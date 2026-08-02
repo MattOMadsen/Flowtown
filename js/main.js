@@ -42,6 +42,8 @@ setInterval(() => {
   document.getElementById('road-count').textContent = game.roads.length;
   document.getElementById('arrived-count').textContent = game.arrivedCount;
   document.getElementById('best-count').textContent = game.sessionBest;
+  document.getElementById('alltime-count').textContent = game.allTimeBest;
+  document.getElementById('goal-count').textContent = game.currentGoal;
 
   const flowEl = document.getElementById('flow-pct');
   if (flowEl) {
@@ -49,7 +51,13 @@ setInterval(() => {
     const pct = total > 5 ? Math.round((game.arrivedCount / (game.arrivedCount + Math.max(1, game.vehicles.length * 0.55))) * 100) : 0;
     flowEl.textContent = pct + '%';
   }
-}, 300);
+
+  const bar = document.getElementById('goal-bar');
+  if (bar) {
+    const progress = Math.min(100, (game.arrivedCount / game.currentGoal) * 100);
+    bar.style.width = progress + '%';
+  }
+}, 280);
 
 // Resize
 function resize() {
