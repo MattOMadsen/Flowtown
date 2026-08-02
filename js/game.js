@@ -22,18 +22,18 @@ export class Game {
     this.spawnTimer = 0;
     this.arrivedCount = 0;
     this.totalSpawned = 0;
+    this.snapDistance = 55;
 
     this.initDistricts();
   }
 
   initDistricts() {
-    // Relative positions (0-1) so they adapt to any screen
     this.districtDefs = [
-      { rx: 0.15, ry: 0.18, rr: 0.055, color: '#fbbf24', name: 'Nord' },
-      { rx: 0.82, ry: 0.20, rr: 0.050, color: '#34d399', name: 'Øst' },
-      { rx: 0.16, ry: 0.78, rr: 0.060, color: '#60a5fa', name: 'Vest' },
-      { rx: 0.78, ry: 0.75, rr: 0.055, color: '#f472b6', name: 'Syd' },
-      { rx: 0.48, ry: 0.48, rr: 0.048, color: '#a78bfa', name: 'Centrum' }
+      { rx: 0.14, ry: 0.17, rr: 0.052, color: '#fbbf24', name: 'Nord' },
+      { rx: 0.84, ry: 0.18, rr: 0.048, color: '#34d399', name: 'Øst' },
+      { rx: 0.15, ry: 0.80, rr: 0.055, color: '#60a5fa', name: 'Vest' },
+      { rx: 0.80, ry: 0.78, rr: 0.050, color: '#f472b6', name: 'Syd' },
+      { rx: 0.48, ry: 0.47, rr: 0.046, color: '#a78bfa', name: 'Centrum' }
     ];
     this.updateDistrictPositions();
   }
@@ -67,10 +67,7 @@ export class Game {
   }
 
   screenToWorld(x, y) {
-    return {
-      x: x * this.dpr,
-      y: y * this.dpr
-    };
+    return { x: x * this.dpr, y: y * this.dpr };
   }
 
   beginStroke(x, y) {
@@ -84,7 +81,7 @@ export class Game {
     const last = this.currentStroke[this.currentStroke.length - 1];
     const dx = p.x - last.x;
     const dy = p.y - last.y;
-    if (dx * dx + dy * dy > 16) {
+    if (dx * dx + dy * dy > 12) {
       this.currentStroke.push({ x: p.x, y: p.y });
     }
   }
@@ -94,11 +91,49 @@ export class Game {
       this.currentStroke = null;
       return;
     }
-    const simplified = this.simplify(this.currentStroke, 10);
-    if (simplified.length >= 2) {
-      this.roads.push(new Road(simplified));
+
+    let points = this.simplify(this.currentStroke, 9);
+    if (points.length < 2) {
+      this.currentStroke = null;
+      return;
     }
+
+    // Snap start and end to nearby existing road ends
+    points = this.snapEndpoints(points);
+
+    this.roads.push(new Road(points));
     this.currentStroke = null;
+  }
+
+  snapEndpoints(points) {
+    const snap = this.snapDistance * this.dpr;
+    const start = points[0];
+    const end = points[points.length - 1];
+
+    let bestStart = null;
+    let bestEnd = null;
+    let bestStartD = snap * snap;
+    let bestEndD = snap * snap;
+
+    for (const road of this.roads) {
+      const rs = road.points[0];
+      const re = road.points[road.points.length - 1];
+
+      let d = (start.x - rs.x) ** 2 + (start.y - rs.y) ** 2;
+      if (d < bestStartD) { bestStartD = d; bestStart = rs; }
+      d = (start.x - re.x) ** 2 + (start.y - re.y) ** 2;
+      if (d < bestStartD) { bestStartD = d; bestStart = re; }
+
+      d = (end.x - rs.x) ** 2 + (end.y - rs.y) ** 2;
+      if (d < bestEndD) { bestEndD = d; bestEnd = rs; }
+      d = (end.x - re.x) ** 2 + (end.y - re.y) ** 2;
+      if (d < bestEndD) { bestEndD = d; bestEnd = re; }
+    }
+
+    if (bestStart) points[0] = { x: bestStart.x, y: bestStart.y };
+    if (bestEnd) points[points.length - 1] = { x: bestEnd.x, y: bestEnd.y };
+
+    return points;
   }
 
   simplify(points, tolerance) {
@@ -118,9 +153,7 @@ export class Game {
   }
 
   undo() {
-    if (this.roads.length > 0) {
-      this.roads.pop();
-    }
+    if (this.roads.length > 0) this.roads.pop();
   }
 
   clearRoads() {
@@ -139,8 +172,7 @@ export class Game {
       to = this.districts[Math.floor(Math.random() * this.districts.length)];
     }
 
-    // Only spawn if there is a road reasonably close to the start district
-    const near = this.findNearestRoadPoint(from.x, from.y, 140);
+    const near = this.findNearestRoadPoint(from.x, from.y, 150);
     if (!near) return;
 
     const vehicle = new Vehicle(from.x, from.y, to, this.roads);
@@ -152,29 +184,23 @@ export class Game {
     let best = null;
     let bestDist = maxDist * maxDist;
     for (const road of this.roads) {
-      for (let i = 0; i < road.points.length; i++) {
-        const p = road.points[i];
+      for (const p of road.points) {
         const dx = p.x - x;
         const dy = p.y - y;
         const d = dx * dx + dy * dy;
         if (d < bestDist) {
           bestDist = d;
-          best = { road, index: i, point: p };
+          best = { road, point: p };
         }
       }
     }
     return best;
   }
 
-  // Calculate rough density per road for visual feedback
   updateRoadDensities() {
-    for (const road of this.roads) {
-      road.density = 0;
-    }
+    for (const road of this.roads) road.density = 0;
     for (const v of this.vehicles) {
-      if (v.currentRoad) {
-        v.currentRoad.density = (v.currentRoad.density || 0) + 1;
-      }
+      if (v.currentRoad) v.currentRoad.density = (v.currentRoad.density || 0) + 1;
     }
   }
 
@@ -182,7 +208,7 @@ export class Game {
     if (this.paused || !this.running) return;
 
     this.spawnTimer += dt;
-    if (this.spawnTimer > 1.4 && this.vehicles.length < 40) {
+    if (this.spawnTimer > 1.25 && this.vehicles.length < 45) {
       this.spawnVehicle();
       this.spawnTimer = 0;
     }
@@ -193,7 +219,7 @@ export class Game {
       if (v.arrived) {
         this.arrivedCount++;
         this.vehicles.splice(i, 1);
-      } else if (v.life > 70) {
+      } else if (v.life > 75) {
         this.vehicles.splice(i, 1);
       }
     }
@@ -206,75 +232,80 @@ export class Game {
     const w = this.canvas.width;
     const h = this.canvas.height;
 
-    // Warm paper background
-    ctx.fillStyle = '#f5f0e8';
+    ctx.fillStyle = '#f4efe6';
     ctx.fillRect(0, 0, w, h);
 
-    // Subtle grid
-    ctx.strokeStyle = 'rgba(0,0,0,0.025)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.022)';
     ctx.lineWidth = 1;
-    const step = 48 * this.dpr;
+    const step = 52 * this.dpr;
     for (let x = 0; x < w; x += step) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
     }
     for (let y = 0; y < h; y += step) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
 
-    // Districts
     for (const d of this.districts) {
-      // Soft glow
-      const grad = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 1.4);
-      grad.addColorStop(0, d.color + '40');
+      const grad = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 1.6);
+      grad.addColorStop(0, d.color + '55');
+      grad.addColorStop(0.6, d.color + '22');
       grad.addColorStop(1, d.color + '00');
       ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r * 1.4, 0, Math.PI * 2);
+      ctx.arc(d.x, d.y, d.r * 1.6, 0, Math.PI * 2);
       ctx.fillStyle = grad;
       ctx.fill();
 
       ctx.beginPath();
       ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-      ctx.fillStyle = d.color + '66';
+      ctx.fillStyle = d.color + '70';
       ctx.fill();
       ctx.strokeStyle = d.color;
-      ctx.lineWidth = 3.5 * this.dpr;
+      ctx.lineWidth = 4 * this.dpr;
       ctx.stroke();
 
-      ctx.fillStyle = '#333';
-      ctx.font = `bold ${Math.max(11, 12 * this.dpr)}px system-ui`;
+      ctx.fillStyle = '#2d2a26';
+      ctx.font = `bold ${Math.max(12, 13 * this.dpr)}px system-ui`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(d.name, d.x, d.y);
     }
 
-    // Roads (with density coloring)
     for (const road of this.roads) {
       road.draw(ctx, this.dpr);
     }
 
-    // Current stroke preview
     if (this.currentStroke && this.currentStroke.length > 1) {
       ctx.beginPath();
       ctx.strokeStyle = '#0f766e';
-      ctx.lineWidth = 10 * this.dpr;
+      ctx.lineWidth = 12 * this.dpr;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.globalAlpha = 0.85;
+      ctx.globalAlpha = 0.8;
       ctx.moveTo(this.currentStroke[0].x, this.currentStroke[0].y);
       for (let i = 1; i < this.currentStroke.length; i++) {
         ctx.lineTo(this.currentStroke[i].x, this.currentStroke[i].y);
       }
       ctx.stroke();
       ctx.globalAlpha = 1;
+
+      const last = this.currentStroke[this.currentStroke.length - 1];
+      for (const road of this.roads) {
+        for (const p of [road.points[0], road.points[road.points.length - 1]]) {
+          const dx = last.x - p.x;
+          const dy = last.y - p.y;
+          if (dx * dx + dy * dy < (this.snapDistance * this.dpr) ** 2) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 10 * this.dpr, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(15, 118, 110, 0.35)';
+            ctx.fill();
+            ctx.strokeStyle = '#0f766e';
+            ctx.lineWidth = 2 * this.dpr;
+            ctx.stroke();
+          }
+        }
+      }
     }
 
-    // Vehicles
     for (const v of this.vehicles) {
       v.draw(ctx, this.dpr);
     }
@@ -283,10 +314,8 @@ export class Game {
   loop(timestamp) {
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05);
     this.lastTime = timestamp;
-
     this.update(dt);
     this.draw();
-
     requestAnimationFrame((t) => this.loop(t));
   }
 }
