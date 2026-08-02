@@ -30,7 +30,7 @@ export class Game {
     this.allTimeBest = this.loadBest();
     this.goalIndex = 0;
     this.goalReachedFlash = 0;
-    this.snapDistance = 70;
+    this.snapDistance = 85;
 
     this.initDistricts();
   }
@@ -106,7 +106,9 @@ export class Game {
       return;
     }
     const p = this.screenToWorld(x, y);
-    this.currentStroke = [{ x: p.x, y: p.y }];
+    // Snap start to nearest existing road point (end or mid)
+    const snapped = this.findSnapPoint(p.x, p.y);
+    this.currentStroke = [{ x: snapped.x, y: snapped.y }];
   }
 
   continueStroke(x, y) {
@@ -137,6 +139,23 @@ export class Game {
     this.currentStroke = null;
   }
 
+  findSnapPoint(x, y) {
+    const snap = this.snapDistance * this.dpr;
+    let best = { x, y };
+    let bestD = snap * snap;
+
+    for (const road of this.roads) {
+      for (const p of road.points) {
+        const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = { x: p.x, y: p.y };
+        }
+      }
+    }
+    return best;
+  }
+
   eraseNear(screenX, screenY) {
     const p = this.screenToWorld(screenX, screenY);
     let bestIdx = -1;
@@ -165,15 +184,12 @@ export class Game {
     let bestStartD = snap * snap, bestEndD = snap * snap;
 
     for (const road of this.roads) {
-      for (let i = 0; i < road.points.length; i++) {
-        const p = road.points[i];
-        const isEnd = i === 0 || i === road.points.length - 1;
-        const weight = isEnd ? 1.0 : 1.6;
-
-        let d = ((start.x - p.x) ** 2 + (start.y - p.y) ** 2) * weight;
+      // Equal treatment of ends and mid-points so T-junctions work reliably
+      for (const p of road.points) {
+        let d = (start.x - p.x) ** 2 + (start.y - p.y) ** 2;
         if (d < bestStartD) { bestStartD = d; bestStart = p; }
 
-        d = ((end.x - p.x) ** 2 + (end.y - p.y) ** 2) * weight;
+        d = (end.x - p.x) ** 2 + (end.y - p.y) ** 2;
         if (d < bestEndD) { bestEndD = d; bestEnd = p; }
       }
     }
@@ -360,7 +376,7 @@ export class Game {
 
     for (const road of this.roads) road.draw(ctx, this.dpr);
 
-    // Draw connection markers (junctions)
+    // Draw connection markers (junctions) for ends that are close
     const connR = 7 * this.dpr;
     for (let i = 0; i < this.roads.length; i++) {
       const r1 = this.roads[i];
@@ -399,14 +415,15 @@ export class Game {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
+      // Snap indicators on ALL points (ends + mid) so T-junctions are visible
       const last = this.currentStroke[this.currentStroke.length - 1];
       for (const road of this.roads) {
-        for (const p of [road.points[0], road.points[road.points.length - 1]]) {
+        for (const p of road.points) {
           const dx = last.x - p.x, dy = last.y - p.y;
           if (dx * dx + dy * dy < (this.snapDistance * this.dpr) ** 2) {
             ctx.beginPath();
-            ctx.arc(p.x, p.y, 11 * this.dpr, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(15, 118, 110, 0.4)';
+            ctx.arc(p.x, p.y, 10 * this.dpr, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(15, 118, 110, 0.45)';
             ctx.fill();
             ctx.strokeStyle = '#0f766e';
             ctx.lineWidth = 2.5 * this.dpr;
