@@ -30,7 +30,7 @@ export class Game {
     this.allTimeBest = this.loadBest();
     this.goalIndex = 0;
     this.goalReachedFlash = 0;
-    this.snapDistance = 55;
+    this.snapDistance = 70;
 
     this.initDistricts();
   }
@@ -165,18 +165,17 @@ export class Game {
     let bestStartD = snap * snap, bestEndD = snap * snap;
 
     for (const road of this.roads) {
-      const rs = road.points[0];
-      const re = road.points[road.points.length - 1];
+      for (let i = 0; i < road.points.length; i++) {
+        const p = road.points[i];
+        const isEnd = i === 0 || i === road.points.length - 1;
+        const weight = isEnd ? 1.0 : 1.6;
 
-      let d = (start.x - rs.x) ** 2 + (start.y - rs.y) ** 2;
-      if (d < bestStartD) { bestStartD = d; bestStart = rs; }
-      d = (start.x - re.x) ** 2 + (start.y - re.y) ** 2;
-      if (d < bestStartD) { bestStartD = d; bestStart = re; }
+        let d = ((start.x - p.x) ** 2 + (start.y - p.y) ** 2) * weight;
+        if (d < bestStartD) { bestStartD = d; bestStart = p; }
 
-      d = (end.x - rs.x) ** 2 + (end.y - rs.y) ** 2;
-      if (d < bestEndD) { bestEndD = d; bestEnd = rs; }
-      d = (end.x - re.x) ** 2 + (end.y - re.y) ** 2;
-      if (d < bestEndD) { bestEndD = d; bestEnd = re; }
+        d = ((end.x - p.x) ** 2 + (end.y - p.y) ** 2) * weight;
+        if (d < bestEndD) { bestEndD = d; bestEnd = p; }
+      }
     }
 
     if (bestStart) points[0] = { x: bestStart.x, y: bestStart.y };
@@ -360,6 +359,31 @@ export class Game {
     }
 
     for (const road of this.roads) road.draw(ctx, this.dpr);
+
+    // Draw connection markers (junctions)
+    const connR = 7 * this.dpr;
+    for (let i = 0; i < this.roads.length; i++) {
+      const r1 = this.roads[i];
+      const ends1 = [r1.points[0], r1.points[r1.points.length - 1]];
+      for (let j = i + 1; j < this.roads.length; j++) {
+        const r2 = this.roads[j];
+        const ends2 = [r2.points[0], r2.points[r2.points.length - 1]];
+        for (const a of ends1) {
+          for (const b of ends2) {
+            const dx = a.x - b.x, dy = a.y - b.y;
+            if (dx * dx + dy * dy < (this.snapDistance * this.dpr * 1.1) ** 2) {
+              ctx.beginPath();
+              ctx.arc((a.x + b.x) / 2, (a.y + b.y) / 2, connR, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(15, 118, 110, 0.45)';
+              ctx.fill();
+              ctx.strokeStyle = '#0f766e';
+              ctx.lineWidth = 1.5 * this.dpr;
+              ctx.stroke();
+            }
+          }
+        }
+      }
+    }
 
     if (this.mode === 'draw' && this.currentStroke && this.currentStroke.length > 1) {
       ctx.beginPath();
