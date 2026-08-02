@@ -20,7 +20,9 @@ document.getElementById('btn-start').addEventListener('click', () => {
 setInterval(() => {
   document.getElementById('car-count').textContent = game.vehicles.length;
   document.getElementById('road-count').textContent = game.roads.length;
-}, 500);
+  const arrivedEl = document.getElementById('arrived-count');
+  if (arrivedEl) arrivedEl.textContent = game.arrivedCount;
+}, 400);
 
 // Resize handling
 function resize() {
