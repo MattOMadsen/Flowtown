@@ -1,10 +1,10 @@
 export class Road {
   constructor(points) {
-    this.points = points; // array of {x, y}
+    this.points = points;
     this.id = Math.random().toString(36).slice(2);
+    this.density = 0;
   }
 
-  // Approximate length
   get length() {
     let len = 0;
     for (let i = 1; i < this.points.length; i++) {
@@ -15,7 +15,6 @@ export class Road {
     return len;
   }
 
-  // Get point at normalized t [0..1]
   getPointAt(t) {
     if (this.points.length < 2) return this.points[0] || { x: 0, y: 0 };
     const total = this.length;
@@ -32,7 +31,7 @@ export class Road {
       const segLen = Math.sqrt(dx * dx + dy * dy);
 
       if (traveled + segLen >= target) {
-        const localT = (target - traveled) / segLen;
+        const localT = (target - traveled) / (segLen || 1);
         return {
           x: p0.x + dx * localT,
           y: p0.y + dy * localT
@@ -43,20 +42,52 @@ export class Road {
     return this.points[this.points.length - 1];
   }
 
-  // Direction (angle) at t
   getAngleAt(t) {
-    const p1 = this.getPointAt(Math.max(0, t - 0.01));
-    const p2 = this.getPointAt(Math.min(1, t + 0.01));
+    const p1 = this.getPointAt(Math.max(0, t - 0.015));
+    const p2 = this.getPointAt(Math.min(1, t + 0.015));
     return Math.atan2(p2.y - p1.y, p2.x - p1.x);
+  }
+
+  // Find closest point on this road to a world position
+  closestPoint(x, y) {
+    let best = null;
+    let bestDist = Infinity;
+    let bestT = 0;
+
+    const samples = Math.max(8, Math.floor(this.length / 25));
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const p = this.getPointAt(t);
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const d = dx * dx + dy * dy;
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+        bestT = t;
+      }
+    }
+    return { point: best, t: bestT, dist: Math.sqrt(bestDist) };
   }
 
   draw(ctx, dpr) {
     if (this.points.length < 2) return;
 
+    // Color based on density (jam feedback)
+    let bodyColor = '#4b5563';
+    let centerColor = '#fbbf24';
+    if (this.density >= 6) {
+      bodyColor = '#b91c1c';
+      centerColor = '#fca5a5';
+    } else if (this.density >= 3) {
+      bodyColor = '#c2410c';
+      centerColor = '#fdba74';
+    }
+
     // Road body
     ctx.beginPath();
-    ctx.strokeStyle = '#4b5563';
-    ctx.lineWidth = 14 * dpr;
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 15 * dpr;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.moveTo(this.points[0].x, this.points[0].y);
@@ -65,11 +96,11 @@ export class Road {
     }
     ctx.stroke();
 
-    // Center line (dashed)
+    // Center dashed line
     ctx.beginPath();
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2 * dpr;
-    ctx.setLineDash([8 * dpr, 10 * dpr]);
+    ctx.strokeStyle = centerColor;
+    ctx.lineWidth = 2.2 * dpr;
+    ctx.setLineDash([7 * dpr, 9 * dpr]);
     ctx.moveTo(this.points[0].x, this.points[0].y);
     for (let i = 1; i < this.points.length; i++) {
       ctx.lineTo(this.points[i].x, this.points[i].y);
@@ -77,9 +108,9 @@ export class Road {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Direction arrows every ~80px
+    // Direction arrows
     const len = this.length;
-    const arrowCount = Math.max(1, Math.floor(len / (90 * dpr)));
+    const arrowCount = Math.max(1, Math.floor(len / (100 * dpr)));
     for (let i = 1; i <= arrowCount; i++) {
       const t = i / (arrowCount + 1);
       const p = this.getPointAt(t);
@@ -88,11 +119,11 @@ export class Road {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(angle);
-      ctx.fillStyle = '#fef3c7';
+      ctx.fillStyle = this.density >= 3 ? '#fee2e2' : '#fef3c7';
       ctx.beginPath();
-      ctx.moveTo(6 * dpr, 0);
-      ctx.lineTo(-4 * dpr, -4 * dpr);
-      ctx.lineTo(-4 * dpr, 4 * dpr);
+      ctx.moveTo(7 * dpr, 0);
+      ctx.lineTo(-5 * dpr, -4.5 * dpr);
+      ctx.lineTo(-5 * dpr, 4.5 * dpr);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
