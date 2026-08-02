@@ -3,34 +3,26 @@
 **Cozy browser traffic management game**  
 Tegn veje mellem distrikter og hold byen kørende. Fungerer på både mobil og PC.
 
-## Spil
-
-Åbn `index.html` i en browser eller host via GitHub Pages.
-
-### Sådan spiller du
-1. Tegn veje med mus eller finger mellem de farvede distrikter.
-2. Biler spawner automatisk og forsøger at køre fra et distrikt til et andet.
-3. Veje bliver orange/røde når der er kø (density).
-4. Jo bedre forbindelser, jo flere biler ankommer.
-5. Brug **Undo** / **Clear** / **Pause** efter behov.
+## Sådan spiller du
+1. **Tegn**-mode: Tegn veje mellem de farvede distrikter. Endepunkter snapper automatisk sammen.
+2. **Slet**-mode: Tryk på en vej for at fjerne den.
+3. Biler spawner og kører selv. Veje bliver orange/røde ved kø.
+4. Følg **flow %**, **ankomne** og **bedst** i bunden.
 
 ## Features
-- Frihånds-tegning af one-way veje (touch + mouse)
-- Real-time biler med density-baseret jam
-- Veje skifter farve ved kø
-- Responsive distrikter (tilpasser sig skærm)
-- Smartere path continuation (foretrækker retning mod mål)
-- Ankomne-tæller
-- Fungerer på mobil og desktop
+- Frihånds-tegning + endpoint snapping
+- Erase mode (slet enkelt vej)
+- Density-baseret jam (farve på veje)
+- Arrival particles
+- Session best + flow %
+- Responsive distrikter
+- Touch + mouse
 
 ## Tech
-- HTML5 Canvas
-- Vanilla JavaScript (ES modules)
-- Tailwind CSS (CDN) til UI
+Vanilla JS + Canvas + Tailwind (CDN)
 
 ## Live
-Aktiver GitHub Pages under Settings → Pages (branch `main`).
+Aktiver GitHub Pages (Settings → Pages → main branch).
 
 ---
-
-Lavet med ❤️ til Flowtown
+Lavet med ❤️
