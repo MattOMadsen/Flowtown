@@ -11,6 +11,26 @@ document.getElementById('btn-toggle').addEventListener('click', (e) => {
   e.target.textContent = game.paused ? 'Play' : 'Pause';
 });
 
+const btnDraw = document.getElementById('btn-draw');
+const btnErase = document.getElementById('btn-erase');
+
+function setMode(mode) {
+  game.setMode(mode);
+  if (mode === 'draw') {
+    btnDraw.classList.add('ring-2', 'ring-emerald-500');
+    btnErase.classList.remove('ring-2', 'ring-rose-500');
+    canvas.style.cursor = 'crosshair';
+  } else {
+    btnErase.classList.add('ring-2', 'ring-rose-500');
+    btnDraw.classList.remove('ring-2', 'ring-emerald-500');
+    canvas.style.cursor = 'pointer';
+  }
+}
+
+btnDraw.addEventListener('click', () => setMode('draw'));
+btnErase.addEventListener('click', () => setMode('erase'));
+setMode('draw');
+
 document.getElementById('btn-start').addEventListener('click', () => {
   document.getElementById('help').style.display = 'none';
   game.start();
@@ -20,18 +40,18 @@ document.getElementById('btn-start').addEventListener('click', () => {
 setInterval(() => {
   document.getElementById('car-count').textContent = game.vehicles.length;
   document.getElementById('road-count').textContent = game.roads.length;
-  const arrivedEl = document.getElementById('arrived-count');
-  if (arrivedEl) arrivedEl.textContent = game.arrivedCount;
+  document.getElementById('arrived-count').textContent = game.arrivedCount;
+  document.getElementById('best-count').textContent = game.sessionBest;
 
   const flowEl = document.getElementById('flow-pct');
   if (flowEl) {
     const total = game.arrivedCount + game.vehicles.length;
-    const pct = total > 0 ? Math.round((game.arrivedCount / (game.arrivedCount + Math.max(1, game.vehicles.length * 0.6))) * 100) : 0;
+    const pct = total > 5 ? Math.round((game.arrivedCount / (game.arrivedCount + Math.max(1, game.vehicles.length * 0.55))) * 100) : 0;
     flowEl.textContent = pct + '%';
   }
-}, 350);
+}, 300);
 
-// Resize handling
+// Resize
 function resize() {
   canvas.width = window.innerWidth * devicePixelRatio;
   canvas.height = window.innerHeight * devicePixelRatio;
@@ -42,5 +62,4 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// Prevent scrolling on mobile
 document.body.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
