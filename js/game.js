@@ -2,6 +2,8 @@ import { Road } from './road.js';
 import { Vehicle } from './vehicle.js';
 import { InputHandler } from './input.js';
 
+const GOALS = [20, 40, 70, 110, 160, 220, 300];
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -25,9 +27,30 @@ export class Game {
     this.arrivedCount = 0;
     this.totalSpawned = 0;
     this.sessionBest = 0;
+    this.allTimeBest = this.loadBest();
+    this.goalIndex = 0;
+    this.goalReachedFlash = 0;
     this.snapDistance = 55;
 
     this.initDistricts();
+  }
+
+  loadBest() {
+    try {
+      return parseInt(localStorage.getItem('flowtown-best') || '0', 10) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  saveBest(value) {
+    try {
+      localStorage.setItem('flowtown-best', String(value));
+    } catch {}
+  }
+
+  get currentGoal() {
+    return GOALS[Math.min(this.goalIndex, GOALS.length - 1)];
   }
 
   initDistricts() {
@@ -120,8 +143,7 @@ export class Game {
     let bestDist = 40 * this.dpr;
 
     for (let i = 0; i < this.roads.length; i++) {
-      const road = this.roads[i];
-      const closest = road.closestPoint(p.x, p.y);
+      const closest = this.roads[i].closestPoint(p.x, p.y);
       if (closest.dist < bestDist) {
         bestDist = closest.dist;
         bestIdx = i;
@@ -139,10 +161,8 @@ export class Game {
     const start = points[0];
     const end = points[points.length - 1];
 
-    let bestStart = null;
-    let bestEnd = null;
-    let bestStartD = snap * snap;
-    let bestEndD = snap * snap;
+    let bestStart = null, bestEnd = null;
+    let bestStartD = snap * snap, bestEndD = snap * snap;
 
     for (const road of this.roads) {
       const rs = road.points[0];
@@ -161,7 +181,6 @@ export class Game {
 
     if (bestStart) points[0] = { x: bestStart.x, y: bestStart.y };
     if (bestEnd) points[points.length - 1] = { x: bestEnd.x, y: bestEnd.y };
-
     return points;
   }
 
@@ -171,11 +190,8 @@ export class Game {
     for (let i = 1; i < points.length - 1; i++) {
       const prev = result[result.length - 1];
       const curr = points[i];
-      const dx = curr.x - prev.x;
-      const dy = curr.y - prev.y;
-      if (dx * dx + dy * dy > tolerance * tolerance) {
-        result.push(curr);
-      }
+      const dx = curr.x - prev.x, dy = curr.y - prev.y;
+      if (dx * dx + dy * dy > tolerance * tolerance) result.push(curr);
     }
     result.push(points[points.length - 1]);
     return result;
@@ -198,46 +214,57 @@ export class Game {
 
     const from = this.districts[Math.floor(Math.random() * this.districts.length)];
     let to = this.districts[Math.floor(Math.random() * this.districts.length)];
-    while (to === from) {
-      to = this.districts[Math.floor(Math.random() * this.districts.length)];
-    }
+    while (to === from) to = this.districts[Math.floor(Math.random() * this.districts.length)];
 
     const near = this.findNearestRoadPoint(from.x, from.y, 150);
     if (!near) return;
 
-    const vehicle = new Vehicle(from.x, from.y, to, this.roads);
-    this.vehicles.push(vehicle);
+    this.vehicles.push(new Vehicle(from.x, from.y, to, this.roads));
     this.totalSpawned++;
   }
 
   findNearestRoadPoint(x, y, maxDist) {
-    let best = null;
-    let bestDist = maxDist * maxDist;
+    let best = null, bestDist = maxDist * maxDist;
     for (const road of this.roads) {
       for (const p of road.points) {
-        const dx = p.x - x;
-        const dy = p.y - y;
-        const d = dx * dx + dy * dy;
-        if (d < bestDist) {
-          bestDist = d;
-          best = { road, point: p };
-        }
+        const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+        if (d < bestDist) { bestDist = d; best = { road, point: p }; }
       }
     }
     return best;
   }
 
   addArrivalParticles(x, y, color) {
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       this.particles.push({
         x, y,
-        vx: (Math.random() - 0.5) * 80,
-        vy: (Math.random() - 0.5) * 80 - 20,
-        life: 0.6 + Math.random() * 0.4,
-        maxLife: 0.8,
+        vx: (Math.random() - 0.5) * 90,
+        vy: (Math.random() - 0.5) * 90 - 30,
+        life: 0.7 + Math.random() * 0.5,
+        maxLife: 1.0,
         color: color || '#10b981',
-        size: 3 + Math.random() * 4
+        size: 3 + Math.random() * 5
       });
+    }
+  }
+
+  checkGoal() {
+    if (this.arrivedCount >= this.currentGoal && this.goalIndex < GOALS.length) {
+      this.goalIndex++;
+      this.goalReachedFlash = 2.2;
+      const cx = this.canvas.width / 2;
+      const cy = this.canvas.height / 2;
+      for (let i = 0; i < 25; i++) {
+        this.particles.push({
+          x: cx, y: cy,
+          vx: (Math.random() - 0.5) * 200,
+          vy: (Math.random() - 0.5) * 200,
+          life: 1.2 + Math.random() * 0.8,
+          maxLife: 1.8,
+          color: ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#a78bfa'][Math.floor(Math.random() * 5)],
+          size: 4 + Math.random() * 6
+        });
+      }
     }
   }
 
@@ -251,8 +278,10 @@ export class Game {
   update(dt) {
     if (this.paused || !this.running) return;
 
+    if (this.goalReachedFlash > 0) this.goalReachedFlash -= dt;
+
     this.spawnTimer += dt;
-    if (this.spawnTimer > 1.2 && this.vehicles.length < 48) {
+    if (this.spawnTimer > 1.15 && this.vehicles.length < 50) {
       this.spawnVehicle();
       this.spawnTimer = 0;
     }
@@ -263,9 +292,14 @@ export class Game {
       if (v.arrived) {
         this.arrivedCount++;
         if (this.arrivedCount > this.sessionBest) this.sessionBest = this.arrivedCount;
+        if (this.arrivedCount > this.allTimeBest) {
+          this.allTimeBest = this.arrivedCount;
+          this.saveBest(this.allTimeBest);
+        }
         this.addArrivalParticles(v.x, v.y, v.color);
+        this.checkGoal();
         this.vehicles.splice(i, 1);
-      } else if (v.life > 80) {
+      } else if (v.life > 85) {
         this.vehicles.splice(i, 1);
       }
     }
@@ -275,7 +309,7 @@ export class Game {
       p.life -= dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.vy += 120 * dt;
+      p.vy += 140 * dt;
       if (p.life <= 0) this.particles.splice(i, 1);
     }
 
@@ -290,7 +324,7 @@ export class Game {
     ctx.fillStyle = '#f4efe6';
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.02)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.018)';
     ctx.lineWidth = 1;
     const step = 52 * this.dpr;
     for (let x = 0; x < w; x += step) {
@@ -325,9 +359,7 @@ export class Game {
       ctx.fillText(d.name, d.x, d.y);
     }
 
-    for (const road of this.roads) {
-      road.draw(ctx, this.dpr);
-    }
+    for (const road of this.roads) road.draw(ctx, this.dpr);
 
     if (this.mode === 'draw' && this.currentStroke && this.currentStroke.length > 1) {
       ctx.beginPath();
@@ -346,8 +378,7 @@ export class Game {
       const last = this.currentStroke[this.currentStroke.length - 1];
       for (const road of this.roads) {
         for (const p of [road.points[0], road.points[road.points.length - 1]]) {
-          const dx = last.x - p.x;
-          const dy = last.y - p.y;
+          const dx = last.x - p.x, dy = last.y - p.y;
           if (dx * dx + dy * dy < (this.snapDistance * this.dpr) ** 2) {
             ctx.beginPath();
             ctx.arc(p.x, p.y, 11 * this.dpr, 0, Math.PI * 2);
@@ -361,9 +392,7 @@ export class Game {
       }
     }
 
-    for (const v of this.vehicles) {
-      v.draw(ctx, this.dpr);
-    }
+    for (const v of this.vehicles) v.draw(ctx, this.dpr);
 
     for (const p of this.particles) {
       const alpha = Math.max(0, p.life / p.maxLife);
@@ -374,6 +403,19 @@ export class Game {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+
+    if (this.goalReachedFlash > 0) {
+      const alpha = Math.min(1, this.goalReachedFlash / 0.6);
+      ctx.fillStyle = `rgba(16, 185, 129, ${0.15 * alpha})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = `rgba(255,255,255,${0.9 * alpha})`;
+      ctx.font = `bold ${Math.max(22, 28 * this.dpr)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Mål nået! 🎉', w / 2, h / 2 - 20 * this.dpr);
+      ctx.font = `${Math.max(14, 16 * this.dpr)}px system-ui`;
+      ctx.fillText(`Næste mål: ${this.currentGoal}`, w / 2, h / 2 + 20 * this.dpr);
+    }
   }
 
   loop(timestamp) {
