@@ -5,7 +5,7 @@ export class Vehicle {
     this.target = targetDistrict;
     this.roads = roads;
 
-    this.speed = 60 + Math.random() * 40;
+    this.speed = 65 + Math.random() * 40;
     this.baseSpeed = this.speed;
     this.angle = 0;
     this.progress = 0;
@@ -42,9 +42,9 @@ export class Vehicle {
       }
     }
 
-    if (bestRoad && bestDist < 170) {
+    if (bestRoad && bestDist < 180) {
       this.currentRoad = bestRoad;
-      this.progress = Math.min(0.98, bestT);
+      this.progress = Math.min(0.98, Math.max(0.01, bestT));
       const p = bestRoad.getPointAt(this.progress);
       this.x = p.x;
       this.y = p.y;
@@ -52,6 +52,51 @@ export class Vehicle {
     } else {
       this.currentRoad = null;
     }
+  }
+
+  findNextRoad(roads, fromX, fromY) {
+    let best = null;
+    let bestScore = -Infinity;
+    const maxDist = 110;
+
+    for (const r of roads) {
+      if (r === this.currentRoad) continue;
+
+      const candidates = [
+        { t: 0.0, p: r.points[0] },
+        { t: 1.0, p: r.points[r.points.length - 1] }
+      ];
+      candidates.push({ t: 0.25, p: r.getPointAt(0.25) });
+      candidates.push({ t: 0.5, p: r.getPointAt(0.5) });
+      candidates.push({ t: 0.75, p: r.getPointAt(0.75) });
+
+      for (const c of candidates) {
+        const dx = c.p.x - fromX;
+        const dy = c.p.y - fromY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > maxDist) continue;
+
+        let t = c.t;
+        if (t > 0.85) t = 0.02;
+
+        const mid = r.getPointAt(Math.min(0.6, t + 0.3));
+        const toTarget = Math.atan2(this.target.y - mid.y, this.target.x - mid.x);
+        const roadAngle = r.getAngleAt(t + 0.05);
+        let angleDiff = Math.abs(toTarget - roadAngle);
+        if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+        const directionScore = 1 - (angleDiff / Math.PI);
+
+        const startBonus = (1 - t) * 30;
+        const score = directionScore * 140 - dist * 1.4 + startBonus;
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = { road: r, t: Math.max(0.01, t), dist };
+        }
+      }
+    }
+
+    return best;
   }
 
   update(dt, roads, allVehicles) {
@@ -68,10 +113,9 @@ export class Vehicle {
       if (other === this) continue;
       const dx = other.x - this.x;
       const dy = other.y - this.y;
-      if (dx * dx + dy * dy < 42 * 42) nearby++;
+      if (dx * dx + dy * dy < 44 * 44) nearby++;
     }
-    const densityFactor = Math.max(0.18, 1 - nearby * 0.14);
-    this.speed = this.baseSpeed * densityFactor;
+    this.speed = this.baseSpeed * Math.max(0.16, 1 - nearby * 0.13);
 
     const roadLen = this.currentRoad.length;
     if (roadLen < 1) {
@@ -88,42 +132,23 @@ export class Vehicle {
 
       const tdx = this.target.x - this.x;
       const tdy = this.target.y - this.y;
-      if (tdx * tdx + tdy * tdy < (this.target.r + 35) ** 2) {
+      if (tdx * tdx + tdy * tdy < (this.target.r + 40) ** 2) {
         this.arrived = true;
         return;
       }
 
-      let next = null;
-      let bestScore = -Infinity;
-
-      for (const r of roads) {
-        if (r === this.currentRoad) continue;
-        const start = r.points[0];
-        const dx = start.x - end.x;
-        const dy = start.y - end.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 95) continue;
-
-        const mid = r.getPointAt(0.4);
-        const toTarget = Math.atan2(this.target.y - mid.y, this.target.x - mid.x);
-        const roadAngle = r.getAngleAt(0.25);
-        let angleDiff = Math.abs(toTarget - roadAngle);
-        if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-        const directionScore = 1 - (angleDiff / Math.PI);
-
-        const score = directionScore * 120 - dist * 1.2;
-        if (score > bestScore) {
-          bestScore = score;
-          next = r;
-        }
-      }
+      const next = this.findNextRoad(roads, end.x, end.y);
 
       if (next) {
-        this.currentRoad = next;
-        this.progress = 0.01;
+        this.currentRoad = next.road;
+        this.progress = next.t;
+        const p = this.currentRoad.getPointAt(this.progress);
+        this.x = p.x;
+        this.y = p.y;
+        this.angle = this.currentRoad.getAngleAt(this.progress);
       } else {
         this.pickBestRoad();
-        if (!this.currentRoad && (tdx * tdx + tdy * tdy < 220 * 220)) {
+        if (!this.currentRoad && (tdx * tdx + tdy * tdy < 250 * 250)) {
           this.arrived = true;
         }
       }
