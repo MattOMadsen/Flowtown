@@ -11,17 +11,20 @@ export class Game {
     this.roads = [];
     this.vehicles = [];
     this.districts = [];
+    this.particles = [];
 
     this.paused = false;
     this.running = false;
     this.lastTime = 0;
 
     this.currentStroke = null;
+    this.mode = 'draw';
     this.input = new InputHandler(canvas, this);
 
     this.spawnTimer = 0;
     this.arrivedCount = 0;
     this.totalSpawned = 0;
+    this.sessionBest = 0;
     this.snapDistance = 55;
 
     this.initDistricts();
@@ -61,6 +64,10 @@ export class Game {
     this.paused = !this.paused;
   }
 
+  setMode(mode) {
+    this.mode = mode;
+  }
+
   onResize() {
     this.dpr = window.devicePixelRatio || 1;
     this.updateDistrictPositions();
@@ -71,12 +78,16 @@ export class Game {
   }
 
   beginStroke(x, y) {
+    if (this.mode === 'erase') {
+      this.eraseNear(x, y);
+      return;
+    }
     const p = this.screenToWorld(x, y);
     this.currentStroke = [{ x: p.x, y: p.y }];
   }
 
   continueStroke(x, y) {
-    if (!this.currentStroke) return;
+    if (this.mode === 'erase' || !this.currentStroke) return;
     const p = this.screenToWorld(x, y);
     const last = this.currentStroke[this.currentStroke.length - 1];
     const dx = p.x - last.x;
@@ -87,7 +98,7 @@ export class Game {
   }
 
   endStroke() {
-    if (!this.currentStroke || this.currentStroke.length < 2) {
+    if (this.mode === 'erase' || !this.currentStroke || this.currentStroke.length < 2) {
       this.currentStroke = null;
       return;
     }
@@ -98,11 +109,29 @@ export class Game {
       return;
     }
 
-    // Snap start and end to nearby existing road ends
     points = this.snapEndpoints(points);
-
     this.roads.push(new Road(points));
     this.currentStroke = null;
+  }
+
+  eraseNear(screenX, screenY) {
+    const p = this.screenToWorld(screenX, screenY);
+    let bestIdx = -1;
+    let bestDist = 40 * this.dpr;
+
+    for (let i = 0; i < this.roads.length; i++) {
+      const road = this.roads[i];
+      const closest = road.closestPoint(p.x, p.y);
+      if (closest.dist < bestDist) {
+        bestDist = closest.dist;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx >= 0) {
+      this.vehicles = this.vehicles.filter(v => v.currentRoad !== this.roads[bestIdx]);
+      this.roads.splice(bestIdx, 1);
+    }
   }
 
   snapEndpoints(points) {
@@ -159,6 +188,7 @@ export class Game {
   clearRoads() {
     this.roads = [];
     this.vehicles = [];
+    this.particles = [];
     this.arrivedCount = 0;
     this.totalSpawned = 0;
   }
@@ -197,6 +227,20 @@ export class Game {
     return best;
   }
 
+  addArrivalParticles(x, y, color) {
+    for (let i = 0; i < 8; i++) {
+      this.particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 80,
+        vy: (Math.random() - 0.5) * 80 - 20,
+        life: 0.6 + Math.random() * 0.4,
+        maxLife: 0.8,
+        color: color || '#10b981',
+        size: 3 + Math.random() * 4
+      });
+    }
+  }
+
   updateRoadDensities() {
     for (const road of this.roads) road.density = 0;
     for (const v of this.vehicles) {
@@ -208,7 +252,7 @@ export class Game {
     if (this.paused || !this.running) return;
 
     this.spawnTimer += dt;
-    if (this.spawnTimer > 1.25 && this.vehicles.length < 45) {
+    if (this.spawnTimer > 1.2 && this.vehicles.length < 48) {
       this.spawnVehicle();
       this.spawnTimer = 0;
     }
@@ -218,10 +262,21 @@ export class Game {
       v.update(dt, this.roads, this.vehicles);
       if (v.arrived) {
         this.arrivedCount++;
+        if (this.arrivedCount > this.sessionBest) this.sessionBest = this.arrivedCount;
+        this.addArrivalParticles(v.x, v.y, v.color);
         this.vehicles.splice(i, 1);
-      } else if (v.life > 75) {
+      } else if (v.life > 80) {
         this.vehicles.splice(i, 1);
       }
+    }
+
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 120 * dt;
+      if (p.life <= 0) this.particles.splice(i, 1);
     }
 
     this.updateRoadDensities();
@@ -235,7 +290,7 @@ export class Game {
     ctx.fillStyle = '#f4efe6';
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.022)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.02)';
     ctx.lineWidth = 1;
     const step = 52 * this.dpr;
     for (let x = 0; x < w; x += step) {
@@ -246,18 +301,18 @@ export class Game {
     }
 
     for (const d of this.districts) {
-      const grad = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 1.6);
-      grad.addColorStop(0, d.color + '55');
-      grad.addColorStop(0.6, d.color + '22');
+      const grad = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 1.7);
+      grad.addColorStop(0, d.color + '60');
+      grad.addColorStop(0.55, d.color + '25');
       grad.addColorStop(1, d.color + '00');
       ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r * 1.6, 0, Math.PI * 2);
+      ctx.arc(d.x, d.y, d.r * 1.7, 0, Math.PI * 2);
       ctx.fillStyle = grad;
       ctx.fill();
 
       ctx.beginPath();
       ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-      ctx.fillStyle = d.color + '70';
+      ctx.fillStyle = d.color + '75';
       ctx.fill();
       ctx.strokeStyle = d.color;
       ctx.lineWidth = 4 * this.dpr;
@@ -274,7 +329,7 @@ export class Game {
       road.draw(ctx, this.dpr);
     }
 
-    if (this.currentStroke && this.currentStroke.length > 1) {
+    if (this.mode === 'draw' && this.currentStroke && this.currentStroke.length > 1) {
       ctx.beginPath();
       ctx.strokeStyle = '#0f766e';
       ctx.lineWidth = 12 * this.dpr;
@@ -295,11 +350,11 @@ export class Game {
           const dy = last.y - p.y;
           if (dx * dx + dy * dy < (this.snapDistance * this.dpr) ** 2) {
             ctx.beginPath();
-            ctx.arc(p.x, p.y, 10 * this.dpr, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(15, 118, 110, 0.35)';
+            ctx.arc(p.x, p.y, 11 * this.dpr, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(15, 118, 110, 0.4)';
             ctx.fill();
             ctx.strokeStyle = '#0f766e';
-            ctx.lineWidth = 2 * this.dpr;
+            ctx.lineWidth = 2.5 * this.dpr;
             ctx.stroke();
           }
         }
@@ -309,6 +364,16 @@ export class Game {
     for (const v of this.vehicles) {
       v.draw(ctx, this.dpr);
     }
+
+    for (const p of this.particles) {
+      const alpha = Math.max(0, p.life / p.maxLife);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * this.dpr * alpha, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 
   loop(timestamp) {
