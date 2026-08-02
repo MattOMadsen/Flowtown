@@ -22,7 +22,14 @@ setInterval(() => {
   document.getElementById('road-count').textContent = game.roads.length;
   const arrivedEl = document.getElementById('arrived-count');
   if (arrivedEl) arrivedEl.textContent = game.arrivedCount;
-}, 400);
+
+  const flowEl = document.getElementById('flow-pct');
+  if (flowEl) {
+    const total = game.arrivedCount + game.vehicles.length;
+    const pct = total > 0 ? Math.round((game.arrivedCount / (game.arrivedCount + Math.max(1, game.vehicles.length * 0.6))) * 100) : 0;
+    flowEl.textContent = pct + '%';
+  }
+}, 350);
 
 // Resize handling
 function resize() {
