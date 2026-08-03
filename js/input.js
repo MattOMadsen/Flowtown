@@ -198,6 +198,11 @@ export class InputHandler {
 
   onDown(e) {
     const pos = this.getPos(e);
+    // Minimap click pans camera instead of drawing
+    if (this.game.handleMinimapTap?.(pos.x, pos.y)) {
+      this.drawing = false;
+      return;
+    }
     this.drawing = true;
     this.game.beginStroke(pos.x, pos.y);
   }

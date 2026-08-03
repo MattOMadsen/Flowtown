@@ -201,6 +201,41 @@ export class Game {
     this.requestDraw();
   }
 
+  /**
+   * Fit all districts (+ roads) into view with padding.
+   */
+  fitCamera(paddingCss = 56) {
+    const w = this.canvas.width || 1;
+    const h = this.canvas.height || 1;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const expand = (x, y, r = 0) => {
+      minX = Math.min(minX, x - r);
+      minY = Math.min(minY, y - r);
+      maxX = Math.max(maxX, x + r);
+      maxY = Math.max(maxY, y + r);
+    };
+    for (const d of this.districts) expand(d.x, d.y, d.r * 1.4);
+    for (const road of this.roads) {
+      for (const p of road.points) expand(p.x, p.y, 10 * this.dpr);
+    }
+    if (!Number.isFinite(minX)) {
+      this.resetCamera();
+      return;
+    }
+    const bw = Math.max(40, maxX - minX);
+    const bh = Math.max(40, maxY - minY);
+    const pad = paddingCss * this.dpr;
+    const zx = (w - pad * 2) / bw;
+    const zy = (h - pad * 2) / bh;
+    const z = this.clampZoom(Math.min(zx, zy, 1.35));
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    this.camera.zoom = z;
+    this.camera.x = w / 2 - cx * z;
+    this.camera.y = h / 2 - cy * z;
+    this.requestDraw();
+  }
+
   getZoomPercent() {
     return Math.round(this.camera.zoom * 100);
   }
@@ -1027,8 +1062,10 @@ export class Game {
     }
     ctx.globalAlpha = 1;
 
-    // Screen-space toast
+    // Screen-space UI (toast + minimap)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.drawMinimap(ctx, w, h);
+
     if (this.toast) {
       ctx.fillStyle = 'rgba(28, 25, 23, 0.85)';
       ctx.font = `bold ${Math.max(13, 15 * this.dpr)}px system-ui`;
@@ -1052,6 +1089,98 @@ export class Game {
       ctx.textBaseline = 'middle';
       ctx.fillText(this.toast, w / 2, by + bh / 2);
     }
+  }
+
+  /**
+   * Compact minimap – bottom-center above stats (not bottom-left/right:
+   * those cover Vest / Syd / zoom stack).
+   */
+  drawMinimap(ctx, w, h) {
+    const mapW = 88 * this.dpr;
+    const mapH = 66 * this.dpr;
+    const mx = (w - mapW) / 2;
+    const my = h - mapH - 48 * this.dpr;
+
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.strokeStyle = 'rgba(68,64,60,0.25)';
+    ctx.lineWidth = 1.5 * this.dpr;
+    const rr = 8 * this.dpr;
+    ctx.beginPath();
+    ctx.moveTo(mx + rr, my);
+    ctx.arcTo(mx + mapW, my, mx + mapW, my + mapH, rr);
+    ctx.arcTo(mx + mapW, my + mapH, mx, my + mapH, rr);
+    ctx.arcTo(mx, my + mapH, mx, my, rr);
+    ctx.arcTo(mx, my, mx + mapW, my, rr);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // World is full canvas coords
+    const worldW = this.canvas.width || w;
+    const worldH = this.canvas.height || h;
+    const sx = mapW / worldW;
+    const sy = mapH / worldH;
+
+    // Roads
+    ctx.lineWidth = Math.max(1, 1.2 * this.dpr);
+    ctx.lineCap = 'round';
+    for (const road of this.roads) {
+      if (road.points.length < 2) continue;
+      ctx.beginPath();
+      ctx.strokeStyle = road.owner === 'player' ? '#57534e' : (road.ownerColor || '#78716c');
+      ctx.moveTo(mx + road.points[0].x * sx, my + road.points[0].y * sy);
+      for (let i = 1; i < road.points.length; i++) {
+        ctx.lineTo(mx + road.points[i].x * sx, my + road.points[i].y * sy);
+      }
+      ctx.stroke();
+    }
+
+    // Districts
+    for (const d of this.districts) {
+      ctx.beginPath();
+      ctx.fillStyle = d.color;
+      ctx.arc(mx + d.x * sx, my + d.y * sy, Math.max(2.5 * this.dpr, d.r * sx * 0.55), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Viewport rectangle
+    const cam = this.camera;
+    const z = cam.zoom || 1;
+    const viewX0 = -cam.x / z;
+    const viewY0 = -cam.y / z;
+    const viewW = w / z;
+    const viewH = h / z;
+    ctx.strokeStyle = '#0f766e';
+    ctx.lineWidth = 1.5 * this.dpr;
+    ctx.strokeRect(
+      mx + viewX0 * sx,
+      my + viewY0 * sy,
+      viewW * sx,
+      viewH * sy
+    );
+
+    ctx.restore();
+    this._minimapRect = { x: mx, y: my, w: mapW, h: mapH, sx, sy, worldW, worldH };
+  }
+
+  /** Click on minimap → pan camera so that world point is centered */
+  handleMinimapTap(screenCssX, screenCssY) {
+    const r = this._minimapRect;
+    if (!r) return false;
+    const x = screenCssX * this.dpr;
+    const y = screenCssY * this.dpr;
+    if (x < r.x || y < r.y || x > r.x + r.w || y > r.y + r.h) return false;
+    const wx = (x - r.x) / r.sx;
+    const wy = (y - r.y) / r.sy;
+    const z = this.camera.zoom || 1;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    this.camera.x = cw / 2 - wx * z;
+    this.camera.y = ch / 2 - wy * z;
+    this.requestDraw();
+    return true;
   }
 
   /** UI helpers */

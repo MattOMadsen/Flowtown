@@ -1,0 +1,4 @@
+# Lokal Grok skriveblok – commit ikke
+data/
+*.log
+.DS_Store

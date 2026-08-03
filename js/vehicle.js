@@ -53,6 +53,8 @@ export class Vehicle {
     this.stuck = false;
     this.life = 0;
     this.idleTime = 0;
+    this.reverse = false;
+    this._triedReverse = false;
 
     this.pickBestRoad();
   }
@@ -88,46 +90,89 @@ export class Vehicle {
     }
   }
 
+  /**
+   * Pick next road segment near a junction.
+   * Prefers: close join, travel direction toward target, reduced density, own roads.
+   * Also allows reverse travel (high t, decreasing) when that gets closer to target.
+   */
   findNextRoad(roads, fromX, fromY) {
     let best = null;
     let bestScore = -Infinity;
-    const maxDist = 120;
+    const maxDist = 140;
+    const tx = this.target?.x ?? fromX;
+    const ty = this.target?.y ?? fromY;
+    const distToTargetNow = Math.hypot(tx - fromX, ty - fromY);
 
     for (const r of roads) {
       if (r === this.currentRoad) continue;
 
+      // Endpoints first (real junctions), then mid samples for T-joins
       const candidates = [
         { t: 0.0, p: r.points[0] },
         { t: 1.0, p: r.points[r.points.length - 1] }
       ];
-      candidates.push({ t: 0.25, p: r.getPointAt(0.25) });
-      candidates.push({ t: 0.5, p: r.getPointAt(0.5) });
-      candidates.push({ t: 0.75, p: r.getPointAt(0.75) });
+      const cMid = r.closestPoint(fromX, fromY);
+      if (cMid.dist < maxDist) {
+        candidates.push({ t: cMid.t, p: cMid.point });
+      }
+      for (const t of [0.25, 0.5, 0.75]) {
+        candidates.push({ t, p: r.getPointAt(t) });
+      }
 
+      const seen = new Set();
       for (const c of candidates) {
+        const key = `${c.t.toFixed(2)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
         const dx = c.p.x - fromX;
         const dy = c.p.y - fromY;
-        const d = Math.sqrt(dx * dx + dy * dy);
+        const d = Math.hypot(dx, dy);
         if (d > maxDist) continue;
 
-        let t = c.t;
-        if (t > 0.85) t = 0.02;
+        // Choose travel direction: forward (t increasing) or reverse (t decreasing)
+        const tEnter = Math.max(0.01, Math.min(0.99, c.t));
+        const lookFwd = r.getPointAt(Math.min(0.98, tEnter + 0.12));
+        const lookRev = r.getPointAt(Math.max(0.02, tEnter - 0.12));
+        const distFwd = Math.hypot(tx - lookFwd.x, ty - lookFwd.y);
+        const distRev = Math.hypot(tx - lookRev.x, ty - lookRev.y);
+        const goForward = distFwd <= distRev;
+        const look = goForward ? lookFwd : lookRev;
+        const progressAfter = goForward
+          ? Math.min(0.98, tEnter + 0.02)
+          : Math.max(0.02, tEnter - 0.02);
 
-        const mid = r.getPointAt(Math.min(0.6, t + 0.3));
-        const toTarget = Math.atan2(this.target.y - mid.y, this.target.x - mid.x);
-        const roadAngle = r.getAngleAt(t + 0.05);
-        let angleDiff = Math.abs(toTarget - roadAngle);
-        if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+        // How much closer to target after joining
+        const distAfter = Math.hypot(tx - look.x, ty - look.y);
+        const approach = distToTargetNow - distAfter; // positive = better
+
+        const toTarget = Math.atan2(ty - look.y, tx - look.x);
+        const roadAngle = r.getAngleAt(tEnter);
+        const travelAngle = goForward ? roadAngle : roadAngle + Math.PI;
+        let angleDiff = Math.abs(toTarget - travelAngle);
+        while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - 2 * Math.PI);
         const directionScore = 1 - (angleDiff / Math.PI);
 
-        const startBonus = (1 - t) * 30;
-        // Slight preference for own roads if owner set on road
-        const ownerBonus = r.owner === this.owner ? 18 : 0;
-        const score = directionScore * 140 - d * 1.4 + startBonus + ownerBonus;
+        const densityPenalty = (r.density || 0) * 6;
+        const ownerBonus = r.owner === this.owner ? 20 : 0;
+        const endpointBonus = (c.t < 0.08 || c.t > 0.92) ? 25 : 0;
+
+        const score =
+          directionScore * 160 +
+          approach * 0.35 -
+          d * 1.5 -
+          densityPenalty +
+          ownerBonus +
+          endpointBonus;
 
         if (score > bestScore) {
           bestScore = score;
-          best = { road: r, t: Math.max(0.01, t), dist: d };
+          best = {
+            road: r,
+            t: progressAfter,
+            dist: d,
+            reverse: !goForward
+          };
         }
       }
     }
@@ -165,10 +210,20 @@ export class Vehicle {
       return;
     }
 
-    this.progress += (this.speed * dt) / roadLen;
+    // Support reverse travel along a road
+    if (this.reverse) {
+      this.progress -= (this.speed * dt) / roadLen;
+    } else {
+      this.progress += (this.speed * dt) / roadLen;
+    }
 
-    if (this.progress >= 1) {
-      const end = this.currentRoad.points[this.currentRoad.points.length - 1];
+    const atEnd = !this.reverse && this.progress >= 1;
+    const atStart = this.reverse && this.progress <= 0;
+
+    if (atEnd || atStart) {
+      const end = atEnd
+        ? this.currentRoad.points[this.currentRoad.points.length - 1]
+        : this.currentRoad.points[0];
       this.x = end.x;
       this.y = end.y;
 
@@ -185,21 +240,35 @@ export class Vehicle {
       if (next) {
         this.currentRoad = next.road;
         this.progress = next.t;
+        this.reverse = !!next.reverse;
+        this._triedReverse = false;
         const p = this.currentRoad.getPointAt(this.progress);
         this.x = p.x;
         this.y = p.y;
-        this.angle = this.currentRoad.getAngleAt(this.progress);
+        const ang = this.currentRoad.getAngleAt(this.progress);
+        this.angle = this.reverse ? ang + Math.PI : ang;
       } else {
-        this.pickBestRoad();
-        if (!this.currentRoad && (tdx * tdx + tdy * tdy < 280 * 280)) {
-          this.arrived = true;
+        // Try reverse on same road once before giving up
+        if (!this._triedReverse) {
+          this._triedReverse = true;
+          this.reverse = !this.reverse;
+          this.progress = Math.max(0.02, Math.min(0.98, this.progress));
+        } else {
+          this._triedReverse = false;
+          this.pickBestRoad();
+          this.reverse = false;
+          if (!this.currentRoad && (tdx * tdx + tdy * tdy < 280 * 280)) {
+            this.arrived = true;
+          }
         }
       }
     } else {
+      this.progress = Math.max(0, Math.min(1, this.progress));
       const p = this.currentRoad.getPointAt(this.progress);
       this.x = p.x;
       this.y = p.y;
-      this.angle = this.currentRoad.getAngleAt(this.progress);
+      const ang = this.currentRoad.getAngleAt(this.progress);
+      this.angle = this.reverse ? ang + Math.PI : ang;
     }
   }
 

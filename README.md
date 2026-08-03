@@ -30,8 +30,15 @@ npx serve .
 # eller: python3 -m http.server 8080
 ```
 
-## Plan
-Se [PLAN.md](./PLAN.md) for roadmap (Fase 2+).
+## Plan & backlog
+- [PLAN.md](./PLAN.md) – faseroadmap  
+- [IMPROVEMENTS.md](./IMPROVEMENTS.md) – konkrete forbedringsforslag  
+- [AGENTS.md](./AGENTS.md) – regler til AI/agenter (UI, zoom, lærte fejl)
+
+## Zoom & UI
+- `+` / `−` / **Fit** (hele byen) / `%` (nulstil)
+- Pinch, musehjul, minimap (tryk for at hoppe)
+- Fold “Aktive opgaver” for mere plads
 
 ---
 Lavet med ❤️

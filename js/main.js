@@ -83,11 +83,42 @@ function bindZoomBtn(id, fn) {
 }
 bindZoomBtn('btn-zoom-in', () => game.zoomBy(1.2));
 bindZoomBtn('btn-zoom-out', () => game.zoomBy(1 / 1.2));
+bindZoomBtn('btn-zoom-fit', () => game.fitCamera());
 bindZoomBtn('btn-zoom-reset', () => game.resetCamera());
+
+// Foldbare opgaver – default lukket på smal skærm (Nord må ikke dækkes)
+let jobsExpanded = !window.matchMedia('(max-width: 640px)').matches;
+const jobsList = document.getElementById('jobs-list');
+const jobsChevron = document.getElementById('jobs-chevron');
+function setJobsExpanded(on) {
+  jobsExpanded = on;
+  if (jobsList) jobsList.classList.toggle('hidden', !on);
+  if (jobsChevron) jobsChevron.textContent = on ? '▼' : '▶';
+}
+setJobsExpanded(jobsExpanded);
+function bindTap(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let last = 0;
+  const fire = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const now = performance.now();
+    if (now - last < 280) return;
+    last = now;
+    fn();
+  };
+  el.addEventListener('click', fire);
+  el.addEventListener('touchend', fire, { passive: false });
+}
+bindTap('btn-jobs-toggle', () => setJobsExpanded(!jobsExpanded));
 
 function renderJobs() {
   const list = document.getElementById('jobs-list');
   const jobs = game.getActiveJobs();
+  const countEl = document.getElementById('jobs-count');
+  if (countEl) countEl.textContent = `(${jobs.length})`;
+  if (!list) return;
   if (!jobs.length) {
     list.innerHTML = '<li class="text-stone-400 italic">Ingen endnu…</li>';
     return;
