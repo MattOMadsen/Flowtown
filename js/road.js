@@ -5,15 +5,22 @@ export class Road {
     this.density = 0;
     this.owner = owner;
     this.ownerColor = ownerColor;
+    this._length = null;
+  }
+
+  invalidateCache() {
+    this._length = null;
   }
 
   get length() {
+    if (this._length != null) return this._length;
     let len = 0;
     for (let i = 1; i < this.points.length; i++) {
       const dx = this.points[i].x - this.points[i - 1].x;
       const dy = this.points[i].y - this.points[i - 1].y;
       len += Math.sqrt(dx * dx + dy * dy);
     }
+    this._length = len;
     return len;
   }
 
@@ -22,7 +29,7 @@ export class Road {
     const total = this.length;
     if (total === 0) return this.points[0];
 
-    let target = t * total;
+    let target = Math.max(0, Math.min(1, t)) * total;
     let traveled = 0;
 
     for (let i = 1; i < this.points.length; i++) {
@@ -45,79 +52,127 @@ export class Road {
   }
 
   getAngleAt(t) {
-    const p1 = this.getPointAt(Math.max(0, t - 0.015));
-    const p2 = this.getPointAt(Math.min(1, t + 0.015));
+    const p1 = this.getPointAt(Math.max(0, t - 0.012));
+    const p2 = this.getPointAt(Math.min(1, t + 0.012));
     return Math.atan2(p2.y - p1.y, p2.x - p1.x);
   }
 
-  // Find closest point on this road to a world position
+  /** Closest point on polyline (segment-accurate, not only samples) */
   closestPoint(x, y) {
-    let best = null;
+    let best = this.points[0] || { x, y };
     let bestDist = Infinity;
     let bestT = 0;
+    let traveled = 0;
+    const total = this.length || 1;
 
-    const samples = Math.max(8, Math.floor(this.length / 25));
-    for (let i = 0; i <= samples; i++) {
-      const t = i / samples;
-      const p = this.getPointAt(t);
-      const dx = p.x - x;
-      const dy = p.y - y;
-      const d = dx * dx + dy * dy;
+    for (let i = 1; i < this.points.length; i++) {
+      const p0 = this.points[i - 1];
+      const p1 = this.points[i];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const segLen = Math.hypot(dx, dy) || 1;
+      const t = Math.max(0, Math.min(1, ((x - p0.x) * dx + (y - p0.y) * dy) / (segLen * segLen)));
+      const px = p0.x + dx * t;
+      const py = p0.y + dy * t;
+      const d = (px - x) ** 2 + (py - y) ** 2;
       if (d < bestDist) {
         bestDist = d;
-        best = p;
-        bestT = t;
+        best = { x: px, y: py };
+        bestT = (traveled + t * segLen) / total;
       }
+      traveled += segLen;
     }
     return { point: best, t: bestT, dist: Math.sqrt(bestDist) };
+  }
+
+  path(ctx) {
+    if (this.points.length < 2) return;
+    ctx.moveTo(this.points[0].x, this.points[0].y);
+    for (let i = 1; i < this.points.length; i++) {
+      ctx.lineTo(this.points[i].x, this.points[i].y);
+    }
   }
 
   draw(ctx, dpr) {
     if (this.points.length < 2) return;
 
-    // Color based on density (jam feedback), tinted by owner if bot
-    let bodyColor = '#4b5563';
-    let centerColor = '#fbbf24';
+    // Density → asphalt tone
+    let edge = '#1c1917';
+    let asphalt = '#57534e';
+    let asphaltHi = '#78716c';
+    let lane = '#fbbf24';
+    let alpha = this.owner === 'player' ? 1 : 0.9;
+
     if (this.density >= 6) {
-      bodyColor = '#b91c1c';
-      centerColor = '#fca5a5';
+      asphalt = '#991b1b';
+      asphaltHi = '#b91c1c';
+      edge = '#450a0a';
+      lane = '#fecaca';
     } else if (this.density >= 3) {
-      bodyColor = '#c2410c';
-      centerColor = '#fdba74';
+      asphalt = '#9a3412';
+      asphaltHi = '#c2410c';
+      edge = '#431407';
+      lane = '#fed7aa';
     } else if (this.owner !== 'player' && this.ownerColor) {
-      bodyColor = this.ownerColor;
-      centerColor = '#fef3c7';
+      asphalt = this.mixHex(this.ownerColor, '#57534e', 0.35);
+      asphaltHi = this.mixHex(this.ownerColor, '#a8a29e', 0.45);
+      edge = this.mixHex(this.ownerColor, '#1c1917', 0.2);
+      lane = '#fef3c7';
     }
 
-    // Road body
-    ctx.beginPath();
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = 15 * dpr;
+    const wEdge = 20 * dpr;
+    const wBody = 15 * dpr;
+    const wInner = 11 * dpr;
+
+    ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.globalAlpha = this.owner === 'player' ? 1 : 0.88;
-    ctx.moveTo(this.points[0].x, this.points[0].y);
-    for (let i = 1; i < this.points.length; i++) {
-      ctx.lineTo(this.points[i].x, this.points[i].y);
-    }
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha;
 
-    // Center dashed line
+    // Soft ground shadow
     ctx.beginPath();
-    ctx.strokeStyle = centerColor;
-    ctx.lineWidth = 2.2 * dpr;
-    ctx.setLineDash([7 * dpr, 9 * dpr]);
-    ctx.moveTo(this.points[0].x, this.points[0].y);
-    for (let i = 1; i < this.points.length; i++) {
-      ctx.lineTo(this.points[i].x, this.points[i].y);
-    }
+    this.path(ctx);
+    ctx.strokeStyle = 'rgba(28, 25, 23, 0.18)';
+    ctx.lineWidth = wEdge + 4 * dpr;
+    ctx.stroke();
+
+    // Dark curb / edge
+    ctx.beginPath();
+    this.path(ctx);
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = wEdge;
+    ctx.stroke();
+
+    // Main asphalt
+    ctx.beginPath();
+    this.path(ctx);
+    ctx.strokeStyle = asphalt;
+    ctx.lineWidth = wBody;
+    ctx.stroke();
+
+    // Slight highlight stripe down the middle of asphalt
+    ctx.beginPath();
+    this.path(ctx);
+    ctx.strokeStyle = asphaltHi;
+    ctx.lineWidth = wInner;
+    ctx.globalAlpha = alpha * 0.35;
+    ctx.stroke();
+    ctx.globalAlpha = alpha;
+
+    // Center dashed lane
+    ctx.beginPath();
+    this.path(ctx);
+    ctx.strokeStyle = lane;
+    ctx.lineWidth = 2 * dpr;
+    ctx.setLineDash([8 * dpr, 10 * dpr]);
+    ctx.lineCap = 'butt';
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.lineCap = 'round';
 
-    // Direction arrows
+    // Direction chevrons
     const len = this.length;
-    const arrowCount = Math.max(1, Math.floor(len / (100 * dpr)));
+    const arrowCount = Math.max(1, Math.floor(len / (110 * dpr)));
     for (let i = 1; i <= arrowCount; i++) {
       const t = i / (arrowCount + 1);
       const p = this.getPointAt(t);
@@ -126,14 +181,30 @@ export class Road {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(angle);
-      ctx.fillStyle = this.density >= 3 ? '#fee2e2' : '#fef3c7';
+      ctx.fillStyle = this.density >= 3 ? 'rgba(254, 226, 226, 0.9)' : 'rgba(254, 243, 199, 0.95)';
       ctx.beginPath();
-      ctx.moveTo(7 * dpr, 0);
-      ctx.lineTo(-5 * dpr, -4.5 * dpr);
-      ctx.lineTo(-5 * dpr, 4.5 * dpr);
+      ctx.moveTo(6.5 * dpr, 0);
+      ctx.lineTo(-4.5 * dpr, -3.8 * dpr);
+      ctx.lineTo(-4.5 * dpr, 3.8 * dpr);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     }
+
+    ctx.restore();
+  }
+
+  mixHex(a, b, t) {
+    const pa = this.parseHex(a);
+    const pb = this.parseHex(b);
+    if (!pa || !pb) return a;
+    const m = (x, y) => Math.round(x + (y - x) * t);
+    return `rgb(${m(pa.r, pb.r)},${m(pa.g, pb.g)},${m(pa.b, pb.b)})`;
+  }
+
+  parseHex(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!m) return null;
+    return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
   }
 }

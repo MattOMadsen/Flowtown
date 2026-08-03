@@ -50,6 +50,11 @@ export class Game {
 
     this.snapDistance = 85;
 
+    // Camera (canvas-pixel space)
+    this.camera = { x: 0, y: 0, zoom: 1 };
+    this.minZoom = 0.45;
+    this.maxZoom = 2.8;
+
     // Bots
     this.botsEnabled = false;
     this.bots = BOT_PRESETS.map(p => new Bot({
@@ -150,8 +155,46 @@ export class Game {
     this.updateDistrictPositions();
   }
 
+  /** CSS screen coords → world (canvas) coords */
   screenToWorld(x, y) {
-    return { x: x * this.dpr, y: y * this.dpr };
+    const sx = x * this.dpr;
+    const sy = y * this.dpr;
+    return {
+      x: (sx - this.camera.x) / this.camera.zoom,
+      y: (sy - this.camera.y) / this.camera.zoom
+    };
+  }
+
+  clampZoom(z) {
+    return Math.max(this.minZoom, Math.min(this.maxZoom, z));
+  }
+
+  /** Zoom keeping CSS point (sx,sy) fixed in world space */
+  setZoomAt(newZoom, sx, sy) {
+    const z0 = this.camera.zoom;
+    const z1 = this.clampZoom(newZoom);
+    if (Math.abs(z1 - z0) < 1e-6) return;
+    const cx = (sx ?? this.canvas.clientWidth / 2) * this.dpr;
+    const cy = (sy ?? this.canvas.clientHeight / 2) * this.dpr;
+    const wx = (cx - this.camera.x) / z0;
+    const wy = (cy - this.camera.y) / z0;
+    this.camera.zoom = z1;
+    this.camera.x = cx - wx * z1;
+    this.camera.y = cy - wy * z1;
+  }
+
+  zoomBy(factor, sx, sy) {
+    this.setZoomAt(this.camera.zoom * factor, sx, sy);
+  }
+
+  resetCamera() {
+    this.camera.x = 0;
+    this.camera.y = 0;
+    this.camera.zoom = 1;
+  }
+
+  getZoomPercent() {
+    return Math.round(this.camera.zoom * 100);
   }
 
   roadCostForLength(lenCssPx) {
@@ -249,23 +292,31 @@ export class Game {
     let best = { x, y };
     let bestD = snap * snap;
 
+    // Snap to any point along existing roads (segment-accurate)
     for (const road of this.roads) {
-      for (const p of road.points) {
-        const d = (p.x - x) ** 2 + (p.y - y) ** 2;
-        if (d < bestD) {
-          bestD = d;
+      const c = road.closestPoint(x, y);
+      const d = c.dist * c.dist;
+      if (d < bestD) {
+        bestD = d;
+        best = { x: c.point.x, y: c.point.y };
+      }
+      // Prefer endpoints slightly for clean junctions
+      for (const p of [road.points[0], road.points[road.points.length - 1]]) {
+        const de = (p.x - x) ** 2 + (p.y - y) ** 2;
+        if (de < bestD * 0.85) {
+          bestD = de;
           best = { x: p.x, y: p.y };
         }
       }
     }
-    // Also snap to district centers
+    // Snap to district rim
     for (const d of this.districts) {
       const dist = Math.hypot(d.x - x, d.y - y);
-      if (dist < d.r + snap * 0.6) {
+      if (dist < d.r + snap * 0.75) {
         const ang = Math.atan2(y - d.y, x - d.x);
         const edge = {
-          x: d.x + Math.cos(ang) * d.r * 0.9,
-          y: d.y + Math.sin(ang) * d.r * 0.9
+          x: d.x + Math.cos(ang) * d.r * 0.92,
+          y: d.y + Math.sin(ang) * d.r * 0.92
         };
         const dd = (edge.x - x) ** 2 + (edge.y - y) ** 2;
         if (dd < bestD) {
@@ -312,23 +363,33 @@ export class Game {
     let bestStartD = snap * snap, bestEndD = snap * snap;
 
     for (const road of this.roads) {
-      for (const p of road.points) {
+      const cs = road.closestPoint(start.x, start.y);
+      if (cs.dist * cs.dist < bestStartD) {
+        bestStartD = cs.dist * cs.dist;
+        bestStart = cs.point;
+      }
+      const ce = road.closestPoint(end.x, end.y);
+      if (ce.dist * ce.dist < bestEndD) {
+        bestEndD = ce.dist * ce.dist;
+        bestEnd = ce.point;
+      }
+      // Endpoints win ties for cleaner T-junctions
+      for (const p of [road.points[0], road.points[road.points.length - 1]]) {
         let d = (start.x - p.x) ** 2 + (start.y - p.y) ** 2;
-        if (d < bestStartD) { bestStartD = d; bestStart = p; }
-
+        if (d < bestStartD * 0.9) { bestStartD = d; bestStart = p; }
         d = (end.x - p.x) ** 2 + (end.y - p.y) ** 2;
-        if (d < bestEndD) { bestEndD = d; bestEnd = p; }
+        if (d < bestEndD * 0.9) { bestEndD = d; bestEnd = p; }
       }
     }
 
     for (const dist of this.districts) {
       for (const pt of [start, end]) {
         const d = Math.hypot(dist.x - pt.x, dist.y - pt.y);
-        if (d < dist.r + snap * 0.5) {
+        if (d < dist.r + snap * 0.65) {
           const ang = Math.atan2(pt.y - dist.y, pt.x - dist.x);
           const edge = {
-            x: dist.x + Math.cos(ang) * dist.r * 0.9,
-            y: dist.y + Math.sin(ang) * dist.r * 0.9
+            x: dist.x + Math.cos(ang) * dist.r * 0.92,
+            y: dist.y + Math.sin(ang) * dist.r * 0.92
           };
           const dd = (edge.x - pt.x) ** 2 + (edge.y - pt.y) ** 2;
           if (pt === start && dd < bestStartD) {
@@ -348,6 +409,7 @@ export class Game {
     return points;
   }
 
+  /** Douglas-Peucker-ish distance simplify + light Chaikin smooth */
   simplify(points, tolerance) {
     if (points.length <= 2) return points;
     const result = [points[0]];
@@ -358,7 +420,31 @@ export class Game {
       if (dx * dx + dy * dy > tolerance * tolerance) result.push(curr);
     }
     result.push(points[points.length - 1]);
-    return result;
+    return this.smoothPolyline(result);
+  }
+
+  /** One pass Chaikin corner-cutting (keeps endpoints) */
+  smoothPolyline(points) {
+    if (points.length < 3) return points;
+    const out = [points[0]];
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i];
+      const p1 = points[i + 1];
+      if (i > 0) {
+        out.push({
+          x: p0.x * 0.75 + p1.x * 0.25,
+          y: p0.y * 0.75 + p1.y * 0.25
+        });
+      }
+      if (i < points.length - 2) {
+        out.push({
+          x: p0.x * 0.25 + p1.x * 0.75,
+          y: p0.y * 0.25 + p1.y * 0.75
+        });
+      }
+    }
+    out.push(points[points.length - 1]);
+    return out;
   }
 
   undo() {
@@ -685,55 +771,149 @@ export class Game {
     ctx.fillText(text, x, y + 0.5 * this.dpr);
   }
 
-  draw() {
-    const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
-
-    ctx.fillStyle = '#f4efe6';
+  drawBackground(ctx, w, h) {
+    // Soft meadow gradient
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, '#e8f0e4');
+    sky.addColorStop(0.45, '#efe8da');
+    sky.addColorStop(1, '#e4dccf');
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.018)';
+    // Soft grass patches (world-space blobs, cheap)
+    const patches = [
+      [0.2, 0.3, 0.22], [0.7, 0.25, 0.18], [0.5, 0.7, 0.25],
+      [0.15, 0.65, 0.16], [0.85, 0.55, 0.2], [0.4, 0.15, 0.14]
+    ];
+    for (const [rx, ry, rr] of patches) {
+      const x = rx * w, y = ry * h, r = rr * Math.min(w, h);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, 'rgba(134, 180, 120, 0.14)');
+      g.addColorStop(1, 'rgba(134, 180, 120, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Subtle grid
+    ctx.strokeStyle = 'rgba(60, 50, 40, 0.035)';
     ctx.lineWidth = 1;
-    const step = 52 * this.dpr;
+    const step = 48 * this.dpr;
     for (let x = 0; x < w; x += step) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
     }
     for (let y = 0; y < h; y += step) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
+  }
 
-    for (const d of this.districts) {
-      const grad = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 1.7);
-      grad.addColorStop(0, d.color + '60');
-      grad.addColorStop(0.55, d.color + '25');
-      grad.addColorStop(1, d.color + '00');
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r * 1.7, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
+  drawDistrict(ctx, d) {
+    // Outer glow
+    const glow = ctx.createRadialGradient(d.x, d.y, d.r * 0.2, d.x, d.y, d.r * 2.1);
+    glow.addColorStop(0, d.color + '55');
+    glow.addColorStop(0.5, d.color + '22');
+    glow.addColorStop(1, d.color + '00');
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r * 2.1, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
 
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-      ctx.fillStyle = d.color + '75';
-      ctx.fill();
-      ctx.strokeStyle = d.color;
-      ctx.lineWidth = 4 * this.dpr;
-      ctx.stroke();
+    // Soft ground disc
+    ctx.beginPath();
+    ctx.arc(d.x, d.y + 3 * this.dpr, d.r * 1.05, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(28, 25, 23, 0.12)';
+    ctx.fill();
 
-      ctx.fillStyle = '#2d2a26';
-      ctx.font = `bold ${Math.max(12, 13 * this.dpr)}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(d.name, d.x, d.y);
-    }
+    // Main disc
+    const disc = ctx.createRadialGradient(
+      d.x - d.r * 0.25, d.y - d.r * 0.3, d.r * 0.1,
+      d.x, d.y, d.r
+    );
+    disc.addColorStop(0, this.lightenHex(d.color, 0.25));
+    disc.addColorStop(0.65, d.color);
+    disc.addColorStop(1, this.darkenHex(d.color, 0.82));
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    ctx.fillStyle = disc;
+    ctx.fill();
 
-    this.drawJobMarkers(ctx);
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 2.5 * this.dpr;
+    ctx.stroke();
 
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r * 0.92, 0, Math.PI * 2);
+    ctx.strokeStyle = this.darkenHex(d.color, 0.7);
+    ctx.lineWidth = 2 * this.dpr;
+    ctx.stroke();
+
+    // Label plate
+    ctx.font = `bold ${Math.max(11, 12.5 * this.dpr)}px system-ui`;
+    const label = d.name;
+    const tw = ctx.measureText(label).width;
+    const padX = 8 * this.dpr;
+    const padY = 5 * this.dpr;
+    const bw = tw + padX * 2;
+    const bh = 16 * this.dpr + padY;
+    const bx = d.x - bw / 2;
+    const by = d.y - bh / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.beginPath();
+    const rr = 7 * this.dpr;
+    ctx.moveTo(bx + rr, by);
+    ctx.arcTo(bx + bw, by, bx + bw, by + bh, rr);
+    ctx.arcTo(bx + bw, by + bh, bx, by + bh, rr);
+    ctx.arcTo(bx, by + bh, bx, by, rr);
+    ctx.arcTo(bx, by, bx + bw, by, rr);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(28,25,23,0.1)';
+    ctx.lineWidth = 1 * this.dpr;
+    ctx.stroke();
+
+    ctx.fillStyle = '#292524';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, d.x, d.y + 0.5 * this.dpr);
+  }
+
+  lightenHex(hex, amount) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!m) return hex;
+    const L = (c) => Math.min(255, Math.round(parseInt(c, 16) + 255 * amount));
+    return `rgb(${L(m[1])},${L(m[2])},${L(m[3])})`;
+  }
+
+  darkenHex(hex, factor) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!m) return hex;
+    const d = (c) => Math.round(parseInt(c, 16) * factor);
+    return `rgb(${d(m[1])},${d(m[2])},${d(m[3])})`;
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const cam = this.camera;
+
+    // Screen-space clear (covers pan gaps)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#d6d3cd';
+    ctx.fillRect(0, 0, w, h);
+
+    // World transform
+    ctx.setTransform(cam.zoom, 0, 0, cam.zoom, cam.x, cam.y);
+
+    this.drawBackground(ctx, w, h);
+
+    // Roads under districts so hubs sit on top of asphalt
     for (const road of this.roads) road.draw(ctx, this.dpr);
 
-    // Junction markers
-    const connR = 7 * this.dpr;
+    // Junction hubs
+    const connR = 8 * this.dpr;
+    const joinThresh = (this.snapDistance * this.dpr * 0.55) ** 2;
     for (let i = 0; i < this.roads.length; i++) {
       const r1 = this.roads[i];
       const ends1 = [r1.points[0], r1.points[r1.points.length - 1]];
@@ -743,53 +923,66 @@ export class Game {
         for (const a of ends1) {
           for (const b of ends2) {
             const dx = a.x - b.x, dy = a.y - b.y;
-            if (dx * dx + dy * dy < (this.snapDistance * this.dpr * 1.1) ** 2) {
+            if (dx * dx + dy * dy < joinThresh) {
+              const jx = (a.x + b.x) / 2;
+              const jy = (a.y + b.y) / 2;
               ctx.beginPath();
-              ctx.arc((a.x + b.x) / 2, (a.y + b.y) / 2, connR, 0, Math.PI * 2);
-              ctx.fillStyle = 'rgba(15, 118, 110, 0.45)';
+              ctx.arc(jx, jy, connR, 0, Math.PI * 2);
+              ctx.fillStyle = '#44403c';
               ctx.fill();
-              ctx.strokeStyle = '#0f766e';
-              ctx.lineWidth = 1.5 * this.dpr;
-              ctx.stroke();
+              ctx.beginPath();
+              ctx.arc(jx, jy, connR * 0.55, 0, Math.PI * 2);
+              ctx.fillStyle = '#a8a29e';
+              ctx.fill();
             }
           }
         }
       }
     }
 
+    for (const d of this.districts) this.drawDistrict(ctx, d);
+
+    this.drawJobMarkers(ctx);
+
+    // Preview stroke
     if (this.mode === 'draw' && this.currentStroke && this.currentStroke.length > 1) {
+      const ok = this.money >= this.pendingRoadCost;
       ctx.beginPath();
-      ctx.strokeStyle = this.money >= this.pendingRoadCost ? '#0f766e' : '#b91c1c';
-      ctx.lineWidth = 12 * this.dpr;
+      ctx.strokeStyle = ok ? '#0f766e' : '#b91c1c';
+      ctx.lineWidth = 16 * this.dpr;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.globalAlpha = 0.8;
+      ctx.globalAlpha = 0.25;
       ctx.moveTo(this.currentStroke[0].x, this.currentStroke[0].y);
       for (let i = 1; i < this.currentStroke.length; i++) {
         ctx.lineTo(this.currentStroke[i].x, this.currentStroke[i].y);
       }
       ctx.stroke();
+      ctx.globalAlpha = 0.85;
+      ctx.lineWidth = 12 * this.dpr;
+      ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Cost label
       const last = this.currentStroke[this.currentStroke.length - 1];
       ctx.font = `bold ${Math.max(12, 13 * this.dpr)}px system-ui`;
-      ctx.fillStyle = this.money >= this.pendingRoadCost ? '#0f766e' : '#b91c1c';
+      ctx.fillStyle = ok ? '#0f766e' : '#b91c1c';
       ctx.textAlign = 'center';
-      ctx.fillText(`$${this.pendingRoadCost}`, last.x, last.y - 16 * this.dpr);
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 3 * this.dpr;
+      ctx.strokeText(`$${this.pendingRoadCost}`, last.x, last.y - 18 * this.dpr);
+      ctx.fillText(`$${this.pendingRoadCost}`, last.x, last.y - 18 * this.dpr);
 
+      // Snap glow near pointer
       for (const road of this.roads) {
-        for (const p of road.points) {
-          const dx = last.x - p.x, dy = last.y - p.y;
-          if (dx * dx + dy * dy < (this.snapDistance * this.dpr) ** 2) {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 10 * this.dpr, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(15, 118, 110, 0.45)';
-            ctx.fill();
-            ctx.strokeStyle = '#0f766e';
-            ctx.lineWidth = 2.5 * this.dpr;
-            ctx.stroke();
-          }
+        const c = road.closestPoint(last.x, last.y);
+        if (c.dist < this.snapDistance * this.dpr) {
+          ctx.beginPath();
+          ctx.arc(c.point.x, c.point.y, 11 * this.dpr, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(15, 118, 110, 0.35)';
+          ctx.fill();
+          ctx.strokeStyle = '#0f766e';
+          ctx.lineWidth = 2.5 * this.dpr;
+          ctx.stroke();
         }
       }
     }
@@ -816,23 +1009,24 @@ export class Game {
     }
     ctx.globalAlpha = 1;
 
+    // Screen-space toast
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.toast) {
-      ctx.fillStyle = 'rgba(28, 25, 23, 0.82)';
+      ctx.fillStyle = 'rgba(28, 25, 23, 0.85)';
       ctx.font = `bold ${Math.max(13, 15 * this.dpr)}px system-ui`;
       const tw = ctx.measureText(this.toast).width;
       const padX = 18 * this.dpr;
-      const padY = 10 * this.dpr;
       const bx = w / 2 - tw / 2 - padX;
-      const by = h * 0.12;
+      const by = h * 0.1;
       const bw = tw + padX * 2;
-      const bh = 28 * this.dpr;
+      const bh = 30 * this.dpr;
       ctx.beginPath();
-      const rr = 12 * this.dpr;
-      ctx.moveTo(bx + rr, by);
-      ctx.arcTo(bx + bw, by, bx + bw, by + bh, rr);
-      ctx.arcTo(bx + bw, by + bh, bx, by + bh, rr);
-      ctx.arcTo(bx, by + bh, bx, by, rr);
-      ctx.arcTo(bx, by, bx + bw, by, rr);
+      const r = 12 * this.dpr;
+      ctx.moveTo(bx + r, by);
+      ctx.arcTo(bx + bw, by, bx + bw, by + bh, r);
+      ctx.arcTo(bx + bw, by + bh, bx, by + bh, r);
+      ctx.arcTo(bx, by + bh, bx, by, r);
+      ctx.arcTo(bx, by, bx + bw, by, r);
       ctx.closePath();
       ctx.fill();
       ctx.fillStyle = '#fafaf9';

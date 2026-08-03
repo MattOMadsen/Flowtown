@@ -59,6 +59,24 @@ function startGame(withBots) {
 document.getElementById('btn-start').addEventListener('click', () => startGame(false));
 document.getElementById('btn-start-bots').addEventListener('click', () => startGame(true));
 
+// Zoom UI
+const zoomLabel = document.getElementById('zoom-label');
+function refreshZoomLabel() {
+  if (zoomLabel) zoomLabel.textContent = game.getZoomPercent() + '%';
+}
+document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
+  game.zoomBy(1.15);
+  refreshZoomLabel();
+});
+document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
+  game.zoomBy(1 / 1.15);
+  refreshZoomLabel();
+});
+document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
+  game.resetCamera();
+  refreshZoomLabel();
+});
+
 function renderJobs() {
   const list = document.getElementById('jobs-list');
   const jobs = game.getActiveJobs();
@@ -133,6 +151,7 @@ setInterval(() => {
 
   renderJobs();
   renderBots();
+  refreshZoomLabel();
 }, 280);
 
 // Resize

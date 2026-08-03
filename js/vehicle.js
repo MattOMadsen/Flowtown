@@ -247,10 +247,11 @@ export class Vehicle {
   }
 
   drawCar(ctx, s, dpr) {
-    const w = s * 2.4;
-    const h = s * 1.2;
-    const r = 2.8 * dpr;
+    const w = s * 2.5;
+    const h = s * 1.25;
+    const r = 3 * dpr;
 
+    // Body
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.moveTo(-w / 2 + r, -h / 2);
@@ -265,33 +266,57 @@ export class Vehicle {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = 'rgba(255,255,255,0.42)';
-    ctx.fillRect(-s * 0.15, -s * 0.42, s * 0.9, s * 0.84);
+    // Roof / window band
+    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.fillRect(-s * 0.2, -s * 0.38, s * 1.0, s * 0.76);
+
+    // Headlights
+    ctx.fillStyle = 'rgba(254, 243, 199, 0.9)';
+    ctx.fillRect(w / 2 - 2.5 * dpr, -h * 0.28, 2.2 * dpr, h * 0.2);
+    ctx.fillRect(w / 2 - 2.5 * dpr, h * 0.08, 2.2 * dpr, h * 0.2);
+
+    // Wheels
+    ctx.fillStyle = '#1c1917';
+    ctx.fillRect(-w * 0.32, -h * 0.62, s * 0.45, s * 0.28);
+    ctx.fillRect(-w * 0.32, h * 0.34, s * 0.45, s * 0.28);
+    ctx.fillRect(w * 0.08, -h * 0.62, s * 0.45, s * 0.28);
+    ctx.fillRect(w * 0.08, h * 0.34, s * 0.45, s * 0.28);
   }
 
   drawTruck(ctx, s, dpr) {
-    const cabW = s * 1.1;
-    const bodyW = s * 2.2;
-    const h = s * 1.35;
+    const cabW = s * 1.15;
+    const bodyW = s * 2.35;
+    const h = s * 1.4;
 
-    // Trailer / cargo body
+    // Trailer
     ctx.fillStyle = this.color;
-    ctx.fillRect(-bodyW * 0.55, -h * 0.5, bodyW, h);
+    ctx.fillRect(-bodyW * 0.58, -h * 0.5, bodyW, h);
+    // Outline
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1 * dpr;
+    ctx.strokeRect(-bodyW * 0.58, -h * 0.5, bodyW, h);
+
     // Cab
-    ctx.fillStyle = this.darken(this.color, 0.85);
-    ctx.fillRect(bodyW * 0.35, -h * 0.42, cabW, h * 0.84);
+    ctx.fillStyle = this.darken(this.color, 0.82);
+    ctx.fillRect(bodyW * 0.32, -h * 0.42, cabW, h * 0.84);
     // Window
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.fillRect(bodyW * 0.42, -h * 0.28, cabW * 0.55, h * 0.45);
+    ctx.fillStyle = 'rgba(186, 230, 253, 0.7)';
+    ctx.fillRect(bodyW * 0.4, -h * 0.28, cabW * 0.55, h * 0.45);
     // Cargo stripes
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 1.2 * dpr;
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = 1.3 * dpr;
     ctx.beginPath();
-    ctx.moveTo(-bodyW * 0.35, -h * 0.35);
-    ctx.lineTo(-bodyW * 0.35, h * 0.35);
-    ctx.moveTo(-bodyW * 0.05, -h * 0.35);
-    ctx.lineTo(-bodyW * 0.05, h * 0.35);
+    ctx.moveTo(-bodyW * 0.38, -h * 0.35);
+    ctx.lineTo(-bodyW * 0.38, h * 0.35);
+    ctx.moveTo(-bodyW * 0.08, -h * 0.35);
+    ctx.lineTo(-bodyW * 0.08, h * 0.35);
     ctx.stroke();
+    // Wheels
+    ctx.fillStyle = '#1c1917';
+    ctx.fillRect(-bodyW * 0.45, -h * 0.62, s * 0.5, s * 0.3);
+    ctx.fillRect(-bodyW * 0.45, h * 0.32, s * 0.5, s * 0.3);
+    ctx.fillRect(bodyW * 0.15, -h * 0.62, s * 0.5, s * 0.3);
+    ctx.fillRect(bodyW * 0.15, h * 0.32, s * 0.5, s * 0.3);
   }
 
   darken(hex, factor) {
