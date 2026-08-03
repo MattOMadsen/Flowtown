@@ -3,60 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Flowtown – Draw roads, keep the city flowing</title>
-  <meta name="description" content="Cozy browser traffic game. Draw roads to connect districts and prevent traffic jams. Works on mobile and desktop." />
+  <title>Flowtown – Transport & trafik</title>
+  <meta name="description" content="Cozy mini Transport Tycoon. Tegn veje, lever passagerer og gods, konkurrér mod bots." />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="bg-stone-100 overflow-hidden select-none">
   <!-- Top UI -->
   <div id="ui" class="fixed top-0 left-0 right-0 z-20 pointer-events-none">
-    <div class="flex items-center justify-between p-3 md:p-4 gap-2">
+    <div class="flex items-center justify-between p-2 md:p-3 gap-2">
       <div class="pointer-events-auto">
-        <h1 class="text-xl md:text-2xl font-bold text-stone-800 tracking-tight">Flowtown</h1>
-        <p class="text-xs text-stone-500 hidden sm:block">Tegn veje – hold byen kørende</p>
+        <h1 class="text-lg md:text-2xl font-bold text-stone-800 tracking-tight">Flowtown</h1>
+        <p class="text-[10px] sm:text-xs text-stone-500 hidden sm:block">Tegn veje · lever folk & gods</p>
       </div>
 
-      <div class="flex flex-wrap gap-1.5 pointer-events-auto justify-end">
-        <button id="btn-draw" class="px-2.5 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
+      <div class="flex flex-wrap gap-1 sm:gap-1.5 pointer-events-auto justify-end max-w-[70%]">
+        <div id="money-badge" class="px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-lg shadow text-xs sm:text-sm font-bold text-amber-900 tabular-nums">
+          $<span id="money-count">500</span>
+        </div>
+        <button id="btn-draw" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
           Tegn
         </button>
-        <button id="btn-erase" class="px-2.5 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
+        <button id="btn-erase" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
           Slet
         </button>
-        <button id="btn-undo" class="px-2.5 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
+        <button id="btn-undo" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
           Undo
         </button>
-        <button id="btn-clear" class="px-2.5 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
+        <button id="btn-clear" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
           Clear
         </button>
-        <button id="btn-toggle" class="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow text-xs sm:text-sm font-medium active:scale-95 transition">
+        <button id="btn-bots" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition" title="Slå bot-modstandere til/fra">
+          Bots: Fra
+        </button>
+        <button id="btn-toggle" class="px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow text-xs sm:text-sm font-medium active:scale-95 transition">
           Pause
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Goal progress -->
-  <div class="fixed top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none w-48 sm:w-64">
-    <div class="bg-white/90 backdrop-blur rounded-full h-2.5 shadow border border-stone-200 overflow-hidden">
-      <div id="goal-bar" class="bg-emerald-500 h-full transition-all duration-300 rounded-full" style="width: 0%"></div>
+  <!-- Jobs panel -->
+  <div id="jobs-panel" class="fixed top-14 left-2 sm:left-3 z-20 pointer-events-none w-[min(100%-1rem,16rem)]">
+    <div class="bg-white/90 backdrop-blur rounded-xl shadow border border-stone-200 p-2 sm:p-2.5">
+      <div class="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Aktive opgaver</div>
+      <ul id="jobs-list" class="space-y-1 text-[11px] sm:text-xs text-stone-700 max-h-40 overflow-y-auto">
+        <li class="text-stone-400 italic">Ingen endnu…</li>
+      </ul>
     </div>
-    <div class="text-center text-xs text-stone-600 mt-1 font-medium">
-      Mål: <span id="goal-count">20</span>
+  </div>
+
+  <!-- Bot scoreboard (shown when bots on) -->
+  <div id="bot-panel" class="fixed top-14 right-2 sm:right-3 z-20 pointer-events-none w-36 sm:w-44 hidden">
+    <div class="bg-white/90 backdrop-blur rounded-xl shadow border border-stone-200 p-2 sm:p-2.5">
+      <div class="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Modstandere</div>
+      <ul id="bot-list" class="space-y-1 text-[11px] sm:text-xs text-stone-700"></ul>
+      <div class="mt-1.5 pt-1.5 border-t border-stone-100 text-[11px] font-medium text-stone-800">
+        Dig: $<span id="player-score">0</span>
+      </div>
     </div>
   </div>
 
   <!-- Stats -->
-  <div id="stats" class="fixed bottom-4 left-4 right-4 z-20 pointer-events-none">
-    <div class="bg-white/90 backdrop-blur rounded-xl px-3 py-2 shadow border border-stone-200 text-xs sm:text-sm text-stone-700 flex flex-wrap gap-x-2 gap-y-1 justify-center sm:justify-start">
+  <div id="stats" class="fixed bottom-3 left-2 right-2 sm:left-4 sm:right-4 z-20 pointer-events-none">
+    <div class="bg-white/90 backdrop-blur rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 shadow border border-stone-200 text-[10px] sm:text-sm text-stone-700 flex flex-wrap gap-x-1.5 sm:gap-x-2 gap-y-0.5 justify-center sm:justify-start">
       <span><span id="car-count">0</span> biler</span>
       <span>·</span>
       <span><span id="road-count">0</span> veje</span>
       <span>·</span>
-      <span><span id="arrived-count">0</span> ankommet</span>
+      <span><span id="arrived-count">0</span> leveret</span>
       <span>·</span>
-      <span>session <span id="best-count">0</span></span>
+      <span>score <span id="best-count">0</span></span>
       <span>·</span>
       <span>rekord <span id="alltime-count">0</span></span>
       <span>·</span>
@@ -65,18 +82,24 @@
   </div>
 
   <!-- Help overlay -->
-  <div id="help" class="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-6 pointer-events-auto">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl text-center">
+  <div id="help" class="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4 sm:p-6 pointer-events-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-xl text-center max-h-[90vh] overflow-y-auto">
       <h2 class="text-xl font-bold text-stone-800 mb-2">Velkommen til Flowtown</h2>
-      <p class="text-stone-600 text-sm mb-4 leading-relaxed text-left space-y-1.5">
-        <span class="block">• <b>Tegn</b> veje (endepunkter snapper automatisk)</span>
-        <span class="block">• <b>Slet</b>: tryk på en vej for at fjerne den</span>
-        <span class="block">• Nå målene for at stige i niveau</span>
-        <span class="block">• Rekorden gemmes automatisk</span>
+      <p class="text-stone-600 text-sm mb-3 leading-relaxed text-left space-y-1.5">
+        <span class="block">• <b>Tegn</b> veje mellem distrikter (koster penge)</span>
+        <span class="block">• Lever <b>personer</b> 👤 og <b>gods</b> 📦 via opgaver</span>
+        <span class="block">• Få belønning for leverancer – byg mere netværk</span>
+        <span class="block">• <b>Bots</b>: slå modstandere til for konkurrence</span>
+        <span class="block">• <b>Slet</b> egne veje (delvis refund)</span>
       </p>
-      <button id="btn-start" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl active:scale-95 transition">
-        Start med at tegne
-      </button>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <button id="btn-start" class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl active:scale-95 transition">
+          Start solo
+        </button>
+        <button id="btn-start-bots" class="flex-1 py-3 bg-rose-500 hover:bg-rose-600 text-white font-medium rounded-xl active:scale-95 transition">
+          Start med bots
+        </button>
+      </div>
     </div>
   </div>
 

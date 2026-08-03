@@ -1,8 +1,15 @@
 import { Road } from './road.js';
 import { Vehicle } from './vehicle.js';
 import { InputHandler } from './input.js';
+import { generateJob, jobComplete, jobLabel } from './jobs.js';
+import { Bot, BOT_PRESETS } from './bot.js';
 
-const GOALS = [20, 40, 70, 110, 160, 220, 300];
+const START_MONEY = 500;
+const MAX_JOBS = 5;
+const ROAD_BASE_COST = 12;
+const ROAD_COST_PER_PX = 0.045; // scaled by dpr later
+const STUCK_PENALTY_INTERVAL = 4;
+const STUCK_PENALTY = 3;
 
 export class Game {
   constructor(canvas) {
@@ -14,6 +21,8 @@ export class Game {
     this.vehicles = [];
     this.districts = [];
     this.particles = [];
+    this.jobs = [];
+    this.floatTexts = [];
 
     this.paused = false;
     this.running = false;
@@ -24,13 +33,31 @@ export class Game {
     this.input = new InputHandler(canvas, this);
 
     this.spawnTimer = 0;
+    this.jobTimer = 0;
+    this.stuckPenaltyTimer = 0;
+
+    // Economy & score
+    this.money = START_MONEY;
+    this.playerScore = 0;
     this.arrivedCount = 0;
+    this.playerDelivered = 0;
     this.totalSpawned = 0;
     this.sessionBest = 0;
     this.allTimeBest = this.loadBest();
-    this.goalIndex = 0;
-    this.goalReachedFlash = 0;
+    this.pendingRoadCost = 0;
+    this.toast = null;
+    this.toastTimer = 0;
+
     this.snapDistance = 85;
+
+    // Bots
+    this.botsEnabled = false;
+    this.bots = BOT_PRESETS.map(p => new Bot({
+      ...p,
+      money: 420,
+      game: this
+    }));
+    for (const b of this.bots) b.enabled = false;
 
     this.initDistricts();
   }
@@ -49,10 +76,6 @@ export class Game {
     } catch {}
   }
 
-  get currentGoal() {
-    return GOALS[Math.min(this.goalIndex, GOALS.length - 1)];
-  }
-
   initDistricts() {
     this.districtDefs = [
       { rx: 0.14, ry: 0.17, rr: 0.052, color: '#fbbf24', name: 'Nord' },
@@ -67,19 +90,33 @@ export class Game {
   updateDistrictPositions() {
     const w = this.canvas.width || 1200;
     const h = this.canvas.height || 800;
-    this.districts = this.districtDefs.map(d => ({
-      x: d.rx * w,
-      y: d.ry * h,
-      r: d.rr * Math.min(w, h),
-      color: d.color,
-      name: d.name
-    }));
+    const prev = this.districts;
+    this.districts = this.districtDefs.map((d, i) => {
+      const base = {
+        x: d.rx * w,
+        y: d.ry * h,
+        r: d.rr * Math.min(w, h),
+        color: d.color,
+        name: d.name,
+        demandPeople: prev[i]?.demandPeople ?? 0,
+        demandCargo: prev[i]?.demandCargo ?? 0
+      };
+      return base;
+    });
+    // Re-bind job district refs after resize
+    for (const job of this.jobs) {
+      job.from = this.districts.find(d => d.name === job.from.name) || job.from;
+      job.to = this.districts.find(d => d.name === job.to.name) || job.to;
+    }
   }
 
   start() {
     this.running = true;
     this.paused = false;
     this.lastTime = performance.now();
+    // Seed a couple of starter jobs
+    this.addJob();
+    this.addJob();
     requestAnimationFrame((t) => this.loop(t));
   }
 
@@ -91,6 +128,23 @@ export class Game {
     this.mode = mode;
   }
 
+  setBotsEnabled(on) {
+    this.botsEnabled = !!on;
+    for (const b of this.bots) {
+      b.enabled = this.botsEnabled;
+      if (!this.botsEnabled) {
+        // Remove bot vehicles when turning off
+        this.vehicles = this.vehicles.filter(v => v.owner === 'player');
+      }
+    }
+    this.showToast(this.botsEnabled ? 'Modstandere: TIL' : 'Modstandere: FRA');
+  }
+
+  toggleBots() {
+    this.setBotsEnabled(!this.botsEnabled);
+    return this.botsEnabled;
+  }
+
   onResize() {
     this.dpr = window.devicePixelRatio || 1;
     this.updateDistrictPositions();
@@ -100,15 +154,35 @@ export class Game {
     return { x: x * this.dpr, y: y * this.dpr };
   }
 
+  roadCostForLength(lenCssPx) {
+    // len may be in canvas (dpr) units — normalize roughly
+    const len = lenCssPx / Math.max(1, this.dpr);
+    return Math.max(15, Math.round(ROAD_BASE_COST + len * ROAD_COST_PER_PX * 22));
+  }
+
+  estimateStrokeCost(points) {
+    if (!points || points.length < 2) return 0;
+    let len = 0;
+    for (let i = 1; i < points.length; i++) {
+      len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    }
+    return this.roadCostForLength(len);
+  }
+
+  showToast(msg, ms = 2.2) {
+    this.toast = msg;
+    this.toastTimer = ms;
+  }
+
   beginStroke(x, y) {
     if (this.mode === 'erase') {
       this.eraseNear(x, y);
       return;
     }
     const p = this.screenToWorld(x, y);
-    // Snap start to nearest existing road point (end or mid)
     const snapped = this.findSnapPoint(p.x, p.y);
     this.currentStroke = [{ x: snapped.x, y: snapped.y }];
+    this.pendingRoadCost = 0;
   }
 
   continueStroke(x, y) {
@@ -119,24 +193,55 @@ export class Game {
     const dy = p.y - last.y;
     if (dx * dx + dy * dy > 12) {
       this.currentStroke.push({ x: p.x, y: p.y });
+      this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke);
     }
   }
 
   endStroke() {
     if (this.mode === 'erase' || !this.currentStroke || this.currentStroke.length < 2) {
       this.currentStroke = null;
+      this.pendingRoadCost = 0;
       return;
     }
 
     let points = this.simplify(this.currentStroke, 9);
     if (points.length < 2) {
       this.currentStroke = null;
+      this.pendingRoadCost = 0;
       return;
     }
 
     points = this.snapEndpoints(points);
-    this.roads.push(new Road(points));
+    const cost = this.estimateStrokeCost(points);
+
+    if (this.money < cost) {
+      this.showToast(`Ikke råd (mangler $${cost - this.money})`);
+      this.currentStroke = null;
+      this.pendingRoadCost = 0;
+      // Flash red particles at end
+      const end = points[points.length - 1];
+      this.addArrivalParticles(end.x, end.y, '#ef4444');
+      return;
+    }
+
+    this.addRoadForOwner(points, 'player', null, cost, true);
     this.currentStroke = null;
+    this.pendingRoadCost = 0;
+  }
+
+  /**
+   * Shared road placement for player + bots.
+   * @returns {boolean} success
+   */
+  addRoadForOwner(points, owner, ownerColor, cost, chargePlayer) {
+    if (!points || points.length < 2) return false;
+    if (chargePlayer) {
+      if (this.money < cost) return false;
+      this.money -= cost;
+      this.addFloatText(points[Math.floor(points.length / 2)].x, points[Math.floor(points.length / 2)].y, `−$${cost}`, '#b91c1c');
+    }
+    this.roads.push(new Road(points, { owner, ownerColor }));
+    return true;
   }
 
   findSnapPoint(x, y) {
@@ -153,6 +258,22 @@ export class Game {
         }
       }
     }
+    // Also snap to district centers
+    for (const d of this.districts) {
+      const dist = Math.hypot(d.x - x, d.y - y);
+      if (dist < d.r + snap * 0.6) {
+        const ang = Math.atan2(y - d.y, x - d.x);
+        const edge = {
+          x: d.x + Math.cos(ang) * d.r * 0.9,
+          y: d.y + Math.sin(ang) * d.r * 0.9
+        };
+        const dd = (edge.x - x) ** 2 + (edge.y - y) ** 2;
+        if (dd < bestD) {
+          bestD = dd;
+          best = edge;
+        }
+      }
+    }
     return best;
   }
 
@@ -162,6 +283,8 @@ export class Game {
     let bestDist = 40 * this.dpr;
 
     for (let i = 0; i < this.roads.length; i++) {
+      // Player can only erase own roads
+      if (this.roads[i].owner !== 'player') continue;
       const closest = this.roads[i].closestPoint(p.x, p.y);
       if (closest.dist < bestDist) {
         bestDist = closest.dist;
@@ -170,8 +293,13 @@ export class Game {
     }
 
     if (bestIdx >= 0) {
-      this.vehicles = this.vehicles.filter(v => v.currentRoad !== this.roads[bestIdx]);
+      const road = this.roads[bestIdx];
+      // Partial refund
+      const refund = Math.floor(this.roadCostForLength(road.length) * 0.35);
+      this.money += refund;
+      this.vehicles = this.vehicles.filter(v => v.currentRoad !== road);
       this.roads.splice(bestIdx, 1);
+      if (refund > 0) this.showToast(`Refund +$${refund}`);
     }
   }
 
@@ -184,13 +312,34 @@ export class Game {
     let bestStartD = snap * snap, bestEndD = snap * snap;
 
     for (const road of this.roads) {
-      // Equal treatment of ends and mid-points so T-junctions work reliably
       for (const p of road.points) {
         let d = (start.x - p.x) ** 2 + (start.y - p.y) ** 2;
         if (d < bestStartD) { bestStartD = d; bestStart = p; }
 
         d = (end.x - p.x) ** 2 + (end.y - p.y) ** 2;
         if (d < bestEndD) { bestEndD = d; bestEnd = p; }
+      }
+    }
+
+    for (const dist of this.districts) {
+      for (const pt of [start, end]) {
+        const d = Math.hypot(dist.x - pt.x, dist.y - pt.y);
+        if (d < dist.r + snap * 0.5) {
+          const ang = Math.atan2(pt.y - dist.y, pt.x - dist.x);
+          const edge = {
+            x: dist.x + Math.cos(ang) * dist.r * 0.9,
+            y: dist.y + Math.sin(ang) * dist.r * 0.9
+          };
+          const dd = (edge.x - pt.x) ** 2 + (edge.y - pt.y) ** 2;
+          if (pt === start && dd < bestStartD) {
+            bestStartD = dd;
+            bestStart = edge;
+          }
+          if (pt === end && dd < bestEndD) {
+            bestEndD = dd;
+            bestEnd = edge;
+          }
+        }
       }
     }
 
@@ -213,29 +362,47 @@ export class Game {
   }
 
   undo() {
-    if (this.roads.length > 0) this.roads.pop();
+    for (let i = this.roads.length - 1; i >= 0; i--) {
+      if (this.roads[i].owner === 'player') {
+        const road = this.roads[i];
+        const refund = Math.floor(this.roadCostForLength(road.length) * 0.5);
+        this.money += refund;
+        this.vehicles = this.vehicles.filter(v => v.currentRoad !== road);
+        this.roads.splice(i, 1);
+        this.showToast(`Undo · +$${refund}`);
+        return;
+      }
+    }
   }
 
   clearRoads() {
-    this.roads = [];
-    this.vehicles = [];
-    this.particles = [];
-    this.arrivedCount = 0;
-    this.totalSpawned = 0;
+    // Only clear player roads; refund partial
+    let refund = 0;
+    const keep = [];
+    for (const r of this.roads) {
+      if (r.owner === 'player') {
+        refund += Math.floor(this.roadCostForLength(r.length) * 0.4);
+      } else {
+        keep.push(r);
+      }
+    }
+    this.roads = keep;
+    this.vehicles = this.vehicles.filter(v => v.owner !== 'player');
+    this.money += refund;
+    if (refund) this.showToast(`Rydet · +$${refund}`);
   }
 
-  spawnVehicle() {
-    if (this.districts.length < 2 || this.roads.length === 0) return;
+  areDistrictsRoughlyConnected(a, b) {
+    // Heuristic: is there a road near both districts?
+    const nearA = this.findNearestRoadPoint(a.x, a.y, a.r + 90);
+    const nearB = this.findNearestRoadPoint(b.x, b.y, b.r + 90);
+    return !!(nearA && nearB);
+  }
 
-    const from = this.districts[Math.floor(Math.random() * this.districts.length)];
-    let to = this.districts[Math.floor(Math.random() * this.districts.length)];
-    while (to === from) to = this.districts[Math.floor(Math.random() * this.districts.length)];
-
-    const near = this.findNearestRoadPoint(from.x, from.y, 150);
-    if (!near) return;
-
-    this.vehicles.push(new Vehicle(from.x, from.y, to, this.roads));
-    this.totalSpawned++;
+  addJob() {
+    if (this.jobs.filter(j => j.active).length >= MAX_JOBS) return;
+    const job = generateJob(this.districts, this.jobs);
+    if (job) this.jobs.push(job);
   }
 
   findNearestRoadPoint(x, y, maxDist) {
@@ -245,8 +412,78 @@ export class Game {
         const d = (p.x - x) ** 2 + (p.y - y) ** 2;
         if (d < bestDist) { bestDist = d; best = { road, point: p }; }
       }
+      const c = road.closestPoint(x, y);
+      if (c.dist * c.dist < bestDist) {
+        bestDist = c.dist * c.dist;
+        best = { road, point: c.point };
+      }
     }
     return best;
+  }
+
+  spawnJobVehicle(job, owner = 'player', ownerColor = null) {
+    if (!job || !job.active) return null;
+    const near = this.findNearestRoadPoint(job.from.x, job.from.y, 200);
+    if (!near) return null;
+
+    const kind = job.type === 'cargo' ? 'truck' : 'car';
+    const cargo = kind === 'truck' ? 1 + Math.floor(Math.random() * 2) : 1;
+
+    // Live district refs
+    const from = this.districts.find(d => d.name === job.from.name) || job.from;
+    const to = this.districts.find(d => d.name === job.to.name) || job.to;
+
+    const v = new Vehicle({
+      x: from.x,
+      y: from.y,
+      targetDistrict: to,
+      roads: this.roads,
+      kind,
+      job,
+      owner,
+      ownerColor,
+      cargo
+    });
+    this.vehicles.push(v);
+    this.totalSpawned++;
+    return v;
+  }
+
+  /** Player auto-spawn for open jobs */
+  spawnVehicle() {
+    if (this.districts.length < 2 || this.roads.length === 0) return;
+    if (this.vehicles.filter(v => v.owner === 'player').length >= 22) return;
+
+    const open = this.jobs.filter(j => j.active && j.delivered < j.amount);
+    if (open.length > 0) {
+      // Prefer jobs player hasn't flooded already
+      const counts = {};
+      for (const v of this.vehicles) {
+        if (v.owner === 'player' && v.job) {
+          counts[v.job.id] = (counts[v.job.id] || 0) + 1;
+        }
+      }
+      open.sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0));
+      const job = open[0];
+      if (this.findNearestRoadPoint(job.from.x, job.from.y, 180)) {
+        this.spawnJobVehicle(job, 'player', null);
+        return;
+      }
+    }
+
+    // Fallback free roam (no job) – small sightseeing traffic
+    if (Math.random() < 0.35) {
+      const from = this.districts[Math.floor(Math.random() * this.districts.length)];
+      let to = this.districts[Math.floor(Math.random() * this.districts.length)];
+      while (to === from) to = this.districts[Math.floor(Math.random() * this.districts.length)];
+      if (!this.findNearestRoadPoint(from.x, from.y, 150)) return;
+      this.vehicles.push(new Vehicle({
+        x: from.x, y: from.y, targetDistrict: to, roads: this.roads,
+        kind: Math.random() < 0.3 ? 'truck' : 'car',
+        owner: 'player'
+      }));
+      this.totalSpawned++;
+    }
   }
 
   addArrivalParticles(x, y, color) {
@@ -263,24 +500,60 @@ export class Game {
     }
   }
 
-  checkGoal() {
-    if (this.arrivedCount >= this.currentGoal && this.goalIndex < GOALS.length) {
-      this.goalIndex++;
-      this.goalReachedFlash = 2.2;
-      const cx = this.canvas.width / 2;
-      const cy = this.canvas.height / 2;
-      for (let i = 0; i < 25; i++) {
-        this.particles.push({
-          x: cx, y: cy,
-          vx: (Math.random() - 0.5) * 200,
-          vy: (Math.random() - 0.5) * 200,
-          life: 1.2 + Math.random() * 0.8,
-          maxLife: 1.8,
-          color: ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#a78bfa'][Math.floor(Math.random() * 5)],
-          size: 4 + Math.random() * 6
-        });
+  addFloatText(x, y, text, color = '#059669') {
+    this.floatTexts.push({
+      x, y, text, color,
+      life: 1.4,
+      maxLife: 1.4,
+      vy: -28
+    });
+  }
+
+  completeDelivery(vehicle) {
+    const job = vehicle.job;
+    const units = vehicle.cargo || 1;
+    let reward = 8;
+
+    if (job && job.active) {
+      // Re-bind districts if needed
+      const to = this.districts.find(d => d.name === job.to.name);
+      if (to) vehicle.target = to;
+
+      const remaining = job.amount - job.delivered;
+      const applied = Math.min(units, remaining);
+      job.delivered += applied;
+
+      const unitReward = Math.round(job.reward / job.amount);
+      reward = unitReward * applied + (jobComplete(job) ? Math.round(job.reward * 0.15) : 0);
+
+      if (jobComplete(job)) {
+        job.active = false;
+        this.showToast(`Opgave klar: ${job.from.name} → ${job.to.name}!`);
+        // Bonus particles at destination
+        this.addArrivalParticles(vehicle.x, vehicle.y, job.to.color);
       }
     }
+
+    if (vehicle.owner === 'player') {
+      this.money += reward;
+      this.playerScore += reward;
+      this.playerDelivered += units;
+      this.arrivedCount++;
+      if (this.arrivedCount > this.sessionBest) this.sessionBest = this.arrivedCount;
+      if (this.arrivedCount > this.allTimeBest) {
+        this.allTimeBest = this.arrivedCount;
+        this.saveBest(this.allTimeBest);
+      }
+      this.addFloatText(vehicle.x, vehicle.y - 10, `+$${reward}`, '#059669');
+    } else {
+      const bot = this.bots.find(b => b.id === vehicle.owner);
+      if (bot) {
+        bot.onDelivery(reward, units);
+        this.addFloatText(vehicle.x, vehicle.y - 10, `${bot.name} +$${reward}`, bot.color);
+      }
+    }
+
+    this.addArrivalParticles(vehicle.x, vehicle.y, vehicle.color);
   }
 
   updateRoadDensities() {
@@ -293,28 +566,54 @@ export class Game {
   update(dt) {
     if (this.paused || !this.running) return;
 
-    if (this.goalReachedFlash > 0) this.goalReachedFlash -= dt;
+    if (this.toastTimer > 0) {
+      this.toastTimer -= dt;
+      if (this.toastTimer <= 0) this.toast = null;
+    }
 
+    // Jobs
+    this.jobTimer += dt;
+    if (this.jobTimer > 6.5) {
+      this.addJob();
+      this.jobTimer = 0;
+    }
+    // Remove old completed jobs from list (keep a few for history)
+    this.jobs = this.jobs.filter(j => j.active || (performance.now() - j.createdAt < 8000));
+
+    // Player vehicle spawn
     this.spawnTimer += dt;
-    if (this.spawnTimer > 1.15 && this.vehicles.length < 50) {
+    if (this.spawnTimer > 1.05 && this.vehicles.length < 55) {
       this.spawnVehicle();
       this.spawnTimer = 0;
+    }
+
+    // Bots
+    if (this.botsEnabled) {
+      for (const bot of this.bots) bot.update(dt);
+    }
+
+    // Stuck traffic penalty (player only)
+    this.stuckPenaltyTimer += dt;
+    if (this.stuckPenaltyTimer >= STUCK_PENALTY_INTERVAL) {
+      this.stuckPenaltyTimer = 0;
+      let stuckCount = 0;
+      for (const v of this.vehicles) {
+        if (v.owner === 'player' && v.stuck) stuckCount++;
+      }
+      if (stuckCount >= 3) {
+        const pen = STUCK_PENALTY * Math.min(5, stuckCount - 2);
+        this.money = Math.max(0, this.money - pen);
+        this.showToast(`Kø-straf −$${pen}`);
+      }
     }
 
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
       const v = this.vehicles[i];
       v.update(dt, this.roads, this.vehicles);
       if (v.arrived) {
-        this.arrivedCount++;
-        if (this.arrivedCount > this.sessionBest) this.sessionBest = this.arrivedCount;
-        if (this.arrivedCount > this.allTimeBest) {
-          this.allTimeBest = this.arrivedCount;
-          this.saveBest(this.allTimeBest);
-        }
-        this.addArrivalParticles(v.x, v.y, v.color);
-        this.checkGoal();
+        this.completeDelivery(v);
         this.vehicles.splice(i, 1);
-      } else if (v.life > 85) {
+      } else if (v.life > 90) {
         this.vehicles.splice(i, 1);
       }
     }
@@ -328,7 +627,62 @@ export class Game {
       if (p.life <= 0) this.particles.splice(i, 1);
     }
 
+    for (let i = this.floatTexts.length - 1; i >= 0; i--) {
+      const f = this.floatTexts[i];
+      f.life -= dt;
+      f.y += f.vy * dt;
+      if (f.life <= 0) this.floatTexts.splice(i, 1);
+    }
+
     this.updateRoadDensities();
+  }
+
+  drawJobMarkers(ctx) {
+    const active = this.jobs.filter(j => j.active);
+    for (const job of active) {
+      const from = this.districts.find(d => d.name === job.from.name) || job.from;
+      const to = this.districts.find(d => d.name === job.to.name) || job.to;
+
+      // Dashed route hint
+      ctx.beginPath();
+      ctx.setLineDash([6 * this.dpr, 8 * this.dpr]);
+      ctx.strokeStyle = job.type === 'cargo' ? 'rgba(180, 83, 9, 0.35)' : 'rgba(37, 99, 235, 0.35)';
+      ctx.lineWidth = 2 * this.dpr;
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Origin badge
+      const left = Math.max(0, job.amount - job.delivered);
+      this.drawBadge(ctx, from.x, from.y - from.r - 14 * this.dpr, `${job.typeMeta.icon}${left}`, job.type === 'cargo' ? '#b45309' : '#2563eb');
+      // Dest arrow badge
+      this.drawBadge(ctx, to.x, to.y - to.r - 14 * this.dpr, '⚑', '#059669');
+    }
+  }
+
+  drawBadge(ctx, x, y, text, color) {
+    ctx.font = `bold ${Math.max(11, 12 * this.dpr)}px system-ui`;
+    const tw = ctx.measureText(text).width;
+    const pad = 6 * this.dpr;
+    const h = 18 * this.dpr;
+    const w = tw + pad * 2;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    const r = 8 * this.dpr;
+    const bx = x - w / 2;
+    const by = y - h / 2;
+    ctx.moveTo(bx + r, by);
+    ctx.arcTo(bx + w, by, bx + w, by + h, r);
+    ctx.arcTo(bx + w, by + h, bx, by + h, r);
+    ctx.arcTo(bx, by + h, bx, by, r);
+    ctx.arcTo(bx, by, bx + w, by, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 0.5 * this.dpr);
   }
 
   draw() {
@@ -374,9 +728,11 @@ export class Game {
       ctx.fillText(d.name, d.x, d.y);
     }
 
+    this.drawJobMarkers(ctx);
+
     for (const road of this.roads) road.draw(ctx, this.dpr);
 
-    // Draw connection markers (junctions) for ends that are close
+    // Junction markers
     const connR = 7 * this.dpr;
     for (let i = 0; i < this.roads.length; i++) {
       const r1 = this.roads[i];
@@ -403,7 +759,7 @@ export class Game {
 
     if (this.mode === 'draw' && this.currentStroke && this.currentStroke.length > 1) {
       ctx.beginPath();
-      ctx.strokeStyle = '#0f766e';
+      ctx.strokeStyle = this.money >= this.pendingRoadCost ? '#0f766e' : '#b91c1c';
       ctx.lineWidth = 12 * this.dpr;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -415,8 +771,13 @@ export class Game {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Snap indicators on ALL points (ends + mid) so T-junctions are visible
+      // Cost label
       const last = this.currentStroke[this.currentStroke.length - 1];
+      ctx.font = `bold ${Math.max(12, 13 * this.dpr)}px system-ui`;
+      ctx.fillStyle = this.money >= this.pendingRoadCost ? '#0f766e' : '#b91c1c';
+      ctx.textAlign = 'center';
+      ctx.fillText(`$${this.pendingRoadCost}`, last.x, last.y - 16 * this.dpr);
+
       for (const road of this.roads) {
         for (const p of road.points) {
           const dx = last.x - p.x, dy = last.y - p.y;
@@ -445,18 +806,65 @@ export class Game {
     }
     ctx.globalAlpha = 1;
 
-    if (this.goalReachedFlash > 0) {
-      const alpha = Math.min(1, this.goalReachedFlash / 0.6);
-      ctx.fillStyle = `rgba(16, 185, 129, ${0.15 * alpha})`;
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = `rgba(255,255,255,${0.9 * alpha})`;
-      ctx.font = `bold ${Math.max(22, 28 * this.dpr)}px system-ui`;
+    for (const f of this.floatTexts) {
+      const alpha = Math.max(0, f.life / f.maxLife);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = f.color;
+      ctx.font = `bold ${Math.max(12, 14 * this.dpr)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+
+    if (this.toast) {
+      ctx.fillStyle = 'rgba(28, 25, 23, 0.82)';
+      ctx.font = `bold ${Math.max(13, 15 * this.dpr)}px system-ui`;
+      const tw = ctx.measureText(this.toast).width;
+      const padX = 18 * this.dpr;
+      const padY = 10 * this.dpr;
+      const bx = w / 2 - tw / 2 - padX;
+      const by = h * 0.12;
+      const bw = tw + padX * 2;
+      const bh = 28 * this.dpr;
+      ctx.beginPath();
+      const rr = 12 * this.dpr;
+      ctx.moveTo(bx + rr, by);
+      ctx.arcTo(bx + bw, by, bx + bw, by + bh, rr);
+      ctx.arcTo(bx + bw, by + bh, bx, by + bh, rr);
+      ctx.arcTo(bx, by + bh, bx, by, rr);
+      ctx.arcTo(bx, by, bx + bw, by, rr);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fafaf9';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('Mål nået! 🎉', w / 2, h / 2 - 20 * this.dpr);
-      ctx.font = `${Math.max(14, 16 * this.dpr)}px system-ui`;
-      ctx.fillText(`Næste mål: ${this.currentGoal}`, w / 2, h / 2 + 20 * this.dpr);
+      ctx.fillText(this.toast, w / 2, by + bh / 2);
     }
+  }
+
+  /** UI helpers */
+  getActiveJobs() {
+    return this.jobs.filter(j => j.active).map(j => ({
+      id: j.id,
+      label: jobLabel(j),
+      progress: j.delivered / j.amount,
+      type: j.type,
+      reward: j.reward,
+      from: j.from.name,
+      to: j.to.name
+    }));
+  }
+
+  getBotStats() {
+    return this.bots.map(b => ({
+      id: b.id,
+      name: b.name,
+      color: b.color,
+      money: Math.floor(b.money),
+      score: b.score,
+      delivered: b.delivered,
+      enabled: b.enabled
+    }));
   }
 
   loop(timestamp) {

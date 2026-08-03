@@ -19,3 +19,15 @@ html, body {
 body {
   background: #f5f0e8;
 }
+
+#jobs-panel ul::-webkit-scrollbar {
+  width: 4px;
+}
+#jobs-panel ul::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 4px;
+}
+
+#money-badge {
+  transition: box-shadow 0.2s ease;
+}

@@ -1,8 +1,10 @@
 export class Road {
-  constructor(points) {
+  constructor(points, { owner = 'player', ownerColor = null } = {}) {
     this.points = points;
     this.id = Math.random().toString(36).slice(2);
     this.density = 0;
+    this.owner = owner;
+    this.ownerColor = ownerColor;
   }
 
   get length() {
@@ -73,7 +75,7 @@ export class Road {
   draw(ctx, dpr) {
     if (this.points.length < 2) return;
 
-    // Color based on density (jam feedback)
+    // Color based on density (jam feedback), tinted by owner if bot
     let bodyColor = '#4b5563';
     let centerColor = '#fbbf24';
     if (this.density >= 6) {
@@ -82,6 +84,9 @@ export class Road {
     } else if (this.density >= 3) {
       bodyColor = '#c2410c';
       centerColor = '#fdba74';
+    } else if (this.owner !== 'player' && this.ownerColor) {
+      bodyColor = this.ownerColor;
+      centerColor = '#fef3c7';
     }
 
     // Road body
@@ -90,11 +95,13 @@ export class Road {
     ctx.lineWidth = 15 * dpr;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.globalAlpha = this.owner === 'player' ? 1 : 0.88;
     ctx.moveTo(this.points[0].x, this.points[0].y);
     for (let i = 1; i < this.points.length; i++) {
       ctx.lineTo(this.points[i].x, this.points[i].y);
     }
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
     // Center dashed line
     ctx.beginPath();

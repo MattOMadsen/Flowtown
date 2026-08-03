@@ -1,26 +1,60 @@
+/** Player / bot vehicles: passenger cars and cargo trucks */
+
+const CAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6', '#06b6d4'];
+const TRUCK_COLORS = ['#b45309', '#92400e', '#a16207', '#78350f'];
+
 export class Vehicle {
-  constructor(x, y, targetDistrict, roads) {
+  /**
+   * @param {object} opts
+   * @param {number} opts.x
+   * @param {number} opts.y
+   * @param {object} opts.targetDistrict
+   * @param {object[]} opts.roads
+   * @param {'car'|'truck'} [opts.kind]
+   * @param {object|null} [opts.job]
+   * @param {string} [opts.owner] 'player' | bot id
+   * @param {string|null} [opts.ownerColor]
+   * @param {number} [opts.cargo] units carried
+   */
+  constructor({
+    x, y, targetDistrict, roads,
+    kind = 'car',
+    job = null,
+    owner = 'player',
+    ownerColor = null,
+    cargo = 1
+  }) {
     this.x = x;
     this.y = y;
     this.target = targetDistrict;
     this.roads = roads;
+    this.kind = kind;
+    this.job = job;
+    this.owner = owner;
+    this.ownerColor = ownerColor;
+    this.cargo = cargo;
+    this.origin = job ? job.from : null;
 
-    this.speed = 65 + Math.random() * 40;
-    this.baseSpeed = this.speed;
+    if (kind === 'truck') {
+      this.baseSpeed = 48 + Math.random() * 22;
+      this.size = 8.5 + Math.random() * 2;
+      this.color = ownerColor || TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)];
+    } else {
+      this.baseSpeed = 70 + Math.random() * 35;
+      this.size = 6 + Math.random() * 2.5;
+      this.color = ownerColor || CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+    }
+    this.speed = this.baseSpeed;
+
     this.angle = 0;
     this.progress = 0;
     this.currentRoad = null;
     this.arrived = false;
+    this.stuck = false;
     this.life = 0;
-    this.color = this.randomColor();
-    this.size = 6.5 + Math.random() * 3.5;
+    this.idleTime = 0;
 
     this.pickBestRoad();
-  }
-
-  randomColor() {
-    const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-    return colors[Math.floor(Math.random() * colors.length)];
   }
 
   pickBestRoad() {
@@ -42,7 +76,7 @@ export class Vehicle {
       }
     }
 
-    if (bestRoad && bestDist < 180) {
+    if (bestRoad && bestDist < 200) {
       this.currentRoad = bestRoad;
       this.progress = Math.min(0.98, Math.max(0.01, bestT));
       const p = bestRoad.getPointAt(this.progress);
@@ -57,7 +91,7 @@ export class Vehicle {
   findNextRoad(roads, fromX, fromY) {
     let best = null;
     let bestScore = -Infinity;
-    const maxDist = 110;
+    const maxDist = 120;
 
     for (const r of roads) {
       if (r === this.currentRoad) continue;
@@ -73,8 +107,8 @@ export class Vehicle {
       for (const c of candidates) {
         const dx = c.p.x - fromX;
         const dy = c.p.y - fromY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > maxDist) continue;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > maxDist) continue;
 
         let t = c.t;
         if (t > 0.85) t = 0.02;
@@ -87,11 +121,13 @@ export class Vehicle {
         const directionScore = 1 - (angleDiff / Math.PI);
 
         const startBonus = (1 - t) * 30;
-        const score = directionScore * 140 - dist * 1.4 + startBonus;
+        // Slight preference for own roads if owner set on road
+        const ownerBonus = r.owner === this.owner ? 18 : 0;
+        const score = directionScore * 140 - d * 1.4 + startBonus + ownerBonus;
 
         if (score > bestScore) {
           bestScore = score;
-          best = { road: r, t: Math.max(0.01, t), dist };
+          best = { road: r, t: Math.max(0.01, t), dist: d };
         }
       }
     }
@@ -105,7 +141,10 @@ export class Vehicle {
 
     if (!this.currentRoad || this.currentRoad.points.length < 2) {
       this.pickBestRoad();
-      if (!this.currentRoad) return;
+      if (!this.currentRoad) {
+        this.idleTime += dt;
+        return;
+      }
     }
 
     let nearby = 0;
@@ -115,7 +154,10 @@ export class Vehicle {
       const dy = other.y - this.y;
       if (dx * dx + dy * dy < 44 * 44) nearby++;
     }
-    this.speed = this.baseSpeed * Math.max(0.16, 1 - nearby * 0.13);
+    this.speed = this.baseSpeed * Math.max(0.14, 1 - nearby * 0.13);
+    if (nearby >= 4) this.idleTime += dt;
+    else this.idleTime = Math.max(0, this.idleTime - dt * 0.5);
+    this.stuck = this.idleTime > 8;
 
     const roadLen = this.currentRoad.length;
     if (roadLen < 1) {
@@ -132,7 +174,8 @@ export class Vehicle {
 
       const tdx = this.target.x - this.x;
       const tdy = this.target.y - this.y;
-      if (tdx * tdx + tdy * tdy < (this.target.r + 40) ** 2) {
+      const arriveR = (this.target.r + 48) ** 2;
+      if (tdx * tdx + tdy * tdy < arriveR) {
         this.arrived = true;
         return;
       }
@@ -148,7 +191,7 @@ export class Vehicle {
         this.angle = this.currentRoad.getAngleAt(this.progress);
       } else {
         this.pickBestRoad();
-        if (!this.currentRoad && (tdx * tdx + tdy * tdy < 250 * 250)) {
+        if (!this.currentRoad && (tdx * tdx + tdy * tdy < 280 * 280)) {
           this.arrived = true;
         }
       }
@@ -167,16 +210,49 @@ export class Vehicle {
 
     const s = this.size * dpr;
 
+    // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.beginPath();
-    ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * 1.35, s * 0.75, 0, 0, Math.PI * 2);
+    ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * 1.45, s * 0.8, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
+    if (this.kind === 'truck') {
+      this.drawTruck(ctx, s, dpr);
+    } else {
+      this.drawCar(ctx, s, dpr);
+    }
+
+    // Owner ring for bots
+    if (this.owner !== 'player' && this.ownerColor) {
+      ctx.strokeStyle = this.ownerColor;
+      ctx.lineWidth = 1.6 * dpr;
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      ctx.arc(0, 0, s * 1.55, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Cargo icon hint
+    if (this.kind === 'truck') {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = `${Math.max(8, 9 * dpr)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.rotate(-this.angle);
+      ctx.fillText('📦', 0, -s * 1.6);
+    }
+
+    ctx.restore();
+  }
+
+  drawCar(ctx, s, dpr) {
     const w = s * 2.4;
     const h = s * 1.2;
     const r = 2.8 * dpr;
+
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
     ctx.moveTo(-w / 2 + r, -h / 2);
     ctx.lineTo(w / 2 - r, -h / 2);
     ctx.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
@@ -191,7 +267,39 @@ export class Vehicle {
 
     ctx.fillStyle = 'rgba(255,255,255,0.42)';
     ctx.fillRect(-s * 0.15, -s * 0.42, s * 0.9, s * 0.84);
+  }
 
-    ctx.restore();
+  drawTruck(ctx, s, dpr) {
+    const cabW = s * 1.1;
+    const bodyW = s * 2.2;
+    const h = s * 1.35;
+
+    // Trailer / cargo body
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-bodyW * 0.55, -h * 0.5, bodyW, h);
+    // Cab
+    ctx.fillStyle = this.darken(this.color, 0.85);
+    ctx.fillRect(bodyW * 0.35, -h * 0.42, cabW, h * 0.84);
+    // Window
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillRect(bodyW * 0.42, -h * 0.28, cabW * 0.55, h * 0.45);
+    // Cargo stripes
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 1.2 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(-bodyW * 0.35, -h * 0.35);
+    ctx.lineTo(-bodyW * 0.35, h * 0.35);
+    ctx.moveTo(-bodyW * 0.05, -h * 0.35);
+    ctx.lineTo(-bodyW * 0.05, h * 0.35);
+    ctx.stroke();
+  }
+
+  darken(hex, factor) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!m) return hex;
+    const r = Math.round(parseInt(m[1], 16) * factor);
+    const g = Math.round(parseInt(m[2], 16) * factor);
+    const b = Math.round(parseInt(m[3], 16) * factor);
+    return `rgb(${r},${g},${b})`;
   }
 }
