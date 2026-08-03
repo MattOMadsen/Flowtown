@@ -1,7 +1,11 @@
 /** Player / bot vehicles: passenger cars and cargo trucks */
 
+import { getClass, cargoCapacity as fleetCargoCap } from './fleet.js';
+
 const CAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6', '#06b6d4'];
 const TRUCK_COLORS = ['#b45309', '#92400e', '#a16207', '#78350f'];
+const FAST_COLORS = ['#e11d48', '#f43f5e', '#fb7185'];
+const HEAVY_COLORS = ['#57534e', '#44403c', '#78716c'];
 
 /** Keep progress away from exact endpoints (avoids snap/hak) */
 function clampTravelT(t) {
@@ -33,29 +37,45 @@ export class Vehicle {
     cargo = 1,
     startRoad = null,
     startT = null,
-    startReverse = false
+    startReverse = false,
+    fleetOwned = false,
+    homeName = null,
+    classId = null,
+    upgradeRank = 0,
+    id = null
   }) {
+    this.id = id || `v_${Math.random().toString(36).slice(2, 9)}`;
     this.x = x;
     this.y = y;
     this.target = targetDistrict;
     this.roads = roads;
-    this.kind = kind;
     this.job = job;
     this.owner = owner;
     this.ownerColor = ownerColor;
-    this.cargo = cargo;
     this.origin = job ? job.from : null;
+    /** Player-owned persistent vehicle (not despawned after delivery) */
+    this.fleetOwned = !!fleetOwned;
+    this.homeName = homeName || null;
+    this.parkName = this.homeName;
+    this.classId = classId || (kind === 'truck' ? 'truck_std' : 'car_std');
+    this.upgradeRank = Math.max(0, upgradeRank | 0);
 
-    if (kind === 'truck') {
-      this.baseSpeed = 48 + Math.random() * 22;
-      this.size = 8.5 + Math.random() * 2;
-      this.color = ownerColor || TRUCK_COLORS[Math.floor(Math.random() * TRUCK_COLORS.length)];
+    const cls = getClass(this.classId);
+    this.kind = cls.kind || kind;
+
+    if (this.kind === 'truck') {
+      this._rawBaseSpeed = 48 + Math.random() * 22;
+      this._rawSize = 8.5 + Math.random() * 2;
+      const palette = this.classId === 'truck_heavy' ? HEAVY_COLORS : TRUCK_COLORS;
+      this.color = ownerColor || palette[Math.floor(Math.random() * palette.length)];
     } else {
-      this.baseSpeed = 70 + Math.random() * 35;
-      this.size = 6 + Math.random() * 2.5;
-      this.color = ownerColor || CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+      this._rawBaseSpeed = 70 + Math.random() * 35;
+      this._rawSize = 6 + Math.random() * 2.5;
+      const palette = this.classId === 'car_fast' ? FAST_COLORS : CAR_COLORS;
+      this.color = ownerColor || palette[Math.floor(Math.random() * palette.length)];
     }
-    this.speed = this.baseSpeed;
+    this.applyClassStats();
+    this.cargo = cargo ?? this.getCargoCapacity();
 
     this.angle = 0;
     this.progress = 0.5;
@@ -79,6 +99,18 @@ export class Vehicle {
     } else {
       this.pickBestRoad();
     }
+  }
+
+  applyClassStats() {
+    const cls = getClass(this.classId);
+    const rankBoost = 1 + this.upgradeRank * 0.03; // mild speed from upgrades
+    this.baseSpeed = (this._rawBaseSpeed || 60) * (cls.speedMul || 1) * rankBoost;
+    this.size = (this._rawSize || 7) * (cls.sizeMul || 1) * (1 + this.upgradeRank * 0.04);
+    this.speed = this.baseSpeed;
+  }
+
+  getCargoCapacity() {
+    return fleetCargoCap(this.classId, this.upgradeRank);
   }
 
   /**
@@ -248,9 +280,62 @@ export class Vehicle {
     return a + d * t;
   }
 
+  /** Park idle at a district (fleet-owned after delivery) */
+  parkIdle(district, roads) {
+    this.job = null;
+    this.arrived = false;
+    this.stuck = false;
+    this.idleTime = 0;
+    this.life = 0;
+    this._triedReverse = false;
+    this.origin = null;
+    this.cargo = this.getCargoCapacity();
+    if (district) {
+      this.target = district;
+      this.parkName = district.name;
+      this.x = district.x;
+      this.y = district.y;
+    }
+    this.roads = roads || this.roads;
+    this.pickBestRoad();
+    // If no road, sit at district center
+    if (!this.currentRoad && district) {
+      this.x = district.x + (Math.random() - 0.5) * district.r * 0.4;
+      this.y = district.y + (Math.random() - 0.5) * district.r * 0.4;
+    }
+  }
+
+  assignJob(job, toDistrict, fromDistrict, roads, spawn) {
+    this.job = job;
+    this.origin = fromDistrict || job?.from || null;
+    this.target = toDistrict || job?.to || this.target;
+    this.arrived = false;
+    this.stuck = false;
+    this.idleTime = 0;
+    this.life = 0;
+    this._triedReverse = false;
+    this.cargo = this.getCargoCapacity();
+    this.roads = roads || this.roads;
+    if (spawn?.road) {
+      this.attachToRoad(spawn.road, spawn.t, !!spawn.reverse, false);
+    } else if (fromDistrict) {
+      this.x = fromDistrict.x;
+      this.y = fromDistrict.y;
+      this.pickBestRoad();
+    }
+  }
+
   update(dt, roads, allVehicles) {
     this.life += dt;
     this.roads = roads;
+
+    // Fleet idle: sit still until assigned a job
+    if (this.fleetOwned && !this.job) {
+      this.idleTime = 0;
+      this.stuck = false;
+      this.arrived = false;
+      return;
+    }
 
     // Blend handoff (smooth road switch)
     if (this._blend > 0) {
@@ -366,17 +451,46 @@ export class Vehicle {
     ctx.rotate(this.angle);
 
     const s = this.size * dpr;
+    const isFast = this.classId === 'car_fast';
+    const isHeavy = this.classId === 'truck_heavy';
+    const rank = this.upgradeRank || 0;
 
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.beginPath();
-    ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * 1.45, s * 0.8, 0, 0, Math.PI * 2);
+    ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * (isHeavy ? 1.65 : 1.45), s * (isHeavy ? 0.95 : 0.8), 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (this.kind === 'truck') {
-      this.drawTruck(ctx, s, dpr);
+      this.drawTruck(ctx, s, dpr, isHeavy);
     } else {
-      this.drawCar(ctx, s, dpr);
+      this.drawCar(ctx, s, dpr, isFast);
+    }
+
+    // Upgrade rank pips (fleet) – small bars above body
+    if (this.fleetOwned && rank > 0) {
+      ctx.save();
+      ctx.rotate(-this.angle);
+      const pipW = 3.2 * dpr;
+      const gap = 1.4 * dpr;
+      const totalW = rank * pipW + (rank - 1) * gap;
+      let px = -totalW / 2;
+      const py = -s * 1.55;
+      for (let i = 0; i < rank; i++) {
+        ctx.fillStyle = i < rank ? '#a78bfa' : 'rgba(0,0,0,0.1)';
+        ctx.fillRect(px, py, pipW, 2.2 * dpr);
+        px += pipW + gap;
+      }
+      ctx.restore();
+    }
+
+    // Class accent ring
+    if (this.fleetOwned && (isFast || isHeavy)) {
+      ctx.strokeStyle = isFast ? 'rgba(244, 63, 94, 0.85)' : 'rgba(68, 64, 60, 0.8)';
+      ctx.lineWidth = 1.8 * dpr;
+      ctx.beginPath();
+      ctx.arc(0, 0, s * (isHeavy ? 1.7 : 1.5), 0, Math.PI * 2);
+      ctx.stroke();
     }
 
     // Owner ring for bots
@@ -390,22 +504,24 @@ export class Vehicle {
       ctx.globalAlpha = 1;
     }
 
-    // Cargo icon hint
-    if (this.kind === 'truck') {
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.font = `${Math.max(8, 9 * dpr)}px system-ui`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.rotate(-this.angle);
-      ctx.fillText('📦', 0, -s * 1.6);
-    }
+    // Cargo / class icon hint
+    ctx.save();
+    ctx.rotate(-this.angle);
+    ctx.font = `${Math.max(8, 9 * dpr)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    if (isHeavy) ctx.fillText('🚛', 0, -s * 1.85);
+    else if (this.kind === 'truck') ctx.fillText('📦', 0, -s * 1.6);
+    else if (isFast) ctx.fillText('⚡', 0, -s * 1.55);
+    ctx.restore();
 
     ctx.restore();
   }
 
-  drawCar(ctx, s, dpr) {
-    const w = s * 2.5;
-    const h = s * 1.25;
+  drawCar(ctx, s, dpr, isFast = false) {
+    const w = s * (isFast ? 2.65 : 2.5);
+    const h = s * (isFast ? 1.1 : 1.25);
     const r = 3 * dpr;
 
     // Body
@@ -423,12 +539,18 @@ export class Vehicle {
     ctx.closePath();
     ctx.fill();
 
+    // Fast: racing stripe
+    if (isFast) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillRect(-w * 0.42, -h * 0.12, w * 0.75, h * 0.24);
+    }
+
     // Roof / window band
     ctx.fillStyle = 'rgba(255,255,255,0.38)';
     ctx.fillRect(-s * 0.2, -s * 0.38, s * 1.0, s * 0.76);
 
-    // Headlights
-    ctx.fillStyle = 'rgba(254, 243, 199, 0.9)';
+    // Headlights (brighter on fast)
+    ctx.fillStyle = isFast ? 'rgba(254, 240, 138, 1)' : 'rgba(254, 243, 199, 0.9)';
     ctx.fillRect(w / 2 - 2.5 * dpr, -h * 0.28, 2.2 * dpr, h * 0.2);
     ctx.fillRect(w / 2 - 2.5 * dpr, h * 0.08, 2.2 * dpr, h * 0.2);
 
@@ -440,10 +562,10 @@ export class Vehicle {
     ctx.fillRect(w * 0.08, h * 0.34, s * 0.45, s * 0.28);
   }
 
-  drawTruck(ctx, s, dpr) {
-    const cabW = s * 1.15;
-    const bodyW = s * 2.35;
-    const h = s * 1.4;
+  drawTruck(ctx, s, dpr, isHeavy = false) {
+    const cabW = s * (isHeavy ? 1.05 : 1.15);
+    const bodyW = s * (isHeavy ? 2.7 : 2.35);
+    const h = s * (isHeavy ? 1.55 : 1.4);
 
     // Trailer
     ctx.fillStyle = this.color;
@@ -453,27 +575,33 @@ export class Vehicle {
     ctx.lineWidth = 1 * dpr;
     ctx.strokeRect(-bodyW * 0.58, -h * 0.5, bodyW, h);
 
+    // Heavy: extra cargo ribs
+    ctx.strokeStyle = isHeavy ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = (isHeavy ? 1.6 : 1.3) * dpr;
+    ctx.beginPath();
+    const ribs = isHeavy ? [-0.42, -0.22, -0.02, 0.15] : [-0.38, -0.08];
+    for (const t of ribs) {
+      ctx.moveTo(bodyW * t, -h * 0.35);
+      ctx.lineTo(bodyW * t, h * 0.35);
+    }
+    ctx.stroke();
+
     // Cab
     ctx.fillStyle = this.darken(this.color, 0.82);
     ctx.fillRect(bodyW * 0.32, -h * 0.42, cabW, h * 0.84);
     // Window
     ctx.fillStyle = 'rgba(186, 230, 253, 0.7)';
     ctx.fillRect(bodyW * 0.4, -h * 0.28, cabW * 0.55, h * 0.45);
-    // Cargo stripes
-    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-    ctx.lineWidth = 1.3 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(-bodyW * 0.38, -h * 0.35);
-    ctx.lineTo(-bodyW * 0.38, h * 0.35);
-    ctx.moveTo(-bodyW * 0.08, -h * 0.35);
-    ctx.lineTo(-bodyW * 0.08, h * 0.35);
-    ctx.stroke();
     // Wheels
     ctx.fillStyle = '#1c1917';
     ctx.fillRect(-bodyW * 0.45, -h * 0.62, s * 0.5, s * 0.3);
     ctx.fillRect(-bodyW * 0.45, h * 0.32, s * 0.5, s * 0.3);
     ctx.fillRect(bodyW * 0.15, -h * 0.62, s * 0.5, s * 0.3);
     ctx.fillRect(bodyW * 0.15, h * 0.32, s * 0.5, s * 0.3);
+    if (isHeavy) {
+      ctx.fillRect(-bodyW * 0.15, -h * 0.62, s * 0.5, s * 0.3);
+      ctx.fillRect(-bodyW * 0.15, h * 0.32, s * 0.5, s * 0.3);
+    }
   }
 
   darken(hex, factor) {

@@ -3,6 +3,27 @@ import { Vehicle } from './vehicle.js';
 import { InputHandler } from './input.js';
 import { generateJob, jobComplete, jobLabel } from './jobs.js';
 import { Bot, BOT_PRESETS } from './bot.js';
+import {
+  loadMeta,
+  addXp,
+  levelProgress,
+  claimFirstLink,
+  XP_REWARDS
+} from './meta.js';
+import {
+  fleetCap,
+  buyPriceForClass,
+  vehicleCanDoJob,
+  getClass,
+  upgradePrice,
+  canUpgrade,
+  resolveUnlockedClasses,
+  applyUpgradeUnlocks,
+  FLEET,
+  VEHICLE_CLASSES,
+  cargoCapacity
+} from './fleet.js';
+import { saveMeta } from './meta.js';
 
 const START_MONEY = 500;
 const MAX_JOBS = 5;
@@ -33,8 +54,11 @@ export class Game {
     this.input = new InputHandler(canvas, this);
 
     this.spawnTimer = 0;
+    this.assignTimer = 0;
     this.jobTimer = 0;
     this.stuckPenaltyTimer = 0;
+    /** Open city sheet: district name or null */
+    this.selectedDistrictName = null;
 
     // Economy & score
     this.money = START_MONEY;
@@ -47,6 +71,11 @@ export class Game {
     this.pendingRoadCost = 0;
     this.toast = null;
     this.toastTimer = 0;
+
+    // Meta: XP / level (persists across sessions)
+    this.meta = loadMeta();
+    applyUpgradeUnlocks(this.meta);
+    saveMeta(this.meta);
 
     this.snapDistance = 85;
 
@@ -122,10 +151,210 @@ export class Game {
     // Seed a couple of starter jobs
     this.addJob();
     this.addJob();
+    if (this.getPlayerFleet().length === 0) {
+      this.showToast('Tryk på en by for at købe din første bil', 3.5);
+    }
     if (!this._loopStarted) {
       this._loopStarted = true;
       requestAnimationFrame((t) => this.loop(t));
     }
+  }
+
+  getPlayerFleet() {
+    return this.vehicles.filter(v => v.owner === 'player' && v.fleetOwned);
+  }
+
+  getFleetCap() {
+    return fleetCap(this.meta?.level || 1);
+  }
+
+  getFleetStats() {
+    const fleet = this.getPlayerFleet();
+    const idle = fleet.filter(v => !v.job).length;
+    return {
+      owned: fleet.length,
+      cap: this.getFleetCap(),
+      idle,
+      busy: fleet.length - idle,
+      cars: fleet.filter(v => v.kind === 'car').length,
+      trucks: fleet.filter(v => v.kind === 'truck').length
+    };
+  }
+
+  hitDistrict(screenX, screenY) {
+    const w = this.screenToWorld(screenX, screenY);
+    let best = null;
+    let bestD = Infinity;
+    for (const d of this.districts) {
+      const dist = Math.hypot(d.x - w.x, d.y - w.y);
+      // Generous tap target for mobile
+      if (dist <= d.r * 1.35 && dist < bestD) {
+        bestD = dist;
+        best = d;
+      }
+    }
+    return best;
+  }
+
+  openDistrictSheet(district) {
+    if (!district || !this.running) return;
+    this.selectedDistrictName = district.name;
+  }
+
+  closeDistrictSheet() {
+    this.selectedDistrictName = null;
+  }
+
+  getSelectedDistrict() {
+    if (!this.selectedDistrictName) return null;
+    return this.districts.find(d => d.name === this.selectedDistrictName) || null;
+  }
+
+  getUnlockedClasses() {
+    return resolveUnlockedClasses(this.meta);
+  }
+
+  /** Catalog for buy UI */
+  getBuyCatalog() {
+    const n = this.getPlayerFleet().length;
+    const unlocked = new Set(this.getUnlockedClasses());
+    const totalUp = this.meta.totalUpgrades || 0;
+    return Object.values(VEHICLE_CLASSES).map(c => ({
+      id: c.id,
+      label: c.label,
+      short: c.short,
+      icon: c.icon,
+      desc: c.desc,
+      kind: c.kind,
+      price: buyPriceForClass(c.id, n),
+      unlocked: unlocked.has(c.id),
+      unlockAt: c.unlockAt,
+      progress: c.unlockAt > 0 ? Math.min(1, totalUp / c.unlockAt) : 1,
+      remaining: Math.max(0, (c.unlockAt || 0) - totalUp)
+    }));
+  }
+
+  getBuyPrices() {
+    const n = this.getPlayerFleet().length;
+    return {
+      car: buyPriceForClass('car_std', n),
+      truck: buyPriceForClass('truck_std', n)
+    };
+  }
+
+  /**
+   * Buy a vehicle stationed at a district.
+   * @param {object|string} district
+   * @param {string} classIdOrKind class id or legacy 'car'|'truck'
+   */
+  buyVehicleAt(district, classIdOrKind = 'car_std') {
+    if (!this.running) return { ok: false, reason: 'not_running' };
+    const d = typeof district === 'string'
+      ? this.districts.find(x => x.name === district)
+      : district;
+    if (!d) return { ok: false, reason: 'no_district' };
+
+    let classId = classIdOrKind;
+    if (classIdOrKind === 'car') classId = 'car_std';
+    if (classIdOrKind === 'truck') classId = 'truck_std';
+    const cls = getClass(classId);
+
+    const unlocked = this.getUnlockedClasses();
+    if (!unlocked.includes(classId)) {
+      this.showToast(`Låst – opgrader biler ${cls.unlockAt} gange i alt`);
+      return { ok: false, reason: 'locked' };
+    }
+
+    const fleet = this.getPlayerFleet();
+    const cap = this.getFleetCap();
+    if (fleet.length >= cap) {
+      this.showToast(`Flåde fuld (${fleet.length}/${cap}) – stig i level for flere slots`);
+      return { ok: false, reason: 'cap' };
+    }
+
+    const price = buyPriceForClass(classId, fleet.length);
+    if (this.money < price) {
+      this.showToast(`Ikke råd (mangler $${price - Math.floor(this.money)})`);
+      return { ok: false, reason: 'money' };
+    }
+
+    this.money -= price;
+    const spawn = this.findSpawnOnRoadNear(d, null, 220);
+    const v = new Vehicle({
+      x: spawn ? spawn.x : d.x,
+      y: spawn ? spawn.y : d.y,
+      targetDistrict: d,
+      roads: this.roads,
+      kind: cls.kind,
+      classId,
+      upgradeRank: 0,
+      job: null,
+      owner: 'player',
+      cargo: cargoCapacity(classId, 0),
+      startRoad: spawn?.road || null,
+      startT: spawn?.t ?? null,
+      startReverse: false,
+      fleetOwned: true,
+      homeName: d.name
+    });
+    v.parkIdle(d, this.roads);
+    this.vehicles.push(v);
+    this.totalSpawned++;
+    this.addFloatText(d.x, d.y - d.r, `−$${price}`, '#b91c1c');
+    this.showToast(`${cls.icon} ${cls.label} købt i ${d.name}`);
+    this.assignFleetJobs();
+    return { ok: true, vehicle: v, price };
+  }
+
+  /**
+   * U1: Upgrade +last on a fleet vehicle.
+   */
+  upgradeVehicle(vehicleId) {
+    const v = this.getPlayerFleet().find(x => x.id === vehicleId);
+    if (!v) return { ok: false, reason: 'not_found' };
+    if (!canUpgrade(v.upgradeRank)) {
+      this.showToast('Max opgraderet (rank 3)');
+      return { ok: false, reason: 'max' };
+    }
+    const price = upgradePrice(v.upgradeRank, v.classId);
+    if (this.money < price) {
+      this.showToast(`Ikke råd (mangler $${price - Math.floor(this.money)})`);
+      return { ok: false, reason: 'money' };
+    }
+    this.money -= price;
+    v.upgradeRank += 1;
+    v.applyClassStats();
+    if (!v.job) v.cargo = v.getCargoCapacity();
+
+    this.meta.totalUpgrades = (this.meta.totalUpgrades || 0) + 1;
+    const newly = applyUpgradeUnlocks(this.meta);
+    saveMeta(this.meta);
+
+    const cap = v.getCargoCapacity();
+    this.addFloatText(v.x, v.y - 12, `Last ${cap}`, '#7c3aed');
+    this.showToast(`Opgraderet · last ${cap} · $${price}`);
+
+    if (newly.length) {
+      const names = newly.map(id => {
+        const c = getClass(id);
+        return `${c.icon} ${c.label}`;
+      }).join(', ');
+      this.showToast(`Ulåst: ${names}!`, 3.4);
+    }
+    return { ok: true, vehicle: v, price, newly };
+  }
+
+  /** Vehicles listed in upgrade tab (home city first) */
+  getFleetForSheet(districtName) {
+    const fleet = this.getPlayerFleet();
+    const here = [];
+    const other = [];
+    for (const v of fleet) {
+      const home = v.homeName || v.parkName;
+      if (home === districtName) here.push(v);
+      else other.push(v);
+    }
+    return [...here, ...other].slice(0, 8);
   }
 
   togglePause() {
@@ -337,7 +566,64 @@ export class Game {
       this.addFloatText(points[Math.floor(points.length / 2)].x, points[Math.floor(points.length / 2)].y, `−$${cost}`, '#b91c1c');
     }
     this.roads.push(new Road(points, { owner, ownerColor }));
+    if (owner === 'player') {
+      this.checkFirstLinks();
+    }
     return true;
+  }
+
+  /**
+   * B1: grant XP once the first time two districts become roughly linked.
+   */
+  checkFirstLinks() {
+    const n = this.districts.length;
+    if (n < 2) return;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = this.districts[i];
+        const b = this.districts[j];
+        if (!this.areDistrictsRoughlyConnected(a, b)) continue;
+        if (!claimFirstLink(this.meta, a.name, b.name)) continue;
+        this.grantXp(XP_REWARDS.firstLink, {
+          floatAt: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+          toast: `Forbundet: ${a.name}–${b.name} · +${XP_REWARDS.firstLink} XP`
+        });
+      }
+    }
+  }
+
+  /**
+   * Award XP to player meta; level-up toast + small $ bonus.
+   * @param {number} amount
+   * @param {{ floatAt?: {x:number,y:number}, toast?: string|null, silent?: boolean }} [opts]
+   */
+  grantXp(amount, opts = {}) {
+    const result = addXp(this.meta, amount);
+    if (result.amount <= 0) return result;
+
+    if (opts.floatAt && !opts.silent) {
+      this.addFloatText(opts.floatAt.x, opts.floatAt.y - 18, `+${result.amount} XP`, '#7c3aed');
+    }
+
+    if (result.leveled) {
+      let moneyBonus = 0;
+      for (let i = 0; i < result.levelsGained; i++) {
+        const lvl = result.level - result.levelsGained + i + 1;
+        moneyBonus += XP_REWARDS.levelMoneyBase + lvl * XP_REWARDS.levelMoneyPerLevel;
+      }
+      this.money += moneyBonus;
+      this.showToast(
+        `Level ${result.level}! 🎉 +$${moneyBonus}`,
+        3.2
+      );
+    } else if (opts.toast) {
+      this.showToast(opts.toast, 2.0);
+    }
+    return result;
+  }
+
+  getMetaProgress() {
+    return levelProgress(this.meta);
   }
 
   findSnapPoint(x, y) {
@@ -623,15 +909,19 @@ export class Game {
     return v;
   }
 
-  /** A1: Player auto-spawn only for open jobs with a road at origin */
-  spawnVehicle() {
+  /**
+   * F2: Assign open jobs to idle player fleet vehicles.
+   * Prefers home district jobs, then nearest under-served jobs.
+   */
+  assignFleetJobs() {
     if (this.districts.length < 2 || this.roads.length === 0) return;
-    if (this.vehicles.filter(v => v.owner === 'player').length >= 22) return;
+
+    const idle = this.getPlayerFleet().filter(v => !v.job && !v.arrived);
+    if (!idle.length) return;
 
     const open = this.jobs.filter(j => j.active && j.delivered < j.amount);
-    if (open.length === 0) return;
+    if (!open.length) return;
 
-    // How many player vehicles already serve each job
     const counts = {};
     for (const v of this.vehicles) {
       if (v.owner === 'player' && v.job) {
@@ -639,26 +929,60 @@ export class Game {
       }
     }
 
-    // Prefer under-served jobs; cap vehicles per remaining cargo
-    const ranked = open
-      .map(j => {
-        const remaining = j.amount - j.delivered;
-        const onRoute = counts[j.id] || 0;
-        const cap = Math.min(4, Math.max(1, remaining));
-        return { job: j, onRoute, remaining, cap, over: onRoute >= cap };
-      })
-      .filter(x => !x.over)
-      .sort((a, b) => a.onRoute - b.onRoute || b.remaining - a.remaining);
+    for (const vehicle of idle) {
+      let best = null;
+      let bestScore = -Infinity;
 
-    for (const { job } of ranked) {
-      // Skip jobs with no road at origin (no point spawning)
-      const from = this.districts.find(d => d.name === job.from.name) || job.from;
-      const to = this.districts.find(d => d.name === job.to.name) || job.to;
-      if (!this.findSpawnOnRoadNear(from, to, 180)) continue;
-      this.spawnJobVehicle(job, 'player', null);
-      return;
+      for (const job of open) {
+        if (!vehicleCanDoJob(vehicle, job)) continue;
+        const remaining = job.amount - job.delivered;
+        const onRoute = counts[job.id] || 0;
+        const perJobCap = Math.min(3, Math.max(1, remaining));
+        if (onRoute >= perJobCap) continue;
+
+        const from = this.districts.find(d => d.name === job.from.name) || job.from;
+        const to = this.districts.find(d => d.name === job.to.name) || job.to;
+        const spawn = this.findSpawnOnRoadNear(from, to, 200);
+        if (!spawn) continue;
+
+        const park = vehicle.parkName || vehicle.homeName;
+        const homeBonus = park === from.name ? 80 : 0;
+        const dist = Math.hypot(
+          (vehicle.x || from.x) - from.x,
+          (vehicle.y || from.y) - from.y
+        );
+        const cap = vehicle.getCargoCapacity?.() || 1;
+        const cargoFit = Math.min(remaining, cap) * 14;
+        // U3: match class to job shape – heavy loves big cargo, fast loves small passenger runs
+        let classFit = 0;
+        if (job.type === 'cargo') {
+          if (vehicle.classId === 'truck_heavy') classFit = remaining >= 5 ? 55 : 20;
+          else if (vehicle.classId === 'truck_std') classFit = 15;
+        } else {
+          if (vehicle.classId === 'car_fast') classFit = remaining <= 6 ? 50 : 18;
+          else if (vehicle.classId === 'car_std') classFit = 15;
+        }
+        // Overkill penalty: huge capacity on tiny leftover job
+        if (cap > remaining + 1) classFit -= (cap - remaining) * 8;
+        const speedHint = (vehicle.baseSpeed || 60) * 0.1;
+        const score =
+          homeBonus + remaining * 5 + cargoFit + classFit + speedHint
+          - onRoute * 25 - dist * 0.02 + Math.random();
+        if (score > bestScore) {
+          bestScore = score;
+          best = { job, from, to, spawn };
+        }
+      }
+
+      if (!best) continue;
+      vehicle.assignJob(best.job, best.to, best.from, this.roads, best.spawn);
+      counts[best.job.id] = (counts[best.job.id] || 0) + 1;
     }
-    // No free-roam traffic — empty roads if no job can be served
+  }
+
+  /** @deprecated player uses fleet; bots still call spawnJobVehicle */
+  spawnVehicle() {
+    this.assignFleetJobs();
   }
 
   addArrivalParticles(x, y, color) {
@@ -688,14 +1012,15 @@ export class Game {
     const job = vehicle.job;
     const units = vehicle.cargo || 1;
     let reward = 8;
+    let applied = units;
+    let jobJustCompleted = false;
 
     if (job && job.active) {
-      // Re-bind districts if needed
       const to = this.districts.find(d => d.name === job.to.name);
       if (to) vehicle.target = to;
 
       const remaining = job.amount - job.delivered;
-      const applied = Math.min(units, remaining);
+      applied = Math.min(units, Math.max(0, remaining));
       job.delivered += applied;
 
       const unitReward = Math.round(job.reward / job.amount);
@@ -703,8 +1028,8 @@ export class Game {
 
       if (jobComplete(job)) {
         job.active = false;
+        jobJustCompleted = true;
         this.showToast(`Opgave klar: ${job.from.name} → ${job.to.name}!`);
-        // Bonus particles at destination
         this.addArrivalParticles(vehicle.x, vehicle.y, job.to.color);
       }
     }
@@ -712,7 +1037,7 @@ export class Game {
     if (vehicle.owner === 'player') {
       this.money += reward;
       this.playerScore += reward;
-      this.playerDelivered += units;
+      this.playerDelivered += applied;
       this.arrivedCount++;
       if (this.arrivedCount > this.sessionBest) this.sessionBest = this.arrivedCount;
       if (this.arrivedCount > this.allTimeBest) {
@@ -720,10 +1045,25 @@ export class Game {
         this.saveBest(this.allTimeBest);
       }
       this.addFloatText(vehicle.x, vehicle.y - 10, `+$${reward}`, '#059669');
+
+      // B1: XP per unit + bonus when whole job completes
+      let xpGain = XP_REWARDS.perUnit * Math.max(1, applied);
+      if (jobJustCompleted && job) {
+        xpGain += XP_REWARDS.jobCompleteBase + job.amount * XP_REWARDS.jobCompletePerUnit;
+      }
+      this.grantXp(xpGain, { floatAt: { x: vehicle.x, y: vehicle.y } });
+
+      // F1: fleet vehicles park at destination and stay
+      if (vehicle.fleetOwned) {
+        const parkAt = (job && this.districts.find(d => d.name === job.to.name))
+          || vehicle.target
+          || this.districts[0];
+        vehicle.parkIdle(parkAt, this.roads);
+      }
     } else {
       const bot = this.bots.find(b => b.id === vehicle.owner);
       if (bot) {
-        bot.onDelivery(reward, units);
+        bot.onDelivery(reward, applied);
         this.addFloatText(vehicle.x, vehicle.y - 10, `${bot.name} +$${reward}`, bot.color);
       }
     }
@@ -755,11 +1095,11 @@ export class Game {
     // Remove old completed jobs from list (keep a few for history)
     this.jobs = this.jobs.filter(j => j.active || (performance.now() - j.createdAt < 8000));
 
-    // Player vehicle spawn
-    this.spawnTimer += dt;
-    if (this.spawnTimer > 1.05 && this.vehicles.length < 55) {
-      this.spawnVehicle();
-      this.spawnTimer = 0;
+    // F2: assign jobs to idle fleet (not free spawn)
+    this.assignTimer += dt;
+    if (this.assignTimer > 0.85) {
+      this.assignFleetJobs();
+      this.assignTimer = 0;
     }
 
     // Bots
@@ -767,13 +1107,13 @@ export class Game {
       for (const bot of this.bots) bot.update(dt);
     }
 
-    // Stuck traffic penalty (player only)
+    // Stuck traffic penalty (busy player vehicles only)
     this.stuckPenaltyTimer += dt;
     if (this.stuckPenaltyTimer >= STUCK_PENALTY_INTERVAL) {
       this.stuckPenaltyTimer = 0;
       let stuckCount = 0;
       for (const v of this.vehicles) {
-        if (v.owner === 'player' && v.stuck) stuckCount++;
+        if (v.owner === 'player' && v.job && v.stuck) stuckCount++;
       }
       if (stuckCount >= 3) {
         const pen = STUCK_PENALTY * Math.min(5, stuckCount - 2);
@@ -784,25 +1124,43 @@ export class Game {
 
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
       const v = this.vehicles[i];
-      // A1: drop jobless free-roamers (legacy) and vehicles whose job finished
-      if (!v.job || (v.job.active === false && !v.arrived)) {
+
+      // Job cancelled / filled while en-route
+      if (v.job && !v.arrived && (v.job.active === false || v.job.delivered >= v.job.amount)) {
+        if (v.fleetOwned) {
+          const park = this.districts.find(d => d.name === (v.parkName || v.homeName))
+            || v.target
+            || this.districts[0];
+          v.parkIdle(park, this.roads);
+          continue;
+        }
         this.vehicles.splice(i, 1);
         continue;
       }
-      if (v.job && v.job.delivered >= v.job.amount && !v.arrived) {
-        // Job already filled by others — despawn without reward spam
+
+      // Legacy non-fleet jobless: remove
+      if (!v.fleetOwned && !v.job) {
         this.vehicles.splice(i, 1);
         continue;
       }
+
       v.update(dt, this.roads, this.vehicles);
-      if (v.arrived) {
+
+      if (v.arrived && v.job) {
         this.completeDelivery(v);
+        if (!v.fleetOwned) {
+          this.vehicles.splice(i, 1);
+        }
+        // fleetOwned already parked inside completeDelivery
+      } else if (!v.fleetOwned && v.life > 90) {
         this.vehicles.splice(i, 1);
-      } else if (v.life > 90) {
+      } else if (!v.fleetOwned && v.idleTime > 14 && v.life > 12) {
         this.vehicles.splice(i, 1);
-      } else if (v.idleTime > 14 && v.life > 12) {
-        // Stuck too long with no progress — remove instead of endless noise
-        this.vehicles.splice(i, 1);
+      } else if (v.fleetOwned && v.job && v.idleTime > 18 && v.life > 15) {
+        // Stuck owned vehicle: abort job and re-park at home
+        const park = this.districts.find(d => d.name === (v.homeName || v.parkName))
+          || this.districts[0];
+        v.parkIdle(park, this.roads);
       }
     }
 

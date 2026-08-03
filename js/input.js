@@ -7,6 +7,10 @@ export class InputHandler {
     this.spaceDown = false;
     this.panLast = null;
     this.pinch = null;
+    /** District tap without drag (buy fleet) */
+    this.pendingDistrict = null;
+    this.downPos = null;
+    this.movedPx = 0;
 
     // Mouse
     canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
@@ -190,6 +194,7 @@ export class InputHandler {
   }
 
   endDrawIfAny() {
+    this.pendingDistrict = null;
     if (this.drawing) {
       this.drawing = false;
       this.game.endStroke();
@@ -198,24 +203,61 @@ export class InputHandler {
 
   onDown(e) {
     const pos = this.getPos(e);
+    this.downPos = pos;
+    this.movedPx = 0;
+    this.pendingDistrict = null;
+
     // Minimap click pans camera instead of drawing
     if (this.game.handleMinimapTap?.(pos.x, pos.y)) {
       this.drawing = false;
       return;
     }
+
+    // Tap-on-city candidate (F1) – only if we don't drag far
+    const hit = this.game.hitDistrict?.(pos.x, pos.y);
+    if (hit && this.game.running && this.game.mode !== 'erase') {
+      this.pendingDistrict = hit;
+      this.drawing = false;
+      return;
+    }
+
     this.drawing = true;
     this.game.beginStroke(pos.x, pos.y);
   }
 
   onMove(e) {
-    if (!this.drawing) return;
     const pos = this.getPos(e);
+    if (this.pendingDistrict && this.downPos) {
+      const dx = pos.x - this.downPos.x;
+      const dy = pos.y - this.downPos.y;
+      this.movedPx = Math.hypot(dx, dy);
+      // Drag → start drawing from original point (not a city tap)
+      if (this.movedPx > 14) {
+        this.pendingDistrict = null;
+        this.drawing = true;
+        this.game.beginStroke(this.downPos.x, this.downPos.y);
+        this.game.continueStroke(pos.x, pos.y);
+      }
+      return;
+    }
+    if (!this.drawing) return;
     this.game.continueStroke(pos.x, pos.y);
   }
 
   onUp() {
+    if (this.pendingDistrict) {
+      if (this.movedPx <= 14) {
+        this.game.openDistrictSheet(this.pendingDistrict);
+      }
+      this.pendingDistrict = null;
+      this.downPos = null;
+      this.movedPx = 0;
+      this.drawing = false;
+      return;
+    }
     if (!this.drawing) return;
     this.drawing = false;
+    this.downPos = null;
     this.game.endStroke();
   }
 }

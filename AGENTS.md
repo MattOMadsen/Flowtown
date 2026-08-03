@@ -5,11 +5,15 @@ Læs denne fil før du ændrer spillet. Målet er cozy mini Transport Tycoon i b
 ## Workflow (obligatorisk)
 
 1. **Dansk** til brugeren medmindre de skriver på andet sprog.
-2. Når arbejde er **færdigt**: sig det tydeligt (status + hvad der ændrede sig).
-3. Når brugeren beder om **push** / “på GitHub”: **commit + push** og bekræft med commit-hash + repo-URL.
-4. **Commit ikke** `data/` (live-scratch / composer) – se `.gitignore`.
-5. Efter større UI-ændringer: kør mindst `node --check` på berørte JS-filer.
-6. Brug **`/check-work`** eller en review-agent efter større features, når brugeren beder om det eller før “alle 3”-agtige leverancer.
+2. Når **koden er færdig** (batch/feature): **svar med det samme** – status + hvad der ændrede sig. Vent ikke på at brugeren spørger.
+3. Når en **opgave/batch er færdig**: **commit + push** med det samme (medmindre brugeren siger “ikke push”). Bekræft med commit-hash + repo-URL.
+4. **Efter hver push:** skriv altid **næste skridt** (1–3 ting fra planen, anbefalet rækkefølge).
+5. **Commit ikke** `data/` (live-scratch / composer) – se `.gitignore`.
+6. Efter større UI-ændringer: kør mindst `node --check` på berørte JS-filer.
+7. Brug **`/check-work`** eller en review-agent efter større features, når brugeren beder om det eller før “alle 3”-agtige leverancer.
+8. Ideer fra brugeren → ind i `DESIGN-PROGRESSION.md` / `IMPROVEMENTS.md`; implementér **1–3 ting** ad gangen.
+9. Når brugeren kommer med **forslag/ideer**: kom **altid** med en kort **anbefaling** (ja/nej/hybrid + hvorfor), ikke kun “noteret”.
+10. Ved hver idé og før implementering: **tjek planen** (`DESIGN-PROGRESSION.md`, UI safe-zones, touch) så det hele **hænger sammen på mobil** – 1–2 tryk hvor muligt, undgå micro-management, ingen permanente overlays i hjørne-distrikter.
 
 ## UI må ikke dække spilverdenen
 

@@ -223,7 +223,7 @@ Hver **batch** = 1–3 konkrete leverancer. Rækkefølge kan finjusteres, men af
 
 | Batch | Indhold | Værdi |
 |-------|---------|--------|
-| **B1** | XP-bar, level, localStorage; XP ved job + first-link; $ uændret til veje | Progression synlig |
+| **B1** | ~~XP-bar, level, localStorage~~ **DONE** | meta.js + UI; XP ved levering/job/first-link |
 | **B2** | Shop (bottom sheet): 4–6 $ items der er level-unlock’ede | Penge får mere formål |
 | **B3** | 2-spor vej-opgradering ($ + unlock) | Klassisk flaskehals→upgrade loop |
 
@@ -316,12 +316,118 @@ Hver **batch** = 1–3 konkrete leverancer. Rækkefølge kan finjusteres, men af
 
 | Dato | Idé | Status | Foreslået batch |
 |------|-----|--------|-----------------|
-| 2026-08-03 | Point/XP + penge begge skal bruges (level + shop) | I plan | B1–B2 |
+| 2026-08-03 | Point/XP + penge begge skal bruges (level + shop) | **B1 done**, shop B2 | B1–B2 |
 | 2026-08-03 | Flere baner; videre ved mål/XP | I plan | C1–C2 |
 | 2026-08-03 | Biler skal ikke køre hvor der ikke er opgaver | **Done A1** | A1 |
 | 2026-08-03 | Større map, flere opgaver/typer | I plan | C3, D3 |
 | 2026-08-03 | Vand + broer | I plan | D1–D2 |
+| 2026-08-03 | Køb biler i stedet for auto-spawn; tryk på by → køb 1 bil | **F1+F2 done** | F1–F2 |
+| 2026-08-03 | Opgrader biler (læs/fart); unlock bedre biltyper efter X opgraderinger; variation | I plan | **U1–U3** |
 | — | *(næste forslag fra dig)* | — | — |
+
+---
+
+## 13. Flåde: købte biler (TT-følelse uden mobil-helvede)
+
+### Problem med auto-spawn i dag
+Mange biler “kommer af sig selv” → trafikstøj, mindre ejerskab, mindre TT-agtigt.
+
+### Anbefalet model (hybrid der føles som Deluxe, spiller på mobil)
+
+| Princip | Valg |
+|---------|------|
+| **Ejerskab** | Du **køber** biler for $ (ikke uendelig auto-spawn) |
+| **Stationering** | Køb sker i en **by** (depot) – bilen hører til der |
+| **Opgaver** | Aktive jobs assignes til ledige biler (auto: “nærmeste ledige”) |
+| **Mobil** | **Tryk by → lille sheet** “+👤 bil $X / +📦 lastbil $Y” – 1–2 tryk, ikke micro-management pr. tur |
+| **Cap** | Start f.eks. **2 bil-slots**; flere slots via $ eller level-unlock (B1/B2) |
+| **Ikke** | Tving “vælg rute for hver bil hver gang” (det bliver træls på mobil) |
+
+### Loop (vanedannende + TT-light)
+```
+Tjen $ på jobs → tryk by → køb bil → bil kører selv til job fra den by
+→ flaskehals? køb flere / anden by → senere 2-spor / bus
+```
+
+### Hvad vi *bevidst* undgår på mobil
+- Trække bil manuelt hver gang  
+- 10 menuer dybt  
+- At man *skal* styre hver bil for at tjene  
+
+**TT Deluxe-kerne vi beholder:** dit netværk + din flåde + økonomi.  
+**Mobil-kerne:** tegn veje, køb flåde, se jobs køre – auto-assign.
+
+### UX-skitse
+1. Tap by → panel: navn, “Ledige biler: 1”, knapper **Køb personbil**, **Køb lastbil** (priser stiger mildt pr. bil i flåden).  
+2. Top/stats: `Flåde 3/6` (ejede / cap).  
+3. Fjern (eller slå næsten helt fra) player auto-`spawnVehicle` uden ejerskab.  
+4. Bots kan beholde simpel auto-flåde (AI “køber” soft) så de ikke snyder.
+
+### Implementeringsbatch
+| Batch | Indhold |
+|-------|---------|
+| **F1** | ~~DONE~~ Flåde-state, by-tap køb, stop player auto-spawn |
+| **F2** | ~~DONE~~ Auto-assign + bottom sheet + flåde i stats |
+| **F3** | Pris-kurve finpuds / sælg bil / cap shop (senere) |
+
+**Prioritet ift. B2 shop:** F1 kan *erstatte* “+1 bil i shop” midlertidigt – shop bliver opgraderinger (fart, cap, 2-spor), by-tap er hvor flåden vokser.
+
+### Anbefalet rækkefølge nu
+1. ~~**F1+F2**~~ done  
+2. **U1** bil-klasser + opgrader last (by-sheet) – retention uden kedelig grind  
+3. **B3** 2-spor (netværk-dybde)  
+4. **U2** unlock næste tier efter X opgraderinger  
+5. C baner, D vand/broer, B2 global shop hvis stadig behov  
+
+---
+
+## 14. Bil-opgraderinger & klasser (retention uden kedsomhed)
+
+### Mål
+Længere spilletid via **valg** (fart vs last vs specialisering), ikke kun “køb bil #12 der er ens”.
+
+### Anbefalet model (mobil-first)
+
+| Princip | Valg |
+|---------|------|
+| **Klasser** | 2–3 linjer: **Hurtig** (lidt last), **Standard**, **Tung** (meget last, langsom) – både person- og gods-variant |
+| **Opgrader pr. bil** | Tryk bil *eller* by-sheet “Mine biler” → **+Last** / **+Fart** (koster $) |
+| **Soft soft-cap pr. bil** | Max 3–4 ranks pr. bil, så man ikke grinder én bil uendeligt |
+| **Tier-unlock** | Efter **X totale opgraderinger** (meta, fx 5) → unlock **næste bilklasse** i købsmenuen |
+| **Ikke** | Separate stats-skærme i 5 lag; ikke “equip gear” som idle RPG |
+
+### Hvorfor det ikke bliver ensformet
+1. **Tradeoff:** hurtig bil tømmer små jobs; tung bil er bedre til store gods-jobs.  
+2. **Unlock-rytme:** ny biltype ca. hvert 5–8 opgraderinger → “snart noget nyt”.  
+3. **By-specialisering:** hurtige biler i Centrum, lastbiler ved industri (senere).  
+4. **Jobs matcher klasser** (allerede 👤/📦) – senere ekspres-jobs der belønner fart.
+
+### Mobil-UX
+- By-sheet udvides: fane **Køb** | **Opgrader** (liste max 4–5 biler “her” / “alle”, store knapper).  
+- Opgrader = **ét tryk** “+1 last $N” med tydelig før/efter (1→2 enheder).  
+- Ingen drag-and-drop inventory.
+
+### Progression (eksempel)
+| Meta | Unlock |
+|------|--------|
+| Start | Standard bil + standard lastbil |
+| 5 opgraderinger | Hurtig bil (lav last, høj fart) |
+| 10 | Tung lastbil (høj last) |
+| 15 | Bus / ekspres (senere) |
+| Level (B1) | Flåde-cap (allerede) |
+
+**$ = opgrader/køb**, **XP/level = cap + evt. tidlig tier** – hold split rent.
+
+### Batches
+| ID | Indhold |
+|----|---------|
+| **U1** | ~~DONE~~ upgradeRank +last, by-sheet fane Opgrader |
+| **U2** | ~~DONE~~ totalUpgrades meta; hurtig@5, tung@10 |
+| **U3** | ~~DONE~~ stripe/ring/pips + classFit i assign |
+
+### Mobil-risiko
+- For mange knapper i sheet → **faner**, collapsed default.  
+- For stærk tung bil → alle køber kun den → balance: jobs med tidsbonus / small passenger jobs.
 
 ---
 

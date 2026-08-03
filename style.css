@@ -32,6 +32,19 @@ body {
   transition: box-shadow 0.2s ease;
 }
 
+#level-badge {
+  transition: box-shadow 0.2s ease;
+}
+
+#xp-fill {
+  min-width: 0;
+}
+
+#district-sheet button:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 #zoom-controls {
   touch-action: manipulation;
   -webkit-user-select: none;

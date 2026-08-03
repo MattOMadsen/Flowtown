@@ -15,6 +15,12 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] `.gitignore` for `data/`
 - [x] **PROG-A1** Job-styret spawn (ingen free-roam) + cap pr. job
 - [x] **PROG-A2** Spawn på vej, blend ved skift, clamp progress, bedre U-turn
+- [x] **PROG-B1** XP + level + localStorage + first-link XP + UI bar
+- [x] **PROG-F1** Køb bil via by-tryk; ejet flåde (ingen player auto-spawn)
+- [x] **PROG-F2** Auto-assign jobs til ledige biler + flåde-UI
+- [x] **PROG-U1** Opgrader bil +last (rank 0–3) i by-sheet
+- [x] **PROG-U2** Unlock hurtig bil (5) / tung lastbil (10) via totalUpgrades
+- [x] **PROG-U3** Visuel klasse-forskel + job-match i assign
 
 ---
 
@@ -35,7 +41,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-A1 | ~~Job-styret spawn~~ | Done 2026-08-03 |
 | PROG-A2 | ~~Fix bil-hakning~~ | Done 2026-08-03 |
 | PROG-A3 | By-hubs + stærk snap + connected + bynavne | game.js |
-| PROG-B1 | XP + level + localStorage meta | $ = køb, XP = unlock |
+| PROG-B1 | ~~XP + level + localStorage meta~~ | Done 2026-08-03 |
 | PROG-B2 | Shop UI (flåde/infra unlock’et af level) | bottom sheet |
 | PROG-B3 | 2-spor vej-opgradering for $ | capacity loop |
 | PROG-C1 | Baner/scenarios + 3-stjerne mål | scenarios.js |
@@ -44,6 +50,12 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-D1 | Vand (sø/kyst) blokerer normal vej | terrain |
 | PROG-D2 | Broer (dyrere segment, krydser vand) | tool/cost |
 | PROG-D3 | Flere jobtyper (ekspres, turist, …) | jobs.js |
+| PROG-F1 | ~~Køb bil via by-tryk~~ | Done |
+| PROG-F2 | ~~Auto-assign + flåde-UI~~ | Done |
+| PROG-F3 | Pris-kurve / sælg bil / cap via level | efter F1 |
+| PROG-U1 | ~~Opgrader bil +last~~ | Done |
+| PROG-U2 | ~~Unlock hurtig/tung~~ | Done 5 / 10 |
+| PROG-U3 | ~~Visuelt + job-match~~ | Done |
 
 ## P1 – Spil-følelse
 

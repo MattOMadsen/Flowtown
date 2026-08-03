@@ -18,6 +18,9 @@
       </div>
 
       <div class="flex flex-wrap gap-1 sm:gap-1.5 pointer-events-auto justify-end max-w-[70%]">
+        <div id="level-badge" class="px-2 py-1.5 bg-violet-50 border border-violet-200 rounded-lg shadow text-xs sm:text-sm font-bold text-violet-900 tabular-nums" title="Netværks-level">
+          Lv <span id="level-count">1</span>
+        </div>
         <div id="money-badge" class="px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-lg shadow text-xs sm:text-sm font-bold text-amber-900 tabular-nums">
           $<span id="money-count">500</span>
         </div>
@@ -54,8 +57,18 @@
     </div>
   </div>
 
+  <!-- XP-bar: tynd fuld bredde under top-UI (safe – dækker ikke distrikt-navne) -->
+  <div id="xp-strip" class="fixed top-11 sm:top-12 left-0 right-0 z-20 px-2 sm:px-4 pointer-events-none">
+    <div class="flex items-center gap-2 max-w-md mx-auto">
+      <div class="flex-1 h-1.5 sm:h-2 bg-stone-200/90 rounded-full overflow-hidden border border-stone-300/80 shadow-sm">
+        <div id="xp-fill" class="h-full bg-gradient-to-r from-violet-400 to-violet-600 rounded-full transition-all duration-300" style="width:0%"></div>
+      </div>
+      <span id="xp-label" class="text-[9px] sm:text-[10px] font-medium text-violet-900/80 tabular-nums shrink-0 bg-white/80 px-1.5 py-0.5 rounded-md border border-violet-100">0/36 XP</span>
+    </div>
+  </div>
+
   <!-- Jobs: øverst midt, foldbar – safe zone mellem Nord/Øst -->
-  <div id="jobs-panel" class="fixed top-12 sm:top-14 left-1/2 -translate-x-1/2 z-20 w-[min(70vw,16rem)] sm:w-[min(92vw,18rem)] pointer-events-auto">
+  <div id="jobs-panel" class="fixed top-[3.6rem] sm:top-16 left-1/2 -translate-x-1/2 z-20 w-[min(70vw,16rem)] sm:w-[min(92vw,18rem)] pointer-events-auto">
     <div class="bg-white/92 backdrop-blur rounded-xl shadow border border-stone-200 p-2 sm:p-2.5">
       <button type="button" id="btn-jobs-toggle" class="w-full flex items-center justify-between gap-2 text-left touch-manipulation">
         <span class="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide">
@@ -80,7 +93,9 @@
   <!-- Stats -->
   <div id="stats" class="fixed bottom-2 left-2 right-2 sm:left-4 sm:right-4 z-20 pointer-events-none">
     <div class="bg-white/90 backdrop-blur rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 shadow border border-stone-200 text-[10px] sm:text-sm text-stone-700 flex flex-wrap gap-x-1.5 sm:gap-x-2 gap-y-0.5 justify-center sm:justify-start">
-      <span><span id="car-count">0</span> biler</span>
+      <span>flåde <span id="fleet-count">0/3</span></span>
+      <span>·</span>
+      <span><span id="car-count">0</span> ude</span>
       <span>·</span>
       <span><span id="road-count">0</span> veje</span>
       <span>·</span>
@@ -94,14 +109,46 @@
     </div>
   </div>
 
+  <!-- By-panel: køb / opgrader flåde (bottom sheet – mobilvenlig) -->
+  <div id="district-sheet" class="fixed inset-x-0 bottom-0 z-30 hidden pointer-events-none">
+    <div class="pointer-events-auto mx-auto w-full max-w-md px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div class="bg-white/95 backdrop-blur rounded-t-2xl sm:rounded-2xl shadow-xl border border-stone-200 p-3 sm:p-4 mb-14 sm:mb-16 max-h-[min(70vh,28rem)] flex flex-col">
+        <div class="flex items-start justify-between gap-2 mb-2 shrink-0">
+          <div class="min-w-0">
+            <h3 id="ds-title" class="text-lg font-bold text-stone-800 truncate">By</h3>
+            <p id="ds-sub" class="text-xs text-stone-500">Køb og opgrader flåde</p>
+          </div>
+          <button type="button" id="ds-close" class="px-3 py-1.5 text-sm font-medium text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg touch-manipulation shrink-0">Luk</button>
+        </div>
+        <p id="ds-fleet" class="text-xs text-stone-600 mb-2 shrink-0">Flåde 0/3 · 0 ledige</p>
+        <p id="ds-upgrades-meta" class="text-[10px] text-violet-700 mb-2 shrink-0">Opgraderinger i alt: 0 · næste unlock ved 5</p>
+        <div class="flex gap-1 mb-2 shrink-0">
+          <button type="button" id="ds-tab-buy" class="flex-1 py-2 text-sm font-semibold rounded-lg bg-emerald-500 text-white touch-manipulation">Køb</button>
+          <button type="button" id="ds-tab-upgrade" class="flex-1 py-2 text-sm font-semibold rounded-lg bg-stone-100 text-stone-700 touch-manipulation">Opgrader</button>
+        </div>
+        <div id="ds-panel-buy" class="overflow-y-auto min-h-0 space-y-2">
+          <div id="ds-buy-list" class="grid grid-cols-1 gap-2"></div>
+        </div>
+        <div id="ds-panel-upgrade" class="overflow-y-auto min-h-0 space-y-2 hidden">
+          <div id="ds-upgrade-list" class="space-y-2"></div>
+          <p id="ds-upgrade-empty" class="text-xs text-stone-400 italic text-center py-2 hidden">Ingen biler endnu – køb under Køb</p>
+        </div>
+        <p class="text-[10px] text-stone-400 mt-2 text-center shrink-0">Træk fra byen for at tegne vej · max 3 last-opgrader pr. bil</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Help overlay -->
   <div id="help" class="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4 sm:p-6 pointer-events-auto">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-xl text-center max-h-[90vh] overflow-y-auto">
       <h2 class="text-xl font-bold text-stone-800 mb-2">Velkommen til Flowtown</h2>
       <p class="text-stone-600 text-sm mb-3 leading-relaxed text-left space-y-1.5">
-        <span class="block">• <b>Tegn</b> veje mellem distrikter (koster penge)</span>
-        <span class="block">• Lever <b>personer</b> 👤 og <b>gods</b> 📦 via opgaver</span>
-        <span class="block">• Få belønning for leverancer – byg mere netværk</span>
+        <span class="block">• <b>Tegn</b> veje mellem byer (koster penge)</span>
+        <span class="block">• <b>Tryk på en by</b>: køb biltyper og <b>opgrader last</b></span>
+        <span class="block">• Efter flere opgraderinger låses <b>hurtig bil</b> og <b>tung lastbil</b> op</span>
+        <span class="block">• Ledige biler tager selv opgaver (👤 · 📦)</span>
+        <span class="block">• Få <b>$</b> til veje/biler og <b>XP</b> til level (gemmes)</span>
+        <span class="block">• Første forbindelse mellem byer giver ekstra XP</span>
         <span class="block">• <b>Bots</b>: slå modstandere til for konkurrence</span>
         <span class="block">• <b>Slet</b> egne veje (delvis refund)</span>
         <span class="block">• <b>Zoom</b>: hjul / knib / + − · <b>Fit</b> = hele byen · minimap nederst midt</span>
