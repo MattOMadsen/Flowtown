@@ -560,69 +560,105 @@ export class Game {
     return best;
   }
 
-  spawnJobVehicle(job, owner = 'player', ownerColor = null) {
-    if (!job || !job.active) return null;
-    const near = this.findNearestRoadPoint(job.from.x, job.from.y, 200);
-    if (!near) return null;
+  /**
+   * Best road attachment near a district for job spawn.
+   * Returns { road, t, reverse, x, y } or null.
+   */
+  findSpawnOnRoadNear(district, targetDistrict, maxDist = 200) {
+    if (!district) return null;
+    let best = null;
+    let bestDist = maxDist;
 
-    const kind = job.type === 'cargo' ? 'truck' : 'car';
-    const cargo = kind === 'truck' ? 1 + Math.floor(Math.random() * 2) : 1;
+    for (const road of this.roads) {
+      if (!road.points || road.points.length < 2) continue;
+      const c = road.closestPoint(district.x, district.y);
+      if (c.dist >= bestDist) continue;
+
+      const t = Math.min(0.97, Math.max(0.03, c.t));
+      let reverse = false;
+      if (targetDistrict) {
+        const lookFwd = road.getPointAt(Math.min(0.98, t + 0.12));
+        const lookRev = road.getPointAt(Math.max(0.02, t - 0.12));
+        const distFwd = Math.hypot(targetDistrict.x - lookFwd.x, targetDistrict.y - lookFwd.y);
+        const distRev = Math.hypot(targetDistrict.x - lookRev.x, targetDistrict.y - lookRev.y);
+        reverse = distRev < distFwd;
+      }
+      const p = road.getPointAt(t);
+      bestDist = c.dist;
+      best = { road, t, reverse, x: p.x, y: p.y, dist: c.dist };
+    }
+    return best;
+  }
+
+  spawnJobVehicle(job, owner = 'player', ownerColor = null) {
+    if (!job || !job.active || job.delivered >= job.amount) return null;
 
     // Live district refs
     const from = this.districts.find(d => d.name === job.from.name) || job.from;
     const to = this.districts.find(d => d.name === job.to.name) || job.to;
 
+    // A1: only spawn if start has a road; prefer when destination area is also road-linked
+    const spawn = this.findSpawnOnRoadNear(from, to, 200);
+    if (!spawn) return null;
+
+    const kind = job.type === 'cargo' ? 'truck' : 'car';
+    const cargo = kind === 'truck' ? 1 + Math.floor(Math.random() * 2) : 1;
+
     const v = new Vehicle({
-      x: from.x,
-      y: from.y,
+      x: spawn.x,
+      y: spawn.y,
       targetDistrict: to,
       roads: this.roads,
       kind,
       job,
       owner,
       ownerColor,
-      cargo
+      cargo,
+      startRoad: spawn.road,
+      startT: spawn.t,
+      startReverse: spawn.reverse
     });
     this.vehicles.push(v);
     this.totalSpawned++;
     return v;
   }
 
-  /** Player auto-spawn for open jobs */
+  /** A1: Player auto-spawn only for open jobs with a road at origin */
   spawnVehicle() {
     if (this.districts.length < 2 || this.roads.length === 0) return;
     if (this.vehicles.filter(v => v.owner === 'player').length >= 22) return;
 
     const open = this.jobs.filter(j => j.active && j.delivered < j.amount);
-    if (open.length > 0) {
-      // Prefer jobs player hasn't flooded already
-      const counts = {};
-      for (const v of this.vehicles) {
-        if (v.owner === 'player' && v.job) {
-          counts[v.job.id] = (counts[v.job.id] || 0) + 1;
-        }
-      }
-      open.sort((a, b) => (counts[a.id] || 0) - (counts[b.id] || 0));
-      const job = open[0];
-      if (this.findNearestRoadPoint(job.from.x, job.from.y, 180)) {
-        this.spawnJobVehicle(job, 'player', null);
-        return;
+    if (open.length === 0) return;
+
+    // How many player vehicles already serve each job
+    const counts = {};
+    for (const v of this.vehicles) {
+      if (v.owner === 'player' && v.job) {
+        counts[v.job.id] = (counts[v.job.id] || 0) + 1;
       }
     }
 
-    // Fallback free roam (no job) – small sightseeing traffic
-    if (Math.random() < 0.35) {
-      const from = this.districts[Math.floor(Math.random() * this.districts.length)];
-      let to = this.districts[Math.floor(Math.random() * this.districts.length)];
-      while (to === from) to = this.districts[Math.floor(Math.random() * this.districts.length)];
-      if (!this.findNearestRoadPoint(from.x, from.y, 150)) return;
-      this.vehicles.push(new Vehicle({
-        x: from.x, y: from.y, targetDistrict: to, roads: this.roads,
-        kind: Math.random() < 0.3 ? 'truck' : 'car',
-        owner: 'player'
-      }));
-      this.totalSpawned++;
+    // Prefer under-served jobs; cap vehicles per remaining cargo
+    const ranked = open
+      .map(j => {
+        const remaining = j.amount - j.delivered;
+        const onRoute = counts[j.id] || 0;
+        const cap = Math.min(4, Math.max(1, remaining));
+        return { job: j, onRoute, remaining, cap, over: onRoute >= cap };
+      })
+      .filter(x => !x.over)
+      .sort((a, b) => a.onRoute - b.onRoute || b.remaining - a.remaining);
+
+    for (const { job } of ranked) {
+      // Skip jobs with no road at origin (no point spawning)
+      const from = this.districts.find(d => d.name === job.from.name) || job.from;
+      const to = this.districts.find(d => d.name === job.to.name) || job.to;
+      if (!this.findSpawnOnRoadNear(from, to, 180)) continue;
+      this.spawnJobVehicle(job, 'player', null);
+      return;
     }
+    // No free-roam traffic — empty roads if no job can be served
   }
 
   addArrivalParticles(x, y, color) {
@@ -748,11 +784,24 @@ export class Game {
 
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
       const v = this.vehicles[i];
+      // A1: drop jobless free-roamers (legacy) and vehicles whose job finished
+      if (!v.job || (v.job.active === false && !v.arrived)) {
+        this.vehicles.splice(i, 1);
+        continue;
+      }
+      if (v.job && v.job.delivered >= v.job.amount && !v.arrived) {
+        // Job already filled by others — despawn without reward spam
+        this.vehicles.splice(i, 1);
+        continue;
+      }
       v.update(dt, this.roads, this.vehicles);
       if (v.arrived) {
         this.completeDelivery(v);
         this.vehicles.splice(i, 1);
       } else if (v.life > 90) {
+        this.vehicles.splice(i, 1);
+      } else if (v.idleTime > 14 && v.life > 12) {
+        // Stuck too long with no progress — remove instead of endless noise
         this.vehicles.splice(i, 1);
       }
     }

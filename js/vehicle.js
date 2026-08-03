@@ -3,6 +3,11 @@
 const CAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6', '#06b6d4'];
 const TRUCK_COLORS = ['#b45309', '#92400e', '#a16207', '#78350f'];
 
+/** Keep progress away from exact endpoints (avoids snap/hak) */
+function clampTravelT(t) {
+  return Math.min(0.985, Math.max(0.015, t));
+}
+
 export class Vehicle {
   /**
    * @param {object} opts
@@ -15,6 +20,9 @@ export class Vehicle {
    * @param {string} [opts.owner] 'player' | bot id
    * @param {string|null} [opts.ownerColor]
    * @param {number} [opts.cargo] units carried
+   * @param {object|null} [opts.startRoad] pre-attached road
+   * @param {number|null} [opts.startT] progress on startRoad
+   * @param {boolean} [opts.startReverse]
    */
   constructor({
     x, y, targetDistrict, roads,
@@ -22,7 +30,10 @@ export class Vehicle {
     job = null,
     owner = 'player',
     ownerColor = null,
-    cargo = 1
+    cargo = 1,
+    startRoad = null,
+    startT = null,
+    startReverse = false
   }) {
     this.x = x;
     this.y = y;
@@ -47,7 +58,7 @@ export class Vehicle {
     this.speed = this.baseSpeed;
 
     this.angle = 0;
-    this.progress = 0;
+    this.progress = 0.5;
     this.currentRoad = null;
     this.arrived = false;
     this.stuck = false;
@@ -55,8 +66,52 @@ export class Vehicle {
     this.idleTime = 0;
     this.reverse = false;
     this._triedReverse = false;
+    this._turnTimer = 0;
 
-    this.pickBestRoad();
+    // Smooth handoff when switching roads
+    this._blend = 0;
+    this._blendFromX = x;
+    this._blendFromY = y;
+    this._blendFromAngle = 0;
+
+    if (startRoad && startRoad.points?.length >= 2) {
+      this.attachToRoad(startRoad, startT ?? 0.5, !!startReverse, false);
+    } else {
+      this.pickBestRoad();
+    }
+  }
+
+  /**
+   * Snap onto a road at travel-t. Optionally start a short blend from current xy.
+   */
+  attachToRoad(road, t, reverse = false, blend = true) {
+    if (!road || road.points.length < 2) return false;
+    const prevX = this.x;
+    const prevY = this.y;
+    const prevAngle = this.angle;
+
+    this.currentRoad = road;
+    this.progress = clampTravelT(t);
+    this.reverse = !!reverse;
+    this._triedReverse = false;
+
+    const p = road.getPointAt(this.progress);
+    const ang = road.getAngleAt(this.progress);
+    const face = this.reverse ? ang + Math.PI : ang;
+
+    if (blend) {
+      this._blendFromX = prevX;
+      this._blendFromY = prevY;
+      this._blendFromAngle = prevAngle;
+      this._blend = 1;
+    } else {
+      this._blend = 0;
+    }
+
+    this.x = p.x;
+    this.y = p.y;
+    this.angle = face;
+    return true;
   }
 
   pickBestRoad() {
@@ -79,21 +134,30 @@ export class Vehicle {
     }
 
     if (bestRoad && bestDist < 200) {
-      this.currentRoad = bestRoad;
-      this.progress = Math.min(0.98, Math.max(0.01, bestT));
-      const p = bestRoad.getPointAt(this.progress);
-      this.x = p.x;
-      this.y = p.y;
-      this.angle = bestRoad.getAngleAt(this.progress);
+      const t = clampTravelT(bestT);
+      // Prefer direction that approaches target
+      const reverse = this._preferReverse(bestRoad, t);
+      this.attachToRoad(bestRoad, t, reverse, false);
     } else {
       this.currentRoad = null;
     }
   }
 
+  /** True if reverse travel from t gets closer to target than forward */
+  _preferReverse(road, t) {
+    if (!this.target) return false;
+    const tx = this.target.x;
+    const ty = this.target.y;
+    const lookFwd = road.getPointAt(Math.min(0.98, t + 0.12));
+    const lookRev = road.getPointAt(Math.max(0.02, t - 0.12));
+    const distFwd = Math.hypot(tx - lookFwd.x, ty - lookFwd.y);
+    const distRev = Math.hypot(tx - lookRev.x, ty - lookRev.y);
+    return distRev < distFwd;
+  }
+
   /**
    * Pick next road segment near a junction.
    * Prefers: close join, travel direction toward target, reduced density, own roads.
-   * Also allows reverse travel (high t, decreasing) when that gets closer to target.
    */
   findNextRoad(roads, fromX, fromY) {
     let best = null;
@@ -106,7 +170,6 @@ export class Vehicle {
     for (const r of roads) {
       if (r === this.currentRoad) continue;
 
-      // Endpoints first (real junctions), then mid samples for T-joins
       const candidates = [
         { t: 0.0, p: r.points[0] },
         { t: 1.0, p: r.points[r.points.length - 1] }
@@ -130,8 +193,7 @@ export class Vehicle {
         const d = Math.hypot(dx, dy);
         if (d > maxDist) continue;
 
-        // Choose travel direction: forward (t increasing) or reverse (t decreasing)
-        const tEnter = Math.max(0.01, Math.min(0.99, c.t));
+        const tEnter = clampTravelT(c.t);
         const lookFwd = r.getPointAt(Math.min(0.98, tEnter + 0.12));
         const lookRev = r.getPointAt(Math.max(0.02, tEnter - 0.12));
         const distFwd = Math.hypot(tx - lookFwd.x, ty - lookFwd.y);
@@ -139,12 +201,11 @@ export class Vehicle {
         const goForward = distFwd <= distRev;
         const look = goForward ? lookFwd : lookRev;
         const progressAfter = goForward
-          ? Math.min(0.98, tEnter + 0.02)
-          : Math.max(0.02, tEnter - 0.02);
+          ? Math.min(0.97, tEnter + 0.02)
+          : Math.max(0.03, tEnter - 0.02);
 
-        // How much closer to target after joining
         const distAfter = Math.hypot(tx - look.x, ty - look.y);
-        const approach = distToTargetNow - distAfter; // positive = better
+        const approach = distToTargetNow - distAfter;
 
         const toTarget = Math.atan2(ty - look.y, tx - look.x);
         const roadAngle = r.getAngleAt(tEnter);
@@ -180,9 +241,37 @@ export class Vehicle {
     return best;
   }
 
+  _lerpAngle(a, b, t) {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return a + d * t;
+  }
+
   update(dt, roads, allVehicles) {
     this.life += dt;
     this.roads = roads;
+
+    // Blend handoff (smooth road switch)
+    if (this._blend > 0) {
+      this._blend = Math.max(0, this._blend - dt / 0.1);
+      const t = 1 - this._blend;
+      // Ease-out
+      const e = 1 - (1 - t) * (1 - t);
+      if (this.currentRoad) {
+        const p = this.currentRoad.getPointAt(this.progress);
+        const ang = this.currentRoad.getAngleAt(this.progress);
+        const face = this.reverse ? ang + Math.PI : ang;
+        this.x = this._blendFromX + (p.x - this._blendFromX) * e;
+        this.y = this._blendFromY + (p.y - this._blendFromY) * e;
+        this.angle = this._lerpAngle(this._blendFromAngle, face, e);
+      }
+      // Still allow light progress during blend so we don't stall
+      if (this._blend > 0.15) {
+        this.idleTime = Math.max(0, this.idleTime - dt);
+        return;
+      }
+    }
 
     if (!this.currentRoad || this.currentRoad.points.length < 2) {
       this.pickBestRoad();
@@ -210,20 +299,21 @@ export class Vehicle {
       return;
     }
 
-    // Support reverse travel along a road
     if (this.reverse) {
       this.progress -= (this.speed * dt) / roadLen;
     } else {
       this.progress += (this.speed * dt) / roadLen;
     }
 
-    const atEnd = !this.reverse && this.progress >= 1;
-    const atStart = this.reverse && this.progress <= 0;
+    // Leave-node zone near endpoints (not exact 0/1 mid-travel)
+    const atEnd = !this.reverse && this.progress >= 0.985;
+    const atStart = this.reverse && this.progress <= 0.015;
 
     if (atEnd || atStart) {
       const end = atEnd
         ? this.currentRoad.points[this.currentRoad.points.length - 1]
         : this.currentRoad.points[0];
+      // Soft snap toward endpoint for junction search
       this.x = end.x;
       this.y = end.y;
 
@@ -238,32 +328,30 @@ export class Vehicle {
       const next = this.findNextRoad(roads, end.x, end.y);
 
       if (next) {
-        this.currentRoad = next.road;
-        this.progress = next.t;
-        this.reverse = !!next.reverse;
-        this._triedReverse = false;
-        const p = this.currentRoad.getPointAt(this.progress);
-        this.x = p.x;
-        this.y = p.y;
-        const ang = this.currentRoad.getAngleAt(this.progress);
-        this.angle = this.reverse ? ang + Math.PI : ang;
+        this.attachToRoad(next.road, next.t, !!next.reverse, true);
       } else {
-        // Try reverse on same road once before giving up
+        // U-turn on same road (animated via blend + reverse flip)
         if (!this._triedReverse) {
           this._triedReverse = true;
-          this.reverse = !this.reverse;
-          this.progress = Math.max(0.02, Math.min(0.98, this.progress));
+          const newReverse = !this.reverse;
+          const t = clampTravelT(this.progress);
+          this.attachToRoad(this.currentRoad, t, newReverse, true);
+          this._turnTimer = 0.12;
         } else {
           this._triedReverse = false;
+          // Last resort: re-pick nearby road toward target
+          const prev = this.currentRoad;
           this.pickBestRoad();
-          this.reverse = false;
-          if (!this.currentRoad && (tdx * tdx + tdy * tdy < 280 * 280)) {
-            this.arrived = true;
+          if (this.currentRoad === prev || !this.currentRoad) {
+            // Still stuck near target? count as arrived soft
+            if (tdx * tdx + tdy * tdy < 280 * 280) {
+              this.arrived = true;
+            }
           }
         }
       }
     } else {
-      this.progress = Math.max(0, Math.min(1, this.progress));
+      this.progress = clampTravelT(this.progress);
       const p = this.currentRoad.getPointAt(this.progress);
       this.x = p.x;
       this.y = p.y;

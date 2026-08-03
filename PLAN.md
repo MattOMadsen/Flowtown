@@ -103,8 +103,14 @@ Stilen forbliver den samme: frihånds-tegning, tæthedsfarver, cozy look, mobil 
 
 ## Næste skridt
 
-Start med **Fase 1** – gør spillet til et leverings-/transportspil med penge og opgaver, mens den nuværende tegneoplevelse bevares.
+**Fase 1 (MVP) er på plads** (jobs, penge, veje, bots).  
+Fokus er nu **progression + vanedannende loop** – se den levende plan:
+
+→ **[DESIGN-PROGRESSION.md](./DESIGN-PROGRESSION.md)**
+
+Kort: **$ køber**, **XP/level låser op**, **baner med stjerner**, **job-styret trafik**, senere **større map + vand/broer**.  
+Implementering i batches af **1–3 ting** (start anbefalet: PROG-A1 job-trafik).
 
 ---
 
-*Sidst opdateret: 2. august 2026*
+*Sidst opdateret: 3. august 2026*

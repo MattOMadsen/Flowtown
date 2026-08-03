@@ -13,6 +13,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] Bedre pathfinding ved kryds
 - [x] AGENTS.md + denne backlog
 - [x] `.gitignore` for `data/`
+- [x] **PROG-A1** Job-styret spawn (ingen free-roam) + cap pr. job
+- [x] **PROG-A2** Spawn på vej, blend ved skift, clamp progress, bedre U-turn
 
 ---
 
@@ -26,6 +28,23 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | P0-4 | Tydeligere snap-feedback (stærkere glød / kort “klik”) | Delvist via snap-glow |
 | P0-5 | Safe-area padding (iPhone notch / home indicator) | `env(safe-area-inset-*)` |
 
+## P0+ – Spil-kerne (progression-plan, se DESIGN-PROGRESSION.md)
+
+| ID | Forslag | Noter |
+|----|---------|--------|
+| PROG-A1 | ~~Job-styret spawn~~ | Done 2026-08-03 |
+| PROG-A2 | ~~Fix bil-hakning~~ | Done 2026-08-03 |
+| PROG-A3 | By-hubs + stærk snap + connected + bynavne | game.js |
+| PROG-B1 | XP + level + localStorage meta | $ = køb, XP = unlock |
+| PROG-B2 | Shop UI (flåde/infra unlock’et af level) | bottom sheet |
+| PROG-B3 | 2-spor vej-opgradering for $ | capacity loop |
+| PROG-C1 | Baner/scenarios + 3-stjerne mål | scenarios.js |
+| PROG-C2 | Map-select + end-of-run | campaign |
+| PROG-C3 | Større world bounds + flere byer på senere baner | camera/map |
+| PROG-D1 | Vand (sø/kyst) blokerer normal vej | terrain |
+| PROG-D2 | Broer (dyrere segment, krydser vand) | tool/cost |
+| PROG-D3 | Flere jobtyper (ekspres, turist, …) | jobs.js |
+
 ## P1 – Spil-følelse
 
 | ID | Forslag | Noter |
@@ -34,7 +53,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | P1-2 | Første-gangs tutorial (tegn Nord→Centrum) | Overlay steps |
 | P1-3 | Rush hour / peak demand | Periodisk spawn-boost |
 | P1-4 | Distrikter vokser (flere jobs / større radius) | PLAN Fase 2 |
-| P1-5 | Flere distrikter / større map | Kræver camera+scroll map bounds |
+| P1-5 | Flere distrikter / større map | → PROG-C3 |
 | P1-6 | Gem session (penge, veje, jobs) i localStorage | Ud over highscore |
 
 ## P2 – Dybde
@@ -45,7 +64,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | P2-2 | Flere biltyper (bus, hurtigbil) | Kapacitet/fart |
 | P2-3 | Station / lager / depot-bygninger | Placering + buff |
 | P2-4 | Achievements | localStorage flags |
-| P2-5 | Scenarier / niveauer | “Forbind 5 byer” |
+| P2-5 | Scenarier / niveauer | → PROG-C1/C2 |
 
 ## P3 – Deluxe / senere
 

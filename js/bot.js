@@ -157,20 +157,37 @@ export class Bot {
     if (g.vehicles.filter(v => v.owner === this.id).length >= 14) return;
     if (g.roads.length === 0) return;
 
-    // Prefer open jobs matching our vehicle needs
+    // A1: only job-backed traffic
     const open = g.jobs.filter(j => j.active && j.delivered < j.amount);
     if (open.length === 0) return;
 
-    // Weight by remaining amount
-    let job = open[Math.floor(Math.random() * open.length)];
-    for (const j of open) {
-      if (Math.random() < 0.35) job = j;
+    const counts = {};
+    for (const v of g.vehicles) {
+      if (v.owner === this.id && v.job) {
+        counts[v.job.id] = (counts[v.job.id] || 0) + 1;
+      }
     }
 
-    const near = g.findNearestRoadPoint(job.from.x, job.from.y, 180);
-    if (!near) return;
+    // Prefer under-served jobs with a road at origin
+    let best = null;
+    let bestScore = -Infinity;
+    for (const job of open) {
+      const remaining = job.amount - job.delivered;
+      const onRoute = counts[job.id] || 0;
+      const cap = Math.min(3, Math.max(1, remaining));
+      if (onRoute >= cap) continue;
+      const from = g.districts.find(d => d.name === job.from.name) || job.from;
+      const to = g.districts.find(d => d.name === job.to.name) || job.to;
+      if (!g.findSpawnOnRoadNear(from, to, 180)) continue;
+      const score = remaining - onRoute * 2 + Math.random();
+      if (score > bestScore) {
+        bestScore = score;
+        best = job;
+      }
+    }
+    if (!best) return;
 
-    g.spawnJobVehicle(job, this.id, this.color);
+    g.spawnJobVehicle(best, this.id, this.color);
   }
 
   onDelivery(reward, units = 1) {
