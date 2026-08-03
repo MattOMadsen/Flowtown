@@ -32,12 +32,19 @@ body {
   transition: box-shadow 0.2s ease;
 }
 
-#zoom-controls button {
-  line-height: 1;
+#zoom-controls {
+  touch-action: manipulation;
+  -webkit-user-select: none;
   user-select: none;
 }
 
+#zoom-controls .zoom-btn {
+  line-height: 1;
+  touch-action: manipulation;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
 #jobs-panel {
-  /* Keep clear of bottom stats bar */
-  max-width: min(17rem, calc(100vw - 5.5rem));
+  max-width: min(18rem, 92vw);
 }

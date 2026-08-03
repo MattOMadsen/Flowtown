@@ -59,23 +59,31 @@ function startGame(withBots) {
 document.getElementById('btn-start').addEventListener('click', () => startGame(false));
 document.getElementById('btn-start-bots').addEventListener('click', () => startGame(true));
 
-// Zoom UI
+// Zoom UI – touch + click, stopPropagation så canvas ikke spiser events
 const zoomLabel = document.getElementById('zoom-label');
 function refreshZoomLabel() {
   if (zoomLabel) zoomLabel.textContent = game.getZoomPercent() + '%';
 }
-document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
-  game.zoomBy(1.15);
-  refreshZoomLabel();
-});
-document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
-  game.zoomBy(1 / 1.15);
-  refreshZoomLabel();
-});
-document.getElementById('btn-zoom-reset')?.addEventListener('click', () => {
-  game.resetCamera();
-  refreshZoomLabel();
-});
+function bindZoomBtn(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let last = 0;
+  const fire = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const now = performance.now();
+    if (now - last < 280) return; // undgå touchend+click dobbelt
+    last = now;
+    fn();
+    refreshZoomLabel();
+  };
+  el.addEventListener('click', fire);
+  el.addEventListener('pointerdown', (e) => e.stopPropagation());
+  el.addEventListener('touchend', fire, { passive: false });
+}
+bindZoomBtn('btn-zoom-in', () => game.zoomBy(1.2));
+bindZoomBtn('btn-zoom-out', () => game.zoomBy(1 / 1.2));
+bindZoomBtn('btn-zoom-reset', () => game.resetCamera());
 
 function renderJobs() {
   const list = document.getElementById('jobs-list');
@@ -165,4 +173,13 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-document.body.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+// Undgå scroll, men bloker IKKE touch på UI-knapper (zoom m.m.)
+document.body.addEventListener('touchmove', (e) => {
+  const t = e.target;
+  if (t === canvas || (t && canvas.contains(t))) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
+// Tegn startskærm (distrikter synlige før Start)
+game.draw();

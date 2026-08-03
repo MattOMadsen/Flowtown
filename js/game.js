@@ -122,7 +122,10 @@ export class Game {
     // Seed a couple of starter jobs
     this.addJob();
     this.addJob();
-    requestAnimationFrame((t) => this.loop(t));
+    if (!this._loopStarted) {
+      this._loopStarted = true;
+      requestAnimationFrame((t) => this.loop(t));
+    }
   }
 
   togglePause() {
@@ -171,30 +174,45 @@ export class Game {
 
   /** Zoom keeping CSS point (sx,sy) fixed in world space */
   setZoomAt(newZoom, sx, sy) {
-    const z0 = this.camera.zoom;
+    const z0 = this.camera.zoom || 1;
     const z1 = this.clampZoom(newZoom);
     if (Math.abs(z1 - z0) < 1e-6) return;
-    const cx = (sx ?? this.canvas.clientWidth / 2) * this.dpr;
-    const cy = (sy ?? this.canvas.clientHeight / 2) * this.dpr;
+    const cw = this.canvas.clientWidth || window.innerWidth || 1;
+    const ch = this.canvas.clientHeight || window.innerHeight || 1;
+    const cx = (sx != null ? sx : cw / 2) * this.dpr;
+    const cy = (sy != null ? sy : ch / 2) * this.dpr;
     const wx = (cx - this.camera.x) / z0;
     const wy = (cy - this.camera.y) / z0;
     this.camera.zoom = z1;
     this.camera.x = cx - wx * z1;
     this.camera.y = cy - wy * z1;
+    this.requestDraw();
   }
 
   zoomBy(factor, sx, sy) {
     this.setZoomAt(this.camera.zoom * factor, sx, sy);
+    this.requestDraw();
   }
 
   resetCamera() {
     this.camera.x = 0;
     this.camera.y = 0;
     this.camera.zoom = 1;
+    this.requestDraw();
   }
 
   getZoomPercent() {
     return Math.round(this.camera.zoom * 100);
+  }
+
+  /** Redraw even if game loop not running / between frames */
+  requestDraw() {
+    if (this._drawPending) return;
+    this._drawPending = true;
+    requestAnimationFrame(() => {
+      this._drawPending = false;
+      this.draw();
+    });
   }
 
   roadCostForLength(lenCssPx) {

@@ -5,15 +5,17 @@ export class InputHandler {
     this.drawing = false;
     this.panning = false;
     this.spaceDown = false;
-
-    // Pinch state
-    this.pinch = null; // { dist, midX, midY, camX, camY, zoom }
+    this.panLast = null;
+    this.pinch = null;
 
     // Mouse
     canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-    canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    canvas.addEventListener('mouseup', (e) => this.onMouseUp(e));
-    canvas.addEventListener('mouseleave', (e) => this.onMouseUp(e));
+    window.addEventListener('mousemove', (e) => this.onMouseMove(e));
+    window.addEventListener('mouseup', (e) => this.onMouseUp(e));
+    canvas.addEventListener('mouseleave', () => {
+      // keep pan if dragging outside; drawing ends
+      if (this.drawing && !this.panning) this.onUp();
+    });
     canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -22,8 +24,8 @@ export class InputHandler {
         this.spaceDown = true;
         e.preventDefault();
       }
-      if (e.key === '+' || e.key === '=') this.game.zoomBy(1.12);
-      if (e.key === '-' || e.key === '_') this.game.zoomBy(1 / 1.12);
+      if (e.key === '+' || e.key === '=') this.game.zoomBy(1.15);
+      if (e.key === '-' || e.key === '_') this.game.zoomBy(1 / 1.15);
       if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         this.game.resetCamera();
@@ -33,10 +35,10 @@ export class InputHandler {
       if (e.code === 'Space') this.spaceDown = false;
     });
 
-    // Touch
+    // Touch – only on canvas
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      if (e.touches.length === 2) {
+      if (e.touches.length >= 2) {
         this.endDrawIfAny();
         this.startPinch(e.touches);
         return;
@@ -48,8 +50,9 @@ export class InputHandler {
 
     canvas.addEventListener('touchmove', (e) => {
       e.preventDefault();
-      if (e.touches.length === 2) {
-        this.movePinch(e.touches);
+      if (e.touches.length >= 2) {
+        if (!this.pinch) this.startPinch(e.touches);
+        else this.movePinch(e.touches);
         return;
       }
       if (e.touches.length === 1 && this.drawing) {
@@ -60,11 +63,15 @@ export class InputHandler {
     canvas.addEventListener('touchend', (e) => {
       e.preventDefault();
       if (e.touches.length < 2) this.pinch = null;
-      if (e.touches.length === 0) this.onUp();
+      if (e.touches.length === 0) {
+        this.panning = false;
+        this.onUp();
+      }
     }, { passive: false });
 
     canvas.addEventListener('touchcancel', () => {
       this.pinch = null;
+      this.panning = false;
       this.onUp();
     });
   }
@@ -78,9 +85,7 @@ export class InputHandler {
   }
 
   touchDist(t0, t1) {
-    const dx = t0.clientX - t1.clientX;
-    const dy = t0.clientY - t1.clientY;
-    return Math.hypot(dx, dy) || 1;
+    return Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY) || 1;
   }
 
   touchMid(t0, t1) {
@@ -92,50 +97,69 @@ export class InputHandler {
   }
 
   startPinch(touches) {
-    const mid = this.touchMid(touches[0], touches[1]);
+    const t0 = touches[0];
+    const t1 = touches[1];
+    const mid = this.touchMid(t0, t1);
     const cam = this.game.camera;
     this.pinch = {
-      dist: this.touchDist(touches[0], touches[1]),
-      midX: mid.x,
-      midY: mid.y,
+      dist: this.touchDist(t0, t1),
+      zoom: cam.zoom,
       camX: cam.x,
       camY: cam.y,
-      zoom: cam.zoom,
+      originMidX: mid.x,
+      originMidY: mid.y,
       lastMidX: mid.x,
       lastMidY: mid.y
     };
+    this.drawing = false;
     this.panning = true;
   }
 
   movePinch(touches) {
-    if (!this.pinch) {
-      this.startPinch(touches);
-      return;
-    }
+    if (!this.pinch || touches.length < 2) return;
     const mid = this.touchMid(touches[0], touches[1]);
     const dist = this.touchDist(touches[0], touches[1]);
-    const scale = dist / this.pinch.dist;
-    const newZoom = this.pinch.zoom * scale;
+    const scale = dist / Math.max(1, this.pinch.dist);
+    const newZoom = this.game.clampZoom(this.pinch.zoom * scale);
 
-    // Zoom toward midpoint, then pan by finger movement
-    this.game.setZoomAt(newZoom, mid.x, mid.y);
-
+    // Reconstruct camera from pinch origin so zoom stays stable
     const dpr = this.game.dpr;
-    this.game.camera.x += (mid.x - this.pinch.lastMidX) * dpr;
-    this.game.camera.y += (mid.y - this.pinch.lastMidY) * dpr;
+    const ox = this.pinch.originMidX * dpr;
+    const oy = this.pinch.originMidY * dpr;
+    const wx = (ox - this.pinch.camX) / this.pinch.zoom;
+    const wy = (oy - this.pinch.camY) / this.pinch.zoom;
+
+    // New mid in screen px
+    const nx = mid.x * dpr;
+    const ny = mid.y * dpr;
+
+    this.game.camera.zoom = newZoom;
+    // Keep original world point under original mid, then pan by mid delta
+    this.game.camera.x = nx - wx * newZoom;
+    this.game.camera.y = ny - wy * newZoom;
+    this.game.requestDraw();
+
     this.pinch.lastMidX = mid.x;
     this.pinch.lastMidY = mid.y;
   }
 
   onWheel(e) {
     e.preventDefault();
+    e.stopPropagation();
     const pos = this.getPos(e);
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    this.game.zoomBy(factor, pos.x, pos.y);
+    // Support trackpads (small delta) and mice
+    const dy = e.deltaY;
+    const factor = dy < 0 ? 1.12 : 1 / 1.12;
+    // Stronger zoom for larger wheel ticks
+    const steps = Math.min(3, Math.max(1, Math.round(Math.abs(dy) / 100)));
+    let f = 1;
+    for (let i = 0; i < steps; i++) f *= factor;
+    this.game.zoomBy(f, pos.x, pos.y);
   }
 
   onMouseDown(e) {
     if (e.button === 1 || e.button === 2 || this.spaceDown) {
+      e.preventDefault();
       this.panning = true;
       this.panLast = this.getPos(e);
       return;
@@ -150,6 +174,7 @@ export class InputHandler {
       this.game.camera.x += (pos.x - this.panLast.x) * dpr;
       this.game.camera.y += (pos.y - this.panLast.y) * dpr;
       this.panLast = pos;
+      this.game.requestDraw();
       return;
     }
     this.onMove(e);
