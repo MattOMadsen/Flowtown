@@ -82,6 +82,7 @@ Distrikter (ca.):
 | 2026-08-04 | Vej under byer; ingen vej fra havn | Push stroke ud af hub; vand-carve + bugt længere fra havn |
 | 2026-08-04 | Byer så “flyvende” ud | Sprite plantet på jord; alpha-crop padding; skygge under base |
 | 2026-08-04 | Byer fløj stadig (padding/cache) | Tight-crop PNG bottom-align; sink i jordplade; SW cache-bump |
+| 2026-08-04 | Byer fløj pga. isometrisk platform | Fjern lilla pad i sprites; blød skygge på hex; SW v7 |
 
 Når du retter en bruger-rapporteret bug: **tilføj en række** i tabellen ovenfor.
 

@@ -172,54 +172,53 @@ function drawFarmFields(ctx, d, dpr) {
 }
 
 /**
- * Place hub planted on ground (not floating).
- * Place-sprites er bottom-aligned i PNG; vi planter bunden i groundY + lille sink.
+ * Place hub planted on hex terrain (not floating diorama).
+ * Sprites uden indbygget platform; blød kontakt-skygge + sink i jorden.
  */
 export function drawPlaceHub(ctx, d, dpr, helpers) {
   const { lightenHex, drawSilhouette } = helpers;
   const type = d.type || 'town';
   const sprite = getPlaceSprite(type, d.spriteKey || null);
-  // Kompakt størrelse – store isometriske sprites “svæver” hvis de er for store
-  const size = d.r * 1.85;
+  // Lidt mindre end før – isometrisk hus på top-down hex
+  const size = d.r * 1.72;
   const connected = d._connected;
-  // Jordkontakt = hub-centrum (veje snapper hertil)
   const groundY = d.y;
   const gc = d.color || '#a8a29e';
 
-  // Solid jord-plade (tydelig base byen står på)
+  // Blød skygge der “klistrer” huset til hex-græs (ingen lilla ø-platform)
   ctx.beginPath();
-  ctx.ellipse(d.x, groundY + 1 * dpr, size * 0.48, size * 0.18, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(28, 25, 23, 0.22)';
+  ctx.ellipse(d.x + 2 * dpr, groundY + 3 * dpr, size * 0.34, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(20, 18, 14, 0.28)';
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(d.x, groundY, size * 0.4, size * 0.145, 0, 0, Math.PI * 2);
-  const sod = ctx.createRadialGradient(d.x - size * 0.08, groundY - size * 0.04, 0, d.x, groundY, size * 0.42);
-  sod.addColorStop(0, 'rgba(120, 140, 85, 0.55)');
-  sod.addColorStop(0.45, 'rgba(95, 110, 70, 0.4)');
-  sod.addColorStop(1, 'rgba(70, 80, 50, 0.05)');
+  ctx.ellipse(d.x, groundY + 1 * dpr, size * 0.28, size * 0.09, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(30, 28, 22, 0.16)';
+  ctx.fill();
+
+  // Meget diskret græs-toning (matcher hex, ikke en grøn “tallerken”)
+  ctx.beginPath();
+  ctx.ellipse(d.x, groundY, size * 0.26, size * 0.085, 0, 0, Math.PI * 2);
+  const sod = ctx.createRadialGradient(d.x, groundY, 0, d.x, groundY, size * 0.28);
+  sod.addColorStop(0, 'rgba(90, 110, 70, 0.22)');
+  sod.addColorStop(1, 'rgba(90, 110, 70, 0)');
   ctx.fillStyle = sod;
   ctx.fill();
-  // Farvet ring (stedets farve)
+
+  // Tynd farvering (stedfarve) – kun når forbundet, ellers næsten usynlig
   ctx.beginPath();
-  ctx.ellipse(d.x, groundY, size * 0.36, size * 0.12, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = hexAlpha(gc, 0.45);
-  ctx.lineWidth = 2 * dpr;
+  ctx.ellipse(d.x, groundY, size * 0.24, size * 0.08, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = hexAlpha(gc, connected ? 0.4 : 0.18);
+  ctx.lineWidth = 1.4 * dpr;
   ctx.stroke();
 
-  // Kontakt-skygge under sprite
-  ctx.beginPath();
-  ctx.ellipse(d.x + 3 * dpr, groundY + 4 * dpr, size * 0.36, size * 0.11, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(15, 12, 10, 0.3)';
-  ctx.fill();
-
   if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-    // Sprites er bottom-aligned: plant bund i jorden med lille sink (ingen luft under)
     const nw = sprite.naturalWidth || size;
     const nh = sprite.naturalHeight || size;
     const aspect = nw / Math.max(1, nh);
     const drawH = size;
     const drawW = drawH * aspect;
-    const sink = drawH * 0.08; // 8% ned i pladen = “står i jorden”
+    // Sink: husets “fødder” graver lidt ned i skyggen
+    const sink = drawH * 0.1;
     const dx = d.x - drawW / 2;
     const dy = groundY - drawH + sink;
     ctx.drawImage(sprite, dx, dy, drawW, drawH);
@@ -231,25 +230,24 @@ export function drawPlaceHub(ctx, d, dpr, helpers) {
     drawSilhouette(ctx, d, type);
   }
 
-  // Hub pin – lille, foran basen (ikke midt i huset)
+  // Lille hub-prik ved jorden (foran hus)
   ctx.beginPath();
-  ctx.arc(d.x, groundY + 1 * dpr, 3.5 * dpr, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(251, 191, 36, 0.95)';
+  ctx.arc(d.x, groundY + 0.5 * dpr, 3 * dpr, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(251, 191, 36, 0.92)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(28,25,23,0.4)';
+  ctx.strokeStyle = 'rgba(28,25,23,0.35)';
   ctx.lineWidth = 1 * dpr;
   ctx.stroke();
 
-  // Connected ring
   if (connected) {
     ctx.beginPath();
-    ctx.ellipse(d.x, groundY, size * 0.38, size * 0.13, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.55)';
-    ctx.lineWidth = 1.8 * dpr;
+    ctx.ellipse(d.x, groundY, size * 0.3, size * 0.1, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
+    ctx.lineWidth = 1.5 * dpr;
     ctx.stroke();
   }
 
-  // Label card under jorden/base
+  // Label under hus
   const icon = d.icon || '';
   const typeLabel = d.typeLabel || '';
   ctx.font = `bold ${Math.max(10, 11.5 * dpr)}px system-ui, sans-serif`;
@@ -261,9 +259,9 @@ export function drawPlaceHub(ctx, d, dpr, helpers) {
   const bw = Math.max(tw, tw2) + padX * 2 + 4 * dpr;
   const bh = 28 * dpr;
   const bx = d.x - bw / 2;
-  const by = groundY + 12 * dpr;
+  const by = groundY + 11 * dpr;
 
-  ctx.fillStyle = 'rgba(15,12,10,0.18)';
+  ctx.fillStyle = 'rgba(15,12,10,0.16)';
   roundRect(ctx, bx + 1.5 * dpr, by + 2 * dpr, bw, bh, 8 * dpr);
   ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.94)';
