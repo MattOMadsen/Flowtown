@@ -385,7 +385,7 @@ Tjen $ på jobs → tryk by → køb bil → bil kører selv til job fra den by
 |-------|---------|
 | **F1** | ~~DONE~~ Flåde-state, by-tap køb, stop player auto-spawn |
 | **F2** | ~~DONE~~ Auto-assign + bottom sheet + flåde i stats |
-| **F3** | Pris-kurve finpuds / sælg bil / cap shop (senere) |
+| **F3** | ~~DONE~~ Pris-kurve + sælg bil + køb flåde-slot |
 
 **Prioritet ift. B2 shop:** F1 kan *erstatte* “+1 bil i shop” midlertidigt – shop bliver opgraderinger (fart, cap, 2-spor), by-tap er hvor flåden vokser.
 

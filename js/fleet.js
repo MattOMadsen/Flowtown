@@ -5,10 +5,17 @@
 export const FLEET = {
   carBase: 55,
   truckBase: 85,
-  priceStep: 16,
-  hardCap: 12,
+  /** Mild step + soft quadratic so fleet #6+ feels pricey */
+  priceStep: 18,
+  priceCurve: 4.5,
+  hardCap: 14,
   baseCap: 3,
   levelsPerSlot: 2,
+  /** Max purchasable extra slots beyond level-cap */
+  maxExtraSlots: 4,
+  /** Sell refund as fraction of "effective buy value" */
+  sellRefund: 0.55,
+  sellUpgradeBonus: 22,
   /** Max +last ranks per vehicle */
   maxUpgradeRank: 3,
   /** Meta unlock thresholds (total upgrades ever) */
@@ -74,19 +81,51 @@ export const VEHICLE_CLASSES = {
 
 export const STARTER_CLASSES = ['car_std', 'truck_std'];
 
-export function fleetCap(level = 1) {
+/**
+ * Fleet capacity = base + level slots + purchased extra slots.
+ * @param {number} [level=1]
+ * @param {number} [extraSlots=0] bought with $ this meta profile
+ */
+export function fleetCap(level = 1, extraSlots = 0) {
   const L = Math.max(1, level | 0);
-  const extra = Math.floor((L - 1) / FLEET.levelsPerSlot);
-  return Math.min(FLEET.hardCap, FLEET.baseCap + extra);
+  const fromLevel = Math.floor((L - 1) / FLEET.levelsPerSlot);
+  const extra = Math.max(0, Math.min(FLEET.maxExtraSlots, extraSlots | 0));
+  return Math.min(FLEET.hardCap, FLEET.baseCap + fromLevel + extra);
+}
+
+/** Cost of next extra fleet slot (after current extras) */
+export function fleetSlotPrice(currentExtraSlots = 0) {
+  const n = Math.max(0, currentExtraSlots | 0);
+  return 120 + n * 85 + n * n * 20;
+}
+
+export function canBuyFleetSlot(level = 1, extraSlots = 0) {
+  const extra = Math.max(0, extraSlots | 0);
+  if (extra >= FLEET.maxExtraSlots) return false;
+  const L = Math.max(1, level | 0);
+  const fromLevel = Math.floor((L - 1) / FLEET.levelsPerSlot);
+  return FLEET.baseCap + fromLevel + extra < FLEET.hardCap;
 }
 
 export function getClass(classId) {
   return VEHICLE_CLASSES[classId] || VEHICLE_CLASSES.car_std;
 }
 
+/**
+ * F3 price curve: base + step·n + curve·n² (n = total owned fleet size).
+ */
 export function buyPriceForClass(classId, ownedCount) {
   const c = getClass(classId);
-  return c.basePrice + Math.max(0, ownedCount) * FLEET.priceStep;
+  const n = Math.max(0, ownedCount | 0);
+  return Math.round(c.basePrice + n * FLEET.priceStep + n * n * FLEET.priceCurve);
+}
+
+/** Refund when selling (idle vehicles only) */
+export function sellPriceForClass(classId, upgradeRank = 0) {
+  const c = getClass(classId);
+  const rank = Math.max(0, Math.min(FLEET.maxUpgradeRank, upgradeRank | 0));
+  const value = c.basePrice + rank * FLEET.sellUpgradeBonus;
+  return Math.max(12, Math.round(value * FLEET.sellRefund));
 }
 
 /** @deprecated use buyPriceForClass */

@@ -88,7 +88,13 @@ export function jobLabel(job) {
   return `${job.typeMeta.icon} ${left} ${job.typeMeta.unit}: ${job.from.name} → ${job.to.name}`;
 }
 
-export function randomJobAmount(typeKey, from, to) {
+/**
+ * @param {string} typeKey
+ * @param {object} from
+ * @param {object} to
+ * @param {{ rush?: boolean, growthMul?: number }} [opts]
+ */
+export function randomJobAmount(typeKey, from, to, opts = {}) {
   let base;
   if (typeKey === 'cargo') base = 3 + Math.floor(Math.random() * 5);
   else if (typeKey === 'express') base = 2 + Math.floor(Math.random() * 4); // mindre, hurtigere
@@ -101,7 +107,27 @@ export function randomJobAmount(typeKey, from, to) {
       (from?.type === 'capital' || from?.type === 'town' || from?.type === 'harbor')) {
     base += Math.floor(Math.random() * 2);
   }
-  return base;
+  // Place growth (P1-4): larger districts spawn slightly bigger jobs
+  const gFrom = (from?.growth | 0) || 0;
+  const gTo = (to?.growth | 0) || 0;
+  const g = Math.max(gFrom, Math.floor((gFrom + gTo) * 0.5));
+  if (g > 0) base += Math.min(6, Math.floor(g * 0.7) + (Math.random() < 0.4 ? 1 : 0));
+  // Demand multipliers from place type * growth
+  if (from?.passengers && (typeKey === 'passengers' || typeKey === 'tourist' || typeKey === 'express')) {
+    base = Math.round(base * (0.85 + Math.min(0.55, from.passengers * 0.12 + g * 0.04)));
+  }
+  if (from?.cargo && typeKey === 'cargo') {
+    base = Math.round(base * (0.85 + Math.min(0.55, from.cargo * 0.12 + g * 0.04)));
+  }
+  if (opts.growthMul && opts.growthMul > 1) {
+    base = Math.round(base * opts.growthMul);
+  }
+  // Rush hour (P1-3)
+  if (opts.rush) {
+    base = Math.round(base * (1.35 + Math.random() * 0.25));
+    base += 1 + Math.floor(Math.random() * 2);
+  }
+  return Math.max(2, base);
 }
 
 function isTouristPlace(d) {
@@ -121,50 +147,69 @@ function pickPassengerType(from, to) {
  * Generate job with industry logic:
  * factories always get cargo jobs TO harbor/capital/town when possible.
  */
-export function generateJob(districts, existingJobs = []) {
+/**
+ * @param {object[]} districts
+ * @param {object[]} [existingJobs]
+ * @param {{ rush?: boolean }} [opts]
+ */
+export function generateJob(districts, existingJobs = [], opts = {}) {
   if (!districts || districts.length < 2) return null;
+  const amtOpts = { rush: !!opts.rush };
 
   const factories = districts.filter(d => d.type === 'factory');
   const farms = districts.filter(d => d.type === 'farm');
 
+  // Weight pick toward grown places slightly
+  const pickPlace = (list) => {
+    if (!list.length) return null;
+    let best = list[0];
+    let bestW = -1;
+    for (let i = 0; i < Math.min(6, list.length); i++) {
+      const d = list[Math.floor(Math.random() * list.length)];
+      const w = 1 + (d.growth | 0) * 0.35 + Math.random();
+      if (w > bestW) { bestW = w; best = d; }
+    }
+    return best;
+  };
+
   // ~40% of jobs: force a meaningful factory chain
   if (factories.length && Math.random() < 0.42) {
-    const factory = factories[Math.floor(Math.random() * factories.length)];
+    const factory = pickPlace(factories);
     // Prefer outbound finished goods; sometimes inbound from farm
     if (farms.length && Math.random() < 0.35) {
-      const farm = farms[Math.floor(Math.random() * farms.length)];
-      const amount = randomJobAmount('cargo', farm, factory);
+      const farm = pickPlace(farms);
+      const amount = randomJobAmount('cargo', farm, factory, amtOpts);
       return createJob(farm, factory, 'cargo', amount);
     }
     const sink = pickFactorySink(districts, factory, existingJobs);
     if (sink) {
-      const amount = randomJobAmount('cargo', factory, sink);
+      const amount = randomJobAmount('cargo', factory, sink, amtOpts);
       return createJob(factory, sink, 'cargo', amount);
     }
   }
 
   // Farm → factory boost
   if (farms.length && factories.length && Math.random() < 0.25) {
-    const farm = farms[Math.floor(Math.random() * farms.length)];
-    const factory = factories[Math.floor(Math.random() * factories.length)];
-    return createJob(farm, factory, 'cargo', randomJobAmount('cargo', farm, factory));
+    const farm = pickPlace(farms);
+    const factory = pickPlace(factories);
+    return createJob(farm, factory, 'cargo', randomJobAmount('cargo', farm, factory, amtOpts));
   }
 
   // Dedicated tourist / express attempts (~18% each when places exist)
-  if (Math.random() < 0.18) {
+  if (Math.random() < (opts.rush ? 0.28 : 0.18)) {
     const hubs = districts.filter(isTouristPlace);
     if (hubs.length >= 2) {
-      const from = hubs[Math.floor(Math.random() * hubs.length)];
-      let to = hubs[Math.floor(Math.random() * hubs.length)];
+      const from = pickPlace(hubs);
+      let to = pickPlace(hubs);
       while (to === from) to = hubs[Math.floor(Math.random() * hubs.length)];
-      return createJob(from, to, 'tourist', randomJobAmount('tourist', from, to));
+      return createJob(from, to, 'tourist', randomJobAmount('tourist', from, to, amtOpts));
     }
   }
-  if (Math.random() < 0.16) {
-    const from = districts[Math.floor(Math.random() * districts.length)];
-    let to = districts[Math.floor(Math.random() * districts.length)];
+  if (Math.random() < (opts.rush ? 0.26 : 0.16)) {
+    const from = pickPlace(districts);
+    let to = pickPlace(districts);
     while (to === from) to = districts[Math.floor(Math.random() * districts.length)];
-    return createJob(from, to, 'express', randomJobAmount('express', from, to));
+    return createJob(from, to, 'express', randomJobAmount('express', from, to, amtOpts));
   }
 
   let best = null;
@@ -216,7 +261,7 @@ export function generateJob(districts, existingJobs = []) {
           factory,
           sink,
           'cargo',
-          randomJobAmount('cargo', factory, sink)
+          randomJobAmount('cargo', factory, sink, amtOpts)
         );
       }
     }
@@ -226,6 +271,6 @@ export function generateJob(districts, existingJobs = []) {
     best = { from, to, typeKey: 'passengers' };
   }
 
-  const amount = randomJobAmount(best.typeKey, best.from, best.to);
+  const amount = randomJobAmount(best.typeKey, best.from, best.to, amtOpts);
   return createJob(best.from, best.to, best.typeKey, amount);
 }

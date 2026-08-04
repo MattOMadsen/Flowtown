@@ -43,25 +43,27 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-D3** Jobtyper: ekspres ⚡ + turister 🧳 (+ person/gods)
 - [x] **P1-6** Gem session (autosave + “Fortsæt gemt spil”)
 
+### Økonomi + peak + vækst (04/08 F3 / P1-3 / P1-4)
+- [x] **PROG-F3** Pris-kurve (kvadratisk), sælg bil (~55%), køb ekstra flåde-slot
+- [x] **P1-3** Rush hour (~28s peak / 95s cyklus): flere jobs, større mængder, HUD-badge
+- [x] **P1-4** Distrikter vokser (max 8) via leverancer + tid; større radius + job-demand
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **PROG-F3** | Pris-kurve / sælg bil / flåde-cap | Balance-dybde |
-| 2 | **P1-3** | Rush hour / peak demand | Periodisk spawn-boost |
-| 3 | **P1-4** | Distrikter vokser | PLAN Fase 2 |
-| 4 | **P0-4** | Tydeligere snap-feedback | Delvist glød |
-| 5 | **P0-5** | Safe-area polish (notch/home) | Delvist `env(safe-area-*)` |
-| 6 | **PROG-B2** | Global shop (infra unlock via level) | By-sheet dækker flåde |
-| 7 | **P2-1** | Trafiklys / envejsveje | Valgfrit tool |
-| 8 | **P2-3** | Station / lager / depot | Placering + buff |
-| 9 | **P2-4** | Achievements | localStorage flags |
-| 10 | **P3-2** | Stærkere bot-AI | bot.js |
-| 11 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
-| 12 | **P3-3/4** | Multiplayer / leaderboard | Backend |
-| 13 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
+| 1 | **PROG-B2** | Global shop (infra unlock via level) | By-sheet dækker flåde |
+| 2 | **P0-4** | Tydeligere snap-feedback | Delvist glød |
+| 3 | **P0-5** | Safe-area polish (notch/home) | Delvist `env(safe-area-*)` |
+| 4 | **P2-1** | Trafiklys / envejsveje | Valgfrit tool |
+| 5 | **P2-3** | Station / lager / depot | Placering + buff |
+| 6 | **P2-4** | Achievements | localStorage flags |
+| 7 | **P3-2** | Stærkere bot-AI | bot.js |
+| 8 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
+| 9 | **P3-3/4** | Multiplayer / leaderboard | Backend |
+| 10 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
 
 ### Hurtige polish der stadig kan give værdi
 - [ ] Tydelig “tryk by for at købe”-hint første minut
@@ -93,7 +95,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-C1 | ~~Baner + stjerner~~ | Done |
 | PROG-C2 | End-of-run polish | Delvist |
 | PROG-D3 | ~~Ekspres + turist jobs~~ | Done 2026-08-04 |
-| PROG-F3 | Pris-kurve / sælg / cap | Mangler |
+| PROG-F3 | ~~Pris-kurve / sælg / cap~~ | Done 2026-08-04 |
 | PROG-U1–U3 | ~~Opgrader + unlock + match~~ | Done |
 
 ## P1 – Spil-følelse
@@ -102,8 +104,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 |----|--------|--------|
 | P1-1 | ~~Lyd + mute~~ | Done 2026-08-04 |
 | P1-2 | ~~Tutorial~~ | Done 2026-08-04 |
-| P1-3 | Rush hour | Mangler |
-| P1-4 | Distrikter vokser | Mangler |
+| P1-3 | ~~Rush hour~~ | Done 2026-08-04 – ~28s peak / 95s cyklus |
+| P1-4 | ~~Distrikter vokser~~ | Done 2026-08-04 – leverancer + tid, max 8 |
 | P1-5 | Større map | Delvist via M1/MAP2 |
 | P1-6 | ~~Gem session~~ | Done 2026-08-04 |
 

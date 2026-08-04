@@ -14,6 +14,9 @@ import {
 import {
   fleetCap,
   buyPriceForClass,
+  sellPriceForClass,
+  fleetSlotPrice,
+  canBuyFleetSlot,
   vehicleCanDoJob,
   getClass,
   upgradePrice,
@@ -38,10 +41,19 @@ import {
 
 const START_MONEY = 1400;
 const MAX_JOBS = 5;
+const MAX_JOBS_RUSH = 8;
 const ROAD_BASE_COST = 6;
 const ROAD_COST_PER_PX = 0.024;
 const STUCK_PENALTY_INTERVAL = 6;
 const STUCK_PENALTY = 1;
+/** Rush hour cycle (seconds of session time) */
+const RUSH_CYCLE = 95;
+const RUSH_DURATION = 28;
+const RUSH_JOB_INTERVAL = 3.4;
+const NORMAL_JOB_INTERVAL = 6.5;
+/** District growth */
+const GROWTH_MAX = 8;
+const GROWTH_TICK = 22;
 
 export class Game {
   constructor(canvas) {
@@ -68,6 +80,11 @@ export class Game {
     this.assignTimer = 0;
     this.jobTimer = 0;
     this.stuckPenaltyTimer = 0;
+    this.growthTimer = 0;
+    /** Session clock (seconds) for rush hour */
+    this.sessionTime = 0;
+    this.rushActive = false;
+    this._wasRush = false;
     /** Open city sheet: district name or null */
     this.selectedDistrictName = null;
 
@@ -159,21 +176,27 @@ export class Game {
       const prevMatch = prev.find(p => p.name === d.name) || prev[i];
       const rx = mx + (d.rx ?? 0.5) * (1 - 2 * mx);
       const ry = my + (d.ry ?? 0.5) * (1 - 2 * my);
+      const growth = Math.max(0, Math.min(GROWTH_MAX, prevMatch?.growth | 0));
+      const baseR = Math.max(28 * dpr, (d.rr || 0.035) * minSide * 1.15);
+      const rMul = 1 + growth * 0.045;
       return {
         id: d.id,
         x: rx * w,
         y: ry * h,
-        r: Math.max(28 * dpr, (d.rr || 0.035) * minSide * 1.15),
+        r: baseR * rMul,
+        baseR,
+        growth,
         color: d.color || typeMeta.color,
         name: d.name,
         type: d.type || 'town',
         typeLabel: d.typeLabel || typeMeta.label,
         icon: d.icon || typeMeta.icon,
         spriteKey: d.spriteKey || d.type || 'town',
-        passengers: d.passengers ?? typeMeta.passengers,
-        cargo: d.cargo ?? typeMeta.cargo,
+        passengers: (d.passengers ?? typeMeta.passengers) * (1 + growth * 0.06),
+        cargo: (d.cargo ?? typeMeta.cargo) * (1 + growth * 0.06),
         demandPeople: prevMatch?.demandPeople ?? 0,
-        demandCargo: prevMatch?.demandCargo ?? 0
+        demandCargo: prevMatch?.demandCargo ?? 0,
+        deliveriesHere: prevMatch?.deliveriesHere ?? 0
       };
     });
     for (const job of this.jobs) {
@@ -214,6 +237,10 @@ export class Game {
     this.pendingRoadCost = 0;
     this.jobTimer = 0;
     this.assignTimer = 0;
+    this.growthTimer = 0;
+    this.sessionTime = 0;
+    this.rushActive = false;
+    this._wasRush = false;
 
     this.initDistricts();
     this.botsEnabled = !!opts.bots;
@@ -260,6 +287,24 @@ export class Game {
     this.arrivedCount = data.arrivedCount | 0;
     this.playerDelivered = data.playerDelivered | 0;
     this.jobsCompleted = data.jobsCompleted | 0;
+    this.sessionTime = data.sessionTime || 0;
+    this.rushActive = false;
+    this._wasRush = false;
+    // Apply saved district growth before vehicles/jobs
+    if (Array.isArray(data.growth)) {
+      for (const g of data.growth) {
+        const d = this.districts.find(x => x.name === g.name);
+        if (!d) continue;
+        d.growth = Math.max(0, Math.min(GROWTH_MAX, g.growth | 0));
+        d.deliveriesHere = g.deliveriesHere | 0;
+        const baseR = d.baseR || d.r;
+        d.baseR = baseR;
+        d.r = baseR * (1 + d.growth * 0.045);
+        const typeMeta = placeTypeMeta(d.type);
+        d.passengers = (typeMeta.passengers || 1) * (1 + d.growth * 0.06);
+        d.cargo = (typeMeta.cargo || 1) * (1 + d.growth * 0.06);
+      }
+    }
 
     // Roads
     this.roads = [];
@@ -414,20 +459,91 @@ export class Game {
     return this.vehicles.filter(v => v.owner === 'player' && v.fleetOwned);
   }
 
+  getExtraFleetSlots() {
+    return Math.max(0, this.meta?.extraFleetSlots | 0);
+  }
+
   getFleetCap() {
-    return fleetCap(this.meta?.level || 1);
+    return fleetCap(this.meta?.level || 1, this.getExtraFleetSlots());
   }
 
   getFleetStats() {
     const fleet = this.getPlayerFleet();
     const idle = fleet.filter(v => !v.job).length;
+    const cap = this.getFleetCap();
+    const extra = this.getExtraFleetSlots();
     return {
       owned: fleet.length,
-      cap: this.getFleetCap(),
+      cap,
       idle,
       busy: fleet.length - idle,
       cars: fleet.filter(v => v.kind === 'car').length,
-      trucks: fleet.filter(v => v.kind === 'truck').length
+      trucks: fleet.filter(v => v.kind === 'truck').length,
+      extraSlots: extra,
+      canBuySlot: canBuyFleetSlot(this.meta?.level || 1, extra),
+      slotPrice: fleetSlotPrice(extra),
+      rush: !!this.rushActive
+    };
+  }
+
+  /** F3: buy +1 fleet slot with $ */
+  buyFleetSlot() {
+    if (!this.running) return { ok: false, reason: 'not_running' };
+    const extra = this.getExtraFleetSlots();
+    if (!canBuyFleetSlot(this.meta?.level || 1, extra)) {
+      this.showToast('Max flåde-slots nået');
+      return { ok: false, reason: 'max' };
+    }
+    const price = fleetSlotPrice(extra);
+    if (this.money < price) {
+      this.showToast(`Ikke råd til slot (mangler $${price - Math.floor(this.money)})`);
+      playError();
+      return { ok: false, reason: 'money' };
+    }
+    this.money -= price;
+    this.meta.extraFleetSlots = extra + 1;
+    saveMeta(this.meta);
+    const cap = this.getFleetCap();
+    this.showToast(`+1 flåde-slot · nu ${cap} pladser (−$${price})`);
+    playBuy();
+    this._sessionDirty = true;
+    return { ok: true, price, cap };
+  }
+
+  /**
+   * F3: sell idle fleet vehicle for partial refund.
+   */
+  sellVehicle(vehicleId) {
+    const v = this.getPlayerFleet().find(x => x.id === vehicleId);
+    if (!v) return { ok: false, reason: 'not_found' };
+    if (v.job) {
+      this.showToast('Kan ikke sælge bil midt i et job');
+      playError();
+      return { ok: false, reason: 'busy' };
+    }
+    const refund = sellPriceForClass(v.classId, v.upgradeRank || 0);
+    this.money += refund;
+    const cls = getClass(v.classId);
+    const idx = this.vehicles.indexOf(v);
+    if (idx >= 0) this.vehicles.splice(idx, 1);
+    this.addFloatText(v.x, v.y - 10, `+$${refund}`, '#15803d');
+    this.showToast(`Solgt ${cls.icon} ${cls.short} · +$${refund}`);
+    playBuy();
+    this._sessionDirty = true;
+    return { ok: true, refund };
+  }
+
+  isRushHour() {
+    return !!this.rushActive;
+  }
+
+  /** Phase within rush cycle 0..1 */
+  getRushPhase() {
+    const t = this.sessionTime % RUSH_CYCLE;
+    return {
+      inRush: t < RUSH_DURATION,
+      tInCycle: t,
+      remaining: t < RUSH_DURATION ? RUSH_DURATION - t : RUSH_CYCLE - t
     };
   }
 
@@ -560,7 +676,13 @@ export class Game {
     const fleet = this.getPlayerFleet();
     const cap = this.getFleetCap();
     if (fleet.length >= cap) {
-      this.showToast(`Flåde fuld (${fleet.length}/${cap}) – stig i level for flere slots`);
+      const extra = this.getExtraFleetSlots();
+      if (canBuyFleetSlot(this.meta?.level || 1, extra)) {
+        const sp = fleetSlotPrice(extra);
+        this.showToast(`Flåde fuld (${fleet.length}/${cap}) – køb slot for $${sp}`);
+      } else {
+        this.showToast(`Flåde fuld (${fleet.length}/${cap}) – stig i level`);
+      }
       return { ok: false, reason: 'cap' };
     }
 
@@ -1415,9 +1537,76 @@ export class Game {
   }
 
   addJob() {
-    if (this.jobs.filter(j => j.active).length >= MAX_JOBS) return;
-    const job = generateJob(this.districts, this.jobs);
-    if (job) this.jobs.push(job);
+    const max = this.rushActive ? MAX_JOBS_RUSH : MAX_JOBS;
+    if (this.jobs.filter(j => j.active).length >= max) return;
+    const job = generateJob(this.districts, this.jobs, { rush: this.rushActive });
+    if (job) {
+      this.jobs.push(job);
+      if (this.rushActive) {
+        // Small visual ping at origin during rush
+        const from = job.from;
+        if (from) this.addFloatText(from.x, from.y - (from.r || 20), '⚡', '#db2777');
+      }
+    }
+  }
+
+  /**
+   * P1-4: grow a district (radius + demand). Triggered by deliveries / time.
+   */
+  growDistrict(district, amount = 1) {
+    if (!district) return false;
+    const before = district.growth | 0;
+    if (before >= GROWTH_MAX) return false;
+    district.growth = Math.min(GROWTH_MAX, before + amount);
+    const g = district.growth;
+    const baseR = district.baseR || district.r;
+    district.baseR = baseR;
+    district.r = baseR * (1 + g * 0.045);
+    const typeMeta = placeTypeMeta(district.type);
+    district.passengers = (typeMeta.passengers || 1) * (1 + g * 0.06);
+    district.cargo = (typeMeta.cargo || 1) * (1 + g * 0.06);
+    if (g > before && (g === 1 || g === 3 || g === 5 || g === GROWTH_MAX)) {
+      this.addFloatText(district.x, district.y - district.r, `By vokser ${g}`, '#0d9488');
+      if (g >= 3) this.showToast(`${district.name} vokser (størrelse ${g})`, 2.0);
+    }
+    return true;
+  }
+
+  tickDistrictGrowth(dt) {
+    this.growthTimer += dt;
+    if (this.growthTimer < GROWTH_TICK) return;
+    this.growthTimer = 0;
+    // Prefer places with many deliveries; soft random growth elsewhere
+    const list = [...this.districts].sort(
+      (a, b) => (b.deliveriesHere | 0) - (a.deliveriesHere | 0)
+    );
+    let grew = 0;
+    for (const d of list) {
+      if ((d.growth | 0) >= GROWTH_MAX) continue;
+      const deliv = d.deliveriesHere | 0;
+      const chance = 0.12 + Math.min(0.55, deliv * 0.04) + (this.rushActive ? 0.08 : 0);
+      if (Math.random() < chance) {
+        this.growDistrict(d, 1);
+        grew++;
+        if (grew >= 2) break;
+      }
+    }
+  }
+
+  tickRushHour(dt) {
+    this.sessionTime += dt;
+    const phase = this.getRushPhase();
+    this.rushActive = phase.inRush;
+    if (this.rushActive && !this._wasRush) {
+      this.showToast('🚇 Rush hour! Flere og større opgaver', 2.8);
+      // Burst a couple jobs if room
+      this.addJob();
+      this.addJob();
+      this.jobTimer = 0;
+    } else if (!this.rushActive && this._wasRush) {
+      this.showToast('Rush over – trafik roligere', 2.0);
+    }
+    this._wasRush = this.rushActive;
   }
 
   findNearestRoadPoint(x, y, maxDist) {
@@ -1648,12 +1837,28 @@ export class Game {
       }
       this.addFloatText(vehicle.x, vehicle.y - 10, `+$${reward}`, '#059669');
 
+      // P1-4: deliveries feed place growth (to + soft from)
+      if (job) {
+        const toD = this.districts.find(d => d.name === job.to.name);
+        const fromD = this.districts.find(d => d.name === job.from.name);
+        if (toD) {
+          toD.deliveriesHere = (toD.deliveriesHere | 0) + applied;
+          if (jobJustCompleted && Math.random() < 0.45) this.growDistrict(toD, 1);
+          else if ((toD.deliveriesHere % 12) === 0) this.growDistrict(toD, 1);
+        }
+        if (fromD && jobJustCompleted && Math.random() < 0.22) {
+          fromD.deliveriesHere = (fromD.deliveriesHere | 0) + 1;
+          this.growDistrict(fromD, 1);
+        }
+      }
+
       // B1: XP per unit + bonus when whole job completes
       let xpGain = XP_REWARDS.perUnit * Math.max(1, applied);
       if (jobJustCompleted && job) {
         xpGain += XP_REWARDS.jobCompleteBase + job.amount * XP_REWARDS.jobCompletePerUnit;
         if (job.type === 'express') xpGain += 4;
         if (job.type === 'tourist') xpGain += 3;
+        if (this.rushActive) xpGain += 3;
       }
       this.grantXp(xpGain, { floatAt: { x: vehicle.x, y: vehicle.y } });
 
@@ -1690,10 +1895,16 @@ export class Game {
       if (this.toastTimer <= 0) this.toast = null;
     }
 
-    // Jobs
+    // P1-3 rush hour + P1-4 growth
+    this.tickRushHour(dt);
+    this.tickDistrictGrowth(dt);
+
+    // Jobs (faster spawn during rush)
     this.jobTimer += dt;
-    if (this.jobTimer > 6.5) {
+    const jobInterval = this.rushActive ? RUSH_JOB_INTERVAL : NORMAL_JOB_INTERVAL;
+    if (this.jobTimer > jobInterval) {
       this.addJob();
+      if (this.rushActive && Math.random() < 0.45) this.addJob();
       this.jobTimer = 0;
     }
     // Remove old completed jobs from list (keep a few for history)

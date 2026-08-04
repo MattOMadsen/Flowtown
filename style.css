@@ -427,6 +427,18 @@ body {
   flex-shrink: 0;
 }
 
+#rush-badge {
+  color: #be185d;
+  background: rgba(251, 207, 232, 0.55);
+  border-radius: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  animation: rush-pulse 1.2s ease-in-out infinite;
+}
+@keyframes rush-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
 .hud-stats b {
   color: #292524;
   font-weight: 800;

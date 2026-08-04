@@ -72,6 +72,12 @@ export function serializeSession(game) {
     y: v.y
   }));
 
+  const growth = (game.districts || []).map(d => ({
+    name: d.name,
+    growth: d.growth | 0,
+    deliveriesHere: d.deliveriesHere | 0
+  }));
+
   return {
     version: 1,
     savedAt: Date.now(),
@@ -82,6 +88,7 @@ export function serializeSession(game) {
     arrivedCount: game.arrivedCount | 0,
     playerDelivered: game.playerDelivered | 0,
     jobsCompleted: game.jobsCompleted | 0,
+    sessionTime: game.sessionTime || 0,
     camera: {
       x: game.camera?.x || 0,
       y: game.camera?.y || 0,
@@ -89,7 +96,8 @@ export function serializeSession(game) {
     },
     roads,
     jobs,
-    fleet
+    fleet,
+    growth
   };
 }
 

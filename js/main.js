@@ -1,5 +1,5 @@
 import { Game } from './game.js';
-import { upgradePrice } from './fleet.js';
+import { upgradePrice, sellPriceForClass } from './fleet.js';
 import { loadGameAssets } from './assets.js';
 import {
   unlockAudio,
@@ -584,6 +584,20 @@ function refreshDistrictSheet() {
   const fl = document.getElementById('ds-fleet');
   if (fl) fl.textContent = `Flåde ${stats.owned}/${stats.cap} · ${stats.idle} ledige · ${stats.busy} på job`;
 
+  const growthEl = document.getElementById('ds-growth');
+  if (growthEl) {
+    const g = d.growth | 0;
+    if (g > 0 || (d.deliveriesHere | 0) > 0) {
+      growthEl.classList.remove('hidden');
+      growthEl.textContent = g > 0
+        ? `🏙️ Størrelse ${g}/8 · ${d.deliveriesHere | 0} leverancer her`
+        : `🏙️ Vokser med leverancer · ${d.deliveriesHere | 0} indtil videre`;
+    } else {
+      growthEl.classList.add('hidden');
+      growthEl.textContent = '';
+    }
+  }
+
   const totalUp = game.meta?.totalUpgrades || 0;
   const metaEl = document.getElementById('ds-upgrades-meta');
   if (metaEl) {
@@ -635,7 +649,25 @@ function refreshDistrictSheet() {
     });
   }
 
-  // Upgrade list
+  // F3: ekstra flåde-slot
+  const slotBtn = document.getElementById('ds-buy-slot');
+  const slotPriceEl = document.getElementById('ds-slot-price');
+  if (slotBtn) {
+    const showSlot = stats.canBuySlot && (stats.owned >= stats.cap - 1 || stats.owned >= stats.cap);
+    slotBtn.classList.toggle('hidden', !showSlot && !(stats.canBuySlot && stats.owned >= 2));
+    // Vis altid hvis man kan købe og flåde er tæt på fuld, ellers også hvis fuld
+    if (stats.canBuySlot) {
+      slotBtn.classList.remove('hidden');
+      const canPay = game.money >= (stats.slotPrice || 0);
+      slotBtn.disabled = !canPay;
+      slotBtn.classList.toggle('opacity-60', !canPay);
+      if (slotPriceEl) slotPriceEl.textContent = `$${stats.slotPrice || 0}`;
+    } else {
+      slotBtn.classList.add('hidden');
+    }
+  }
+
+  // Upgrade list + sell
   const upList = document.getElementById('ds-upgrade-list');
   const upEmpty = document.getElementById('ds-upgrade-empty');
   const vehicles = game.getFleetForSheet?.(d.name) || [];
@@ -648,20 +680,30 @@ function refreshDistrictSheet() {
       const maxed = rank >= 3;
       const price = upgradePrice(rank, v.classId || 'car_std');
       const can = !maxed && game.money >= price;
-      const status = v.job ? 'på job' : 'ledig';
+      const busy = !!v.job;
+      const status = busy ? 'på job' : 'ledig';
       const home = v.homeName || '—';
+      const sellP = sellPriceForClass(v.classId || 'car_std', rank);
       return `
         <div class="flex items-center gap-2 p-2 rounded-xl border border-stone-200 bg-white">
           <div class="min-w-0 flex-1">
             <div class="text-sm font-semibold text-stone-800 truncate">${clsIcon} rank ${rank}/3 · last ${cap}</div>
             <div class="text-[11px] text-stone-500">${escapeHtml(home)} · ${status}</div>
           </div>
-          <button type="button" data-upgrade-id="${v.id}"
-            class="shrink-0 py-2 px-3 rounded-lg text-xs font-bold touch-manipulation
-              ${maxed ? 'bg-stone-100 text-stone-400' : can ? 'bg-violet-500 text-white' : 'bg-stone-100 text-stone-400'}"
-            ${maxed || !can ? 'disabled' : ''}>
-            ${maxed ? 'MAX' : `+Last $${price}`}
-          </button>
+          <div class="flex flex-col gap-1 shrink-0">
+            <button type="button" data-upgrade-id="${v.id}"
+              class="py-1.5 px-2.5 rounded-lg text-[11px] font-bold touch-manipulation
+                ${maxed ? 'bg-stone-100 text-stone-400' : can ? 'bg-violet-500 text-white' : 'bg-stone-100 text-stone-400'}"
+              ${maxed || !can ? 'disabled' : ''}>
+              ${maxed ? 'MAX' : `+Last $${price}`}
+            </button>
+            <button type="button" data-sell-id="${v.id}"
+              class="py-1.5 px-2.5 rounded-lg text-[11px] font-bold touch-manipulation
+                ${busy ? 'bg-stone-100 text-stone-400' : 'bg-rose-50 text-rose-700 border border-rose-200'}"
+              ${busy ? 'disabled' : ''} title="Sælg bil">
+              Sælg $${sellP}
+            </button>
+          </div>
         </div>`;
     }).join('');
 
@@ -673,8 +715,21 @@ function refreshDistrictSheet() {
         refreshDistrictSheet();
       });
     });
+    upList.querySelectorAll('[data-sell-id]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        game.sellVehicle(btn.getAttribute('data-sell-id'));
+        refreshDistrictSheet();
+      });
+    });
   }
 }
+
+bindTap('ds-buy-slot', () => {
+  game.buyFleetSlot?.();
+  refreshDistrictSheet();
+});
 
 window.addEventListener('flowtown:district-sheet', () => refreshDistrictSheet());
 
@@ -698,6 +753,16 @@ setInterval(() => {
   document.getElementById('car-count').textContent = busy;
   const fleetEl = document.getElementById('fleet-count');
   if (fleetEl && fleet) fleetEl.textContent = `${fleet.owned}/${fleet.cap}`;
+  const rushBadge = document.getElementById('rush-badge');
+  const rushLabel = document.getElementById('rush-label');
+  if (rushBadge) {
+    const rush = !!game.isRushHour?.();
+    rushBadge.classList.toggle('hidden', !rush);
+    if (rush && rushLabel) {
+      const rem = Math.ceil(game.getRushPhase?.().remaining || 0);
+      rushLabel.textContent = `Rush ${rem}s`;
+    }
+  }
   document.getElementById('road-count').textContent = game.roads.length;
   document.getElementById('arrived-count').textContent = game.arrivedCount;
   document.getElementById('best-count').textContent = game.playerScore;

@@ -26,7 +26,9 @@ export function defaultMeta() {
     /** Unlocked vehicle class ids */
     unlockedClasses: ['car_std', 'truck_std'],
     /** Best stars per scenario id: { intro: 2, ... } */
-    scenarioStars: {}
+    scenarioStars: {},
+    /** Extra fleet slots bought with $ (F3) */
+    extraFleetSlots: 0
   };
 }
 
@@ -50,7 +52,8 @@ export function loadMeta() {
         : [...base.unlockedClasses],
       scenarioStars: data.scenarioStars && typeof data.scenarioStars === 'object'
         ? data.scenarioStars
-        : {}
+        : {},
+      extraFleetSlots: Math.max(0, Math.min(4, parseInt(data.extraFleetSlots, 10) || 0))
     };
   } catch {
     return defaultMeta();
@@ -68,7 +71,8 @@ export function saveMeta(meta) {
       firstLinks: meta.firstLinks || [],
       totalUpgrades: meta.totalUpgrades || 0,
       unlockedClasses: meta.unlockedClasses || ['car_std', 'truck_std'],
-      scenarioStars: meta.scenarioStars || {}
+      scenarioStars: meta.scenarioStars || {},
+      extraFleetSlots: meta.extraFleetSlots || 0
     }));
   } catch {
     /* private mode / quota */
