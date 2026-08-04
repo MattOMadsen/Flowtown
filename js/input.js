@@ -17,6 +17,9 @@ export class InputHandler {
     this.movedPx = 0;
     this.longPressTimer = null;
     this.longPressPan = false;
+    /** Touch: vent med vejtegning indtil 2. finger er ude af billedet / flyt bekræftet */
+    this.deferDraw = false;
+    this.pinchJustEnded = false;
 
     canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
@@ -64,39 +67,86 @@ export class InputHandler {
 
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      // 2+ fingre: zoom/drej – ALDRIG læg vej (annuller evt. streg, commit ikke)
       if (e.touches.length >= 2) {
         this.clearLongPress();
-        this.endDrawIfAny();
+        this.cancelDrawIfAny();
         this.pendingDistrict = null;
+        this.deferDraw = false;
         this.startPinch(e.touches);
         return;
       }
       if (e.touches.length === 1 && !this.pinch) {
-        this.onDown(e.touches[0]);
+        // Efter pinch: ignorer den finger der bliver tilbage kortvarigt
+        if (this.pinchJustEnded) {
+          this.pinchJustEnded = false;
+          return;
+        }
+        // Touch: udskyd beginStroke til flyt – ellers sættes vej før 2. finger rammer
+        this.onDown(e.touches[0], { deferDraw: true });
       }
     }, { passive: false });
 
     canvas.addEventListener('touchmove', (e) => {
       e.preventDefault();
       if (e.touches.length >= 2) {
+        this.cancelDrawIfAny();
+        this.deferDraw = false;
         if (!this.pinch) this.startPinch(e.touches);
         else this.movePinch(e.touches);
         return;
       }
-      if (e.touches.length === 1) {
-        if (this.panning) this.onPanMove(e.touches[0]);
-        else this.onMove(e.touches[0]);
+      if (e.touches.length === 1 && !this.pinch) {
+        const t = e.touches[0];
+        // Start udskudt vejtegning ved reel flyt (ikke bare finger-plant)
+        if (this.deferDraw && this.downPos) {
+          const pos = this.getPos(t);
+          this.movedPx = Math.hypot(pos.x - this.downPos.x, pos.y - this.downPos.y);
+          if (this.movedPx > 12) {
+            this.commitDeferredDraw(t);
+          }
+        }
+        if (this.panning) this.onPanMove(t);
+        else this.onMove(t);
       }
     }, { passive: false });
 
     canvas.addEventListener('touchend', (e) => {
       e.preventDefault();
-      if (e.touches.length < 2) this.pinch = null;
-      if (e.touches.length === 0) {
-        this.panning = false;
-        this.panLast = null;
-        this.onUp();
+      if (e.touches.length >= 2) return;
+      if (e.touches.length === 1) {
+        // Gik fra pinch → 1 finger: ikke start tegning med den sidste finger
+        if (this.pinch) {
+          this.pinch = null;
+          this.pinchJustEnded = true;
+          this.panning = false;
+          this.panLast = null;
+          this.cancelDrawIfAny();
+          this.deferDraw = false;
+        }
+        return;
       }
+      // 0 fingre
+      const wasPinch = !!this.pinch;
+      this.pinch = null;
+      this.panning = false;
+      this.panLast = null;
+      if (wasPinch) {
+        this.pinchJustEnded = true;
+        this.cancelDrawIfAny();
+        this.deferDraw = false;
+        this.downPos = null;
+        this.movedPx = 0;
+        this.pendingDistrict = null;
+        this.drawing = false;
+        return;
+      }
+      // Tap uden flyt (slet/opgrader/lys/shop) – kør deferred down-handling
+      if (this.deferDraw && this.movedPx <= 12) {
+        this.fireDeferredTap();
+      }
+      this.deferDraw = false;
+      this.onUp();
     }, { passive: false });
 
     canvas.addEventListener('touchcancel', () => {
@@ -104,7 +154,11 @@ export class InputHandler {
       this.panning = false;
       this.panLast = null;
       this.clearLongPress();
-      this.onUp();
+      this.cancelDrawIfAny();
+      this.deferDraw = false;
+      this.drawing = false;
+      this.downPos = null;
+      this.pendingDistrict = null;
     });
   }
 
@@ -281,23 +335,80 @@ export class InputHandler {
     this.onUp();
   }
 
+  /** Commit streg (bruges når man bevidst slipper efter tegning) */
   endDrawIfAny() {
     this.pendingDistrict = null;
+    this.deferDraw = false;
     if (this.drawing) {
       this.drawing = false;
       this.game.endStroke();
     }
   }
 
-  onDown(e) {
+  /** Slet igangværende streg UDEN at bygge vej (pinch / multi-touch) */
+  cancelDrawIfAny() {
+    this.pendingDistrict = null;
+    this.drawing = false;
+    this.deferDraw = false;
+    if (this.game.currentStroke) {
+      this.game.currentStroke = null;
+      this.game.pendingRoadCost = 0;
+      this.game.clearActiveSnap?.();
+      this.game.requestDraw?.();
+    }
+  }
+
+  /**
+   * Touch: start streg efter flyt (bekræftet 1-finger-træk).
+   */
+  commitDeferredDraw(touchOrEvent) {
+    if (!this.deferDraw || !this.downPos) return;
+    this.deferDraw = false;
+    const mode = this.game.mode;
+    // Tap-værktøjer: ikke start streg ved flyt – de kører ved fireDeferredTap
+    if (mode === 'erase' || mode === 'upgrade' || mode === 'oneway' || mode === 'light') {
+      return;
+    }
+    if (this.pendingDistrict) {
+      const d = this.pendingDistrict;
+      this.pendingDistrict = null;
+      this.drawing = true;
+      this.game.beginStrokeFromDistrict?.(d, this.downPos.x, this.downPos.y);
+      const pos = this.getPos(touchOrEvent);
+      this.game.continueStroke(pos.x, pos.y);
+      return;
+    }
+    this.drawing = true;
+    this.game.beginStroke(this.downPos.x, this.downPos.y);
+    const pos = this.getPos(touchOrEvent);
+    this.game.continueStroke(pos.x, pos.y);
+  }
+
+  /** Touch: kort tap uden pinch – slet/lys/by-shop */
+  fireDeferredTap() {
+    if (!this.downPos) return;
+    const pos = this.downPos;
+    const mode = this.game.mode;
+    if (mode === 'erase' || mode === 'upgrade' || mode === 'oneway' || mode === 'light') {
+      this.game.beginStroke(pos.x, pos.y);
+      this.game.endStroke?.();
+      // beginStroke already applies erase/upgrade; endStroke no-ops for those modes
+      return;
+    }
+    // pendingDistrict håndteres i onUp
+  }
+
+  onDown(e, opts = {}) {
     const pos = this.getPos(e);
     this.downPos = pos;
     this.movedPx = 0;
     this.pendingDistrict = null;
     this.longPressPan = false;
+    this.deferDraw = !!opts.deferDraw;
 
     if (this.game.handleMinimapTap?.(pos.x, pos.y)) {
       this.drawing = false;
+      this.deferDraw = false;
       return;
     }
 
@@ -306,6 +417,7 @@ export class InputHandler {
       this.panning = true;
       this.panLast = pos;
       this.drawing = false;
+      this.deferDraw = false;
       return;
     }
 
@@ -319,6 +431,14 @@ export class InputHandler {
     const core = canShop ? this.game.hitDistrictCore?.(pos.x, pos.y) : null;
     if (core) {
       this.pendingDistrict = core;
+      this.drawing = false;
+      // deferDraw forbliver true på touch – streg startes ved flyt
+      this.armLongPressPan();
+      return;
+    }
+
+    // Mus: tegn med det samme. Touch: vent på flyt (se commitDeferredDraw)
+    if (this.deferDraw) {
       this.drawing = false;
       this.armLongPressPan();
       return;
