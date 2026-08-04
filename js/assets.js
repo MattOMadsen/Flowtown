@@ -13,8 +13,8 @@ const PLACE_SRC = {
 const VEHICLE_SRC = {
   car: 'assets/vehicles/car.png',
   truck: 'assets/vehicles/truck.png',
-  car_fast: 'assets/vehicles/car.png',
-  truck_heavy: 'assets/vehicles/truck.png'
+  car_fast: 'assets/vehicles/car_fast.png',
+  truck_heavy: 'assets/vehicles/truck_heavy.png'
 };
 
 const TILE_SRC = {
