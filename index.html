@@ -277,6 +277,7 @@
       <div id="how-box" class="hidden text-left text-sm text-stone-600 space-y-2 mb-2 bg-gradient-to-b from-stone-50 to-white rounded-xl p-3.5 border border-stone-100 shadow-sm">
         <p class="font-semibold text-stone-800">Byg & kør</p>
         <p>✏️ <b>Træk fra by-kant</b> → tegn vej · <b>tryk midt i by</b> → køb bil</p>
+        <p>🌉🚦 <b>Vej over vej</b> → vælg bro eller kryds med lys (forskellig pris; flere kryds kan vælges enkeltvis)</p>
         <p>🖐️ <b>Hold</b> finger / pile / 2 fingre → flyt eller zoom</p>
         <p>🗑️ <b>Slet</b> fjerner et stykke vej · ↩️ <b>Undo</b> giver fuld refund</p>
         <p>🏭 Fabrikker sender gods til havn/by · ⚡ ekspres · 🧳 turister</p>
@@ -290,19 +291,28 @@
   <div id="crossing-choice" class="crossing-choice hidden" role="dialog" aria-modal="true" aria-labelledby="crossing-choice-title">
     <div class="crossing-choice-card">
       <h3 id="crossing-choice-title" class="crossing-choice-title">Vejkryds</h3>
-      <p class="crossing-choice-sub">Din vej krydser en anden. Vælg hvordan:</p>
+      <p id="cross-progress" class="crossing-progress hidden">Kryds 1/1</p>
+      <p id="crossing-choice-sub" class="crossing-choice-sub">Din vej krydser en anden. Vælg hvordan:</p>
       <div class="crossing-choice-btns">
         <button type="button" id="cross-opt-bridge" class="crossing-opt crossing-opt-bridge touch-manipulation">
           <span class="crossing-opt-icon">🌉</span>
-          <span class="crossing-opt-label">Bro</span>
+          <span class="crossing-opt-label">Bro her</span>
           <span class="crossing-opt-desc">Over den anden vej</span>
           <span id="cross-cost-bridge" class="crossing-opt-price">$0</span>
         </button>
         <button type="button" id="cross-opt-junction" class="crossing-opt crossing-opt-junction touch-manipulation">
           <span class="crossing-opt-icon">🚦</span>
-          <span class="crossing-opt-label">Kryds med lys</span>
-          <span class="crossing-opt-desc">Samme niveau + trafiklys</span>
+          <span class="crossing-opt-label">Lys her</span>
+          <span class="crossing-opt-desc">Kryds + synkroniseret lys</span>
           <span id="cross-cost-junction" class="crossing-opt-price">$0</span>
+        </button>
+      </div>
+      <div id="cross-all-row" class="crossing-all-row hidden">
+        <button type="button" id="cross-opt-bridge-all" class="crossing-all-btn crossing-all-bridge touch-manipulation">
+          🌉 Bro alle <span id="cross-cost-bridge-all" class="crossing-all-price">$0</span>
+        </button>
+        <button type="button" id="cross-opt-junction-all" class="crossing-all-btn crossing-all-junction touch-manipulation">
+          🚦 Lys alle <span id="cross-cost-junction-all" class="crossing-all-price">$0</span>
         </button>
       </div>
       <button type="button" id="cross-opt-cancel" class="crossing-opt-cancel touch-manipulation">Annuller</button>

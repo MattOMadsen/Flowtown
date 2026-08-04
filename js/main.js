@@ -31,13 +31,20 @@ const canvas = document.getElementById('game');
 const game = new Game(canvas);
 loadGameAssets().then(() => game.requestDraw?.());
 
-// Kryds-valg: bro vs lys (efter vej-over-vej)
+// Kryds-valg: bro vs lys (efter vej-over-vej), evt. flere kryds
 const crossingEl = document.getElementById('crossing-choice');
 const crossCostBridge = document.getElementById('cross-cost-bridge');
 const crossCostJunction = document.getElementById('cross-cost-junction');
+const crossCostBridgeAll = document.getElementById('cross-cost-bridge-all');
+const crossCostJunctionAll = document.getElementById('cross-cost-junction-all');
 const crossBtnBridge = document.getElementById('cross-opt-bridge');
 const crossBtnJunction = document.getElementById('cross-opt-junction');
+const crossBtnBridgeAll = document.getElementById('cross-opt-bridge-all');
+const crossBtnJunctionAll = document.getElementById('cross-opt-junction-all');
 const crossBtnCancel = document.getElementById('cross-opt-cancel');
+const crossAllRow = document.getElementById('cross-all-row');
+const crossProgress = document.getElementById('cross-progress');
+const crossSub = document.getElementById('crossing-choice-sub');
 
 function setCrossingChoiceOpen(state) {
   if (!crossingEl) return;
@@ -48,15 +55,48 @@ function setCrossingChoiceOpen(state) {
   const money = state.money | 0;
   const bCost = state.bridgeCost | 0;
   const jCost = state.junctionCost | 0;
+  const bAll = state.bridgeAllCost | 0;
+  const jAll = state.junctionAllCost | 0;
+  const multi = !!state.multi;
+  const idx = (state.index | 0) + 1;
+  const total = state.total | 0;
+
   if (crossCostBridge) crossCostBridge.textContent = `$${bCost}`;
   if (crossCostJunction) crossCostJunction.textContent = `$${jCost}`;
+  if (crossCostBridgeAll) crossCostBridgeAll.textContent = `$${bAll}`;
+  if (crossCostJunctionAll) crossCostJunctionAll.textContent = `$${jAll}`;
+
+  if (crossProgress) {
+    if (multi && total > 1) {
+      crossProgress.textContent = `Kryds ${idx}/${total}`;
+      crossProgress.classList.remove('hidden');
+    } else {
+      crossProgress.classList.add('hidden');
+    }
+  }
+  if (crossSub) {
+    crossSub.textContent = multi
+      ? 'Flere kryds – vælg her, eller brug «alle» for resten.'
+      : 'Din vej krydser en anden. Vælg hvordan:';
+  }
+  if (crossAllRow) {
+    const remaining = total - (state.index | 0);
+    crossAllRow.classList.toggle('hidden', remaining <= 1);
+  }
+
   if (crossBtnBridge) {
     crossBtnBridge.disabled = money < bCost;
-    crossBtnBridge.title = money < bCost ? 'Ikke råd' : 'Byg bro over vejen';
+    crossBtnBridge.title = money < bCost ? 'Ikke råd' : 'Bro ved dette kryds';
   }
   if (crossBtnJunction) {
     crossBtnJunction.disabled = money < jCost;
-    crossBtnJunction.title = money < jCost ? 'Ikke råd' : 'Kryds med trafiklys';
+    crossBtnJunction.title = money < jCost ? 'Ikke råd' : 'Kryds med synkroniseret lys';
+  }
+  if (crossBtnBridgeAll) {
+    crossBtnBridgeAll.disabled = money < bAll;
+  }
+  if (crossBtnJunctionAll) {
+    crossBtnJunctionAll.disabled = money < jAll;
   }
   crossingEl.classList.remove('hidden');
 }
@@ -75,6 +115,20 @@ if (crossBtnJunction) {
     e.preventDefault();
     playUi();
     game.resolveCrossingChoice('junction');
+  });
+}
+if (crossBtnBridgeAll) {
+  crossBtnBridgeAll.addEventListener('click', (e) => {
+    e.preventDefault();
+    playUi();
+    game.resolveCrossingChoice('bridge_all');
+  });
+}
+if (crossBtnJunctionAll) {
+  crossBtnJunctionAll.addEventListener('click', (e) => {
+    e.preventDefault();
+    playUi();
+    game.resolveCrossingChoice('junction_all');
   });
 }
 if (crossBtnCancel) {

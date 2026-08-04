@@ -1047,3 +1047,59 @@ body {
 .crossing-opt-cancel:active {
   background: #e7e5e4;
 }
+
+.crossing-progress {
+  margin: 0.15rem 0 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #0e7490;
+  letter-spacing: 0.02em;
+}
+.crossing-all-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+.crossing-all-row.hidden {
+  display: none;
+}
+.crossing-all-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.5rem 0.35rem;
+  border-radius: 0.75rem;
+  border: 1.5px solid #e7e5e4;
+  background: #fafaf9;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #292524;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 2.75rem;
+}
+.crossing-all-bridge {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #0c4a6e;
+}
+.crossing-all-junction {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #14532d;
+}
+.crossing-all-price {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.crossing-all-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.crossing-all-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}

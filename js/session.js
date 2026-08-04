@@ -49,7 +49,9 @@ export function serializeSession(game) {
       paidCost: r.paidCost || 0,
       oneWay: r.oneWay === -1 || r.oneWay === 1 ? r.oneWay : 0,
       hasLight: !!r.hasLight,
-      lightT: r.lightT != null ? r.lightT : 0.5
+      lightT: r.lightT != null ? r.lightT : 0.5,
+      lightGroup: r.lightGroup != null ? r.lightGroup : null,
+      lightRole: r.lightRole === 1 ? 1 : 0
     }));
 
   const jobs = (game.jobs || [])

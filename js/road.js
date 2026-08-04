@@ -35,7 +35,11 @@ export class Road {
     /** Trafiklys på segmentet */
     hasLight = false,
     /** 0–1 position langs vejen (default midt) */
-    lightT = 0.5
+    lightT = 0.5,
+    /** Gruppe-id for synkede kryds (samme tal = parret lys) */
+    lightGroup = null,
+    /** 0 = “A-fase”, 1 = modfase i firevejs-kryds */
+    lightRole = 0
   } = {}) {
     this.points = points;
     this.id = Math.random().toString(36).slice(2);
@@ -49,6 +53,8 @@ export class Road {
     this.oneWay = oneWay === -1 || oneWay === 1 ? oneWay : 0;
     this.hasLight = !!hasLight;
     this.lightT = Math.max(0.05, Math.min(0.95, lightT != null ? lightT : 0.5));
+    this.lightGroup = lightGroup != null ? lightGroup : null;
+    this.lightRole = lightRole === 1 ? 1 : 0;
     /** 0 green, 1 yellow, 2 red – set by game tick */
     this.lightPhase = 0;
     this._length = null;
