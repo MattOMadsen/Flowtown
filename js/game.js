@@ -3504,15 +3504,24 @@ export class Game {
 
   /** UI helpers */
   getActiveJobs() {
-    return this.jobs.filter(j => j.active).map(j => ({
-      id: j.id,
-      label: jobLabel(j),
-      progress: j.delivered / j.amount,
-      type: j.type,
-      reward: j.reward,
-      from: j.from.name,
-      to: j.to.name
-    }));
+    return this.jobs.filter(j => j.active).map(j => {
+      const left = Math.max(0, (j.amount | 0) - (j.delivered | 0));
+      const meta = j.typeMeta || {};
+      return {
+        id: j.id,
+        label: jobLabel(j),
+        progress: j.amount ? j.delivered / j.amount : 0,
+        type: j.type,
+        reward: j.reward,
+        from: j.from?.name || '?',
+        to: j.to?.name || '?',
+        icon: meta.icon || '•',
+        unit: meta.unit || '',
+        amount: j.amount | 0,
+        delivered: j.delivered | 0,
+        remaining: left
+      };
+    });
   }
 
   getBotStats() {

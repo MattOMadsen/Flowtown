@@ -425,8 +425,8 @@ function refreshGoalsUi() {
   const list = document.getElementById('goals-list');
   if (list) {
     list.innerHTML = (ui.details || []).map(d => `
-      <li class="flex justify-between gap-2 ${d.done ? 'text-emerald-700 font-medium' : ''}">
-        <span class="truncate">${d.done ? '✓' : '○'} ${escapeHtml(d.label)}</span>
+      <li class="${d.done ? 'text-emerald-700 font-medium' : ''}">
+        <span>${d.done ? '✓' : '○'} ${escapeHtml(d.label)}</span>
         <span class="tabular-nums shrink-0 text-stone-500">${escapeHtml(d.progress)}</span>
       </li>`).join('');
     // Keep collapsed unless user opened
@@ -683,15 +683,22 @@ function renderJobs() {
     if (j.type === 'cargo') barColor = 'bg-amber-500';
     else if (j.type === 'express') barColor = 'bg-pink-500';
     else if (j.type === 'tourist') barColor = 'bg-violet-500';
+    const head = `${j.icon || ''} ${j.remaining ?? '?'} ${j.unit || ''}`.trim();
     return `
-      <li class="leading-tight">
-        <div class="flex justify-between gap-1">
-          <span class="truncate">${escapeHtml(j.label)}</span>
-          <span class="text-emerald-700 font-medium shrink-0">$${j.reward}</span>
+      <li class="job-item">
+        <div class="job-item-top">
+          <span class="job-item-head">${escapeHtml(head)}</span>
+          <span class="job-item-pay">$${j.reward}</span>
         </div>
-        <div class="mt-0.5 h-1 rounded-full bg-stone-200 overflow-hidden">
+        <div class="job-item-route">
+          <span class="job-from">${escapeHtml(j.from)}</span>
+          <span class="job-arrow" aria-hidden="true">→</span>
+          <span class="job-to">${escapeHtml(j.to)}</span>
+        </div>
+        <div class="job-item-bar">
           <div class="${barColor} h-full transition-all duration-300" style="width:${pct}%"></div>
         </div>
+        <div class="job-item-meta">${j.delivered || 0}/${j.amount || 0} leveret · ${pct}%</div>
       </li>`;
   }).join('');
 }
