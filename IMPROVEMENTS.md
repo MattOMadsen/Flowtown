@@ -36,6 +36,10 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-ROAD-TEX** Asfalt-tekstur på veje
 - [x] **PROG-ART-VEH** Egne sprites: hurtig bil + tung lastbil
 - [x] **PROG-HUD** Stablet top-HUD: XP → tools → opgaver
+- [x] **PROG-UX-ROAD** Vej fra by (midte=køb, træk=vej) + long-press pan
+- [x] **PROG-BOUNDS** Tegn kun på bræt
+- [x] **PROG-INDUSTRY** Fabrik→havn/by jobs + layout-kæder
+- [x] **PROG-HUD2** Ikon-tools + mini-HUD ved zoom
 
 ---
 

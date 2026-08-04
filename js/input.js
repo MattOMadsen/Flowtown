@@ -1,3 +1,8 @@
+/**
+ * Input: draw roads (incl. from city edge), tap city center = shop,
+ * pan via long-press, two-finger, arrows, space/right-click — not a bad Flyt-button.
+ */
+
 export class InputHandler {
   constructor(canvas, game) {
     this.canvas = canvas;
@@ -10,6 +15,8 @@ export class InputHandler {
     this.pendingDistrict = null;
     this.downPos = null;
     this.movedPx = 0;
+    this.longPressTimer = null;
+    this.longPressPan = false;
 
     canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
@@ -25,7 +32,6 @@ export class InputHandler {
         this.spaceDown = true;
         e.preventDefault();
       }
-      // Arrow keys pan when not typing
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
         e.preventDefault();
         const map = {
@@ -50,7 +56,9 @@ export class InputHandler {
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
       if (e.touches.length >= 2) {
+        this.clearLongPress();
         this.endDrawIfAny();
+        this.pendingDistrict = null;
         this.startPinch(e.touches);
         return;
       }
@@ -68,7 +76,7 @@ export class InputHandler {
       }
       if (e.touches.length === 1) {
         if (this.panning) this.onPanMove(e.touches[0]);
-        else if (this.drawing || this.pendingDistrict) this.onMove(e.touches[0]);
+        else this.onMove(e.touches[0]);
       }
     }, { passive: false });
 
@@ -86,8 +94,33 @@ export class InputHandler {
       this.pinch = null;
       this.panning = false;
       this.panLast = null;
+      this.clearLongPress();
       this.onUp();
     });
+  }
+
+  clearLongPress() {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  armLongPressPan() {
+    this.clearLongPress();
+    this.longPressPan = false;
+    this.longPressTimer = setTimeout(() => {
+      if (this.movedPx < 12 && !this.drawing) {
+        // Long-press → pan (works without Flyt tool)
+        this.longPressPan = true;
+        this.pendingDistrict = null;
+        this.panning = true;
+        this.panLast = this.downPos;
+        this.drawing = false;
+        this.game.currentStroke = null;
+        this.game.showToast?.('Flyt kort…', 0.9);
+      }
+    }, 340);
   }
 
   getPos(e) {
@@ -121,12 +154,11 @@ export class InputHandler {
       camX: cam.x,
       camY: cam.y,
       originMidX: mid.x,
-      originMidY: mid.y,
-      lastMidX: mid.x,
-      lastMidY: mid.y
+      originMidY: mid.y
     };
     this.drawing = false;
     this.panning = true;
+    this.pendingDistrict = null;
   }
 
   movePinch(touches) {
@@ -141,7 +173,6 @@ export class InputHandler {
     const oy = this.pinch.originMidY * dpr;
     const wx = (ox - this.pinch.camX) / this.pinch.zoom;
     const wy = (oy - this.pinch.camY) / this.pinch.zoom;
-
     const nx = mid.x * dpr;
     const ny = mid.y * dpr;
 
@@ -149,9 +180,6 @@ export class InputHandler {
     this.game.camera.x = nx - wx * newZoom;
     this.game.camera.y = ny - wy * newZoom;
     this.game.requestDraw();
-
-    this.pinch.lastMidX = mid.x;
-    this.pinch.lastMidY = mid.y;
   }
 
   onWheel(e) {
@@ -167,7 +195,8 @@ export class InputHandler {
   }
 
   onMouseDown(e) {
-    if (e.button === 1 || e.button === 2 || this.spaceDown || this.game.mode === 'pan') {
+    // Middle/right/space = pan
+    if (e.button === 1 || e.button === 2 || this.spaceDown) {
       e.preventDefault();
       this.panning = true;
       this.panLast = this.getPos(e);
@@ -198,10 +227,11 @@ export class InputHandler {
     this.game.requestDraw();
   }
 
-  onMouseUp(e) {
+  onMouseUp() {
     if (this.panning) {
       this.panning = false;
       this.panLast = null;
+      this.clearLongPress();
       return;
     }
     this.onUp();
@@ -220,13 +250,14 @@ export class InputHandler {
     this.downPos = pos;
     this.movedPx = 0;
     this.pendingDistrict = null;
+    this.longPressPan = false;
 
     if (this.game.handleMinimapTap?.(pos.x, pos.y)) {
       this.drawing = false;
       return;
     }
 
-    // Pan tool: drag map, never draw
+    // Explicit pan mode still works
     if (this.game.mode === 'pan') {
       this.panning = true;
       this.panLast = pos;
@@ -234,36 +265,47 @@ export class InputHandler {
       return;
     }
 
-    const hit = this.game.hitDistrict?.(pos.x, pos.y);
     const mode = this.game.mode;
-    if (
-      hit && this.game.running &&
-      mode !== 'erase' && mode !== 'upgrade' && mode !== 'bridge' && mode !== 'pan'
-    ) {
-      this.pendingDistrict = hit;
+    const canShop =
+      this.game.running &&
+      mode !== 'erase' && mode !== 'upgrade' && mode !== 'bridge' && mode !== 'pan';
+
+    // Center of city = short tap opens shop; drag = draw road FROM city
+    const core = canShop ? this.game.hitDistrictCore?.(pos.x, pos.y) : null;
+    if (core) {
+      this.pendingDistrict = core;
       this.drawing = false;
+      this.armLongPressPan();
       return;
     }
 
+    // Outer ring / empty land: draw or erase immediately (snap to hub)
     this.drawing = true;
     this.game.beginStroke(pos.x, pos.y);
+    this.armLongPressPan();
   }
 
   onMove(e) {
     const pos = this.getPos(e);
+    if (this.downPos) {
+      this.movedPx = Math.hypot(pos.x - this.downPos.x, pos.y - this.downPos.y);
+      if (this.movedPx > 10) this.clearLongPress();
+    }
+
+    // Drag from city center → DRAW road (not pan, not shop)
     if (this.pendingDistrict && this.downPos) {
-      const dx = pos.x - this.downPos.x;
-      const dy = pos.y - this.downPos.y;
-      this.movedPx = Math.hypot(dx, dy);
-      // Drag on city → pan map instead of accidental road (better UX)
-      if (this.movedPx > 16) {
+      if (this.movedPx > 11) {
+        const d = this.pendingDistrict;
         this.pendingDistrict = null;
-        this.panning = true;
-        this.panLast = this.downPos;
-        this.onPanMove(e);
+        this.panning = false;
+        this.drawing = true;
+        // Start stroke at district edge toward drag direction
+        this.game.beginStrokeFromDistrict?.(d, this.downPos.x, this.downPos.y);
+        this.game.continueStroke(pos.x, pos.y);
       }
       return;
     }
+
     if (this.panning) {
       this.onPanMove(e);
       return;
@@ -273,12 +315,14 @@ export class InputHandler {
   }
 
   onUp() {
+    this.clearLongPress();
     if (this.panning) {
       this.panning = false;
       this.panLast = null;
+      this.longPressPan = false;
     }
     if (this.pendingDistrict) {
-      if (this.movedPx <= 16) {
+      if (this.movedPx <= 11) {
         this.game.openDistrictSheet(this.pendingDistrict);
       }
       this.pendingDistrict = null;

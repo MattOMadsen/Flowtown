@@ -106,7 +106,8 @@ function pickName(pool, used, rng) {
 export function buildPlaceDefs(seed = 42, layout = null) {
   const rng = mulberry32(seed | 0);
   const used = new Set();
-  const slots = layout && layout.length ? layout : DEFAULT_LAYOUT;
+  const raw = layout && layout.length ? layout : DEFAULT_LAYOUT;
+  const slots = ensureIndustryChains(raw);
   return slots.map((slot, i) => {
     const type = PLACE_TYPES[slot.type] || PLACE_TYPES.town;
     const pool = NAME_POOLS[slot.type] || NAME_POOLS.town;
@@ -135,31 +136,125 @@ export function placeTypeMeta(typeId) {
  * Score how natural a job is for from→to + typeKey.
  * Higher = better TTD-style flow.
  */
+/** Cargo sinks: where factories/farms can deliver */
+export const CARGO_SINKS = new Set(['harbor', 'capital', 'town', 'factory']);
+export const CARGO_SOURCES = new Set(['farm', 'factory', 'harbor']);
+
+export function isCargoSink(place) {
+  return CARGO_SINKS.has(place?.type);
+}
+
+export function isCargoSource(place) {
+  return CARGO_SOURCES.has(place?.type);
+}
+
+/**
+ * Ensure layout has delivery chains: every factory needs a non-factory sink
+ * (harbor/capital/town) and preferably a farm source.
+ * Mutates/returns a safe layout.
+ */
+export function ensureIndustryChains(layout) {
+  if (!layout?.length) return layout;
+  const types = layout.map(s => s.type);
+  const hasFactory = types.includes('factory');
+  const hasFarm = types.includes('farm');
+  const hasSink = types.some(t => t === 'harbor' || t === 'capital' || t === 'town');
+  const out = layout.map(s => ({ ...s }));
+
+  if (hasFactory && !hasSink) {
+    // Convert one factory to town so there is a delivery place
+    const fi = out.findIndex(s => s.type === 'factory');
+    if (fi >= 0) {
+      out[fi] = { ...out[fi], type: 'town', rr: out[fi].rr || 0.032 };
+    }
+  }
+  if (hasFactory && !hasFarm) {
+    // Prefer a farm for inbound goods – convert a spare town if 2+ towns
+    const towns = out.map((s, i) => (s.type === 'town' ? i : -1)).filter(i => i >= 0);
+    if (towns.length >= 2) {
+      out[towns[towns.length - 1]] = {
+        ...out[towns[towns.length - 1]],
+        type: 'farm'
+      };
+    }
+  }
+  // At least one harbor if factories exist (classic TTD goods out)
+  if (hasFactory && !types.includes('harbor') && !out.some(s => s.type === 'harbor')) {
+    // If still no harbor after mutations, convert farthest factory-adjacent slot
+    const capital = out.find(s => s.type === 'capital');
+    let bestI = -1;
+    let bestD = -1;
+    out.forEach((s, i) => {
+      if (s.type === 'town' || s.type === 'farm') {
+        const d = capital
+          ? Math.hypot(s.rx - capital.rx, s.ry - capital.ry)
+          : s.rx;
+        if (d > bestD) {
+          bestD = d;
+          bestI = i;
+        }
+      }
+    });
+    if (bestI >= 0 && !out.some(s => s.type === 'harbor')) {
+      // Prefer coast-ish: leftmost or rightmost
+      const edge = out.reduce((a, s, i) => (s.rx < out[a].rx ? i : a), 0);
+      if (out[edge].type !== 'capital' && out[edge].type !== 'factory') {
+        out[edge] = { ...out[edge], type: 'harbor', rr: 0.034 };
+      }
+    }
+  }
+  return out;
+}
+
 export function jobRouteScore(from, to, typeKey) {
   const ft = from.type || 'town';
   const tt = to.type || 'town';
   let s = 0;
 
   if (typeKey === 'cargo') {
-    // Farm / harbor → factory; factory → harbor / capital; farm → harbor
-    if (ft === 'farm' && (tt === 'factory' || tt === 'harbor' || tt === 'capital')) s += 90;
-    if (ft === 'factory' && (tt === 'harbor' || tt === 'capital' || tt === 'town')) s += 70;
-    if (ft === 'harbor' && (tt === 'factory' || tt === 'capital')) s += 75;
-    if (ft === 'town' && tt === 'factory') s += 25;
-    // Weak reverse cargo
-    if (ft === 'factory' && tt === 'farm') s -= 20;
+    // Farm → factory (raw); factory → harbor/capital/town (finished goods)
+    if (ft === 'farm' && tt === 'factory') s += 110;
+    if (ft === 'farm' && (tt === 'harbor' || tt === 'capital')) s += 70;
+    if (ft === 'factory' && tt === 'harbor') s += 120;
+    if (ft === 'factory' && (tt === 'capital' || tt === 'town')) s += 95;
+    if (ft === 'harbor' && tt === 'factory') s += 80;
+    if (ft === 'harbor' && tt === 'capital') s += 60;
+    if (ft === 'town' && tt === 'factory') s += 35;
+    // Dead ends / nonsense
+    if (ft === 'factory' && tt === 'farm') s -= 80;
+    if (ft === 'factory' && tt === 'factory') s -= 40;
+    if (ft === 'farm' && tt === 'farm') s -= 50;
     s += ((from.cargo || 1) + (to.cargo || 1)) * 12;
   } else {
-    // Passengers: towns and capital
     if ((ft === 'town' || ft === 'capital') && (tt === 'town' || tt === 'capital')) s += 85;
     if (ft === 'capital' || tt === 'capital') s += 25;
     if ((ft === 'harbor' || tt === 'harbor') && (ft === 'town' || tt === 'town' || ft === 'capital' || tt === 'capital')) s += 40;
-    // Workers to factory
-    if ((ft === 'town' || ft === 'capital') && tt === 'factory') s += 55;
-    if (ft === 'factory' && (tt === 'town' || tt === 'capital')) s += 45;
-    // Farms rarely send people
-    if (ft === 'farm' && typeKey === 'passengers') s -= 15;
+    if ((ft === 'town' || ft === 'capital') && tt === 'factory') s += 70; // workers in
+    if (ft === 'factory' && (tt === 'town' || tt === 'capital')) s += 55; // workers home
+    if (ft === 'farm' && typeKey === 'passengers') s -= 25;
     s += ((from.passengers || 1) + (to.passengers || 1)) * 10;
   }
   return s;
+}
+
+/** Pick a good cargo destination for a factory (must exist on map) */
+export function pickFactorySink(districts, factory, existingJobs = []) {
+  const sinks = districts.filter(
+    d => d !== factory && (d.type === 'harbor' || d.type === 'capital' || d.type === 'town')
+  );
+  if (!sinks.length) return null;
+  let best = null;
+  let bestS = -Infinity;
+  for (const to of sinks) {
+    const routeJobs = existingJobs.filter(
+      j => j.active && j.from.name === factory.name && j.to.name === to.name
+    ).length;
+    const preferHarbor = to.type === 'harbor' ? 40 : to.type === 'capital' ? 20 : 10;
+    const s = preferHarbor - routeJobs * 30 + Math.random() * 8;
+    if (s > bestS) {
+      bestS = s;
+      best = to;
+    }
+  }
+  return best;
 }

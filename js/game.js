@@ -336,13 +336,44 @@ export class Game {
     let bestD = Infinity;
     for (const d of this.districts) {
       const dist = Math.hypot(d.x - w.x, d.y - w.y);
-      // Generous tap target for mobile
-      if (dist <= d.r * 1.35 && dist < bestD) {
+      // Outer ring – road connection / presence
+      if (dist <= d.r * 1.4 && dist < bestD) {
         bestD = dist;
         best = d;
       }
     }
     return best;
+  }
+
+  /** Only inner hub – short tap opens shop (not road) */
+  hitDistrictCore(screenX, screenY) {
+    const w = this.screenToWorld(screenX, screenY);
+    let best = null;
+    let bestD = Infinity;
+    for (const d of this.districts) {
+      const dist = Math.hypot(d.x - w.x, d.y - w.y);
+      if (dist <= d.r * 0.52 && dist < bestD) {
+        bestD = dist;
+        best = d;
+      }
+    }
+    return best;
+  }
+
+  /** Keep world point on the playable board */
+  clampToWorld(p) {
+    const m = 10 * (this.dpr || 1);
+    const maxX = (this.worldW || 1) - m;
+    const maxY = (this.worldH || 1) - m;
+    return {
+      x: Math.max(m, Math.min(maxX, p.x)),
+      y: Math.max(m, Math.min(maxY, p.y))
+    };
+  }
+
+  isOnBoard(p) {
+    const m = 4 * (this.dpr || 1);
+    return p.x >= m && p.y >= m && p.x <= (this.worldW || 0) - m && p.y <= (this.worldH || 0) - m;
   }
 
   openDistrictSheet(district) {
@@ -691,16 +722,49 @@ export class Game {
       this.upgradeRoadNear(x, y);
       return;
     }
-    // draw + bridge modes
-    const p = this.screenToWorld(x, y);
+    const p = this.clampToWorld(this.screenToWorld(x, y));
+    if (!this.isOnBoard(p)) {
+      this.currentStroke = null;
+      return;
+    }
     const snapped = this.findSnapPoint(p.x, p.y);
-    this.currentStroke = [{ x: snapped.x, y: snapped.y }];
+    const start = this.clampToWorld(snapped);
+    this.currentStroke = [{ x: start.x, y: start.y }];
     this.pendingRoadCost = 0;
+  }
+
+  /**
+   * Start a road from a district hub edge toward the pointer (easy connect).
+   */
+  beginStrokeFromDistrict(district, screenX, screenY) {
+    if (!district || this.mode === 'pan' || this.mode === 'erase' || this.mode === 'upgrade') return;
+    const aim = this.clampToWorld(this.screenToWorld(screenX, screenY));
+    const ang = Math.atan2(aim.y - district.y, aim.x - district.x);
+    const edge = {
+      x: district.x + Math.cos(ang) * district.r * 0.92,
+      y: district.y + Math.sin(ang) * district.r * 0.92
+    };
+    const start = this.clampToWorld(this.findSnapPoint(edge.x, edge.y));
+    this.currentStroke = [{ x: start.x, y: start.y }];
+    // Second point toward finger so stroke is valid quickly
+    const mid = this.clampToWorld({
+      x: start.x + Math.cos(ang) * 20 * this.dpr,
+      y: start.y + Math.sin(ang) * 20 * this.dpr
+    });
+    this.currentStroke.push(mid);
+    this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke, {
+      bridge: this.mode === 'bridge'
+    });
   }
 
   continueStroke(x, y) {
     if (this.mode === 'erase' || this.mode === 'upgrade' || !this.currentStroke) return;
-    const p = this.screenToWorld(x, y);
+    const raw = this.screenToWorld(x, y);
+    // Stop extending far outside board
+    if (!this.isOnBoard(raw) && !this.isOnBoard(this.clampToWorld(raw))) {
+      return;
+    }
+    const p = this.clampToWorld(raw);
     const last = this.currentStroke[this.currentStroke.length - 1];
     const dx = p.x - last.x;
     const dy = p.y - last.y;
@@ -719,13 +783,24 @@ export class Game {
     }
 
     let points = this.simplify(this.currentStroke, 9);
+    points = points.map(p => this.clampToWorld(p));
     if (points.length < 2) {
       this.currentStroke = null;
       this.pendingRoadCost = 0;
       return;
     }
 
+    // Drop points that somehow left the board
+    points = points.filter(p => this.isOnBoard(p));
+    if (points.length < 2) {
+      this.showToast('Kun på land – tegn inden for kortet');
+      this.currentStroke = null;
+      this.pendingRoadCost = 0;
+      return;
+    }
+
     points = this.snapEndpoints(points);
+    points = points.map(p => this.clampToWorld(p));
     const waterFrac = strokeWaterFraction(points, this.waterBodies);
     const wantBridge = this.mode === 'bridge';
     const crossesWater = waterFrac > 0.08;
@@ -915,16 +990,18 @@ export class Game {
         }
       }
     }
-    // Snap to district rim
+    // Snap hard to district hub (easy connect) – prefer city over road
     for (const d of this.districts) {
       const dist = Math.hypot(d.x - x, d.y - y);
-      if (dist < d.r + snap * 0.75) {
+      const magnet = d.r + snap * 1.15;
+      if (dist < magnet) {
         const ang = Math.atan2(y - d.y, x - d.x);
         const edge = {
-          x: d.x + Math.cos(ang) * d.r * 0.92,
-          y: d.y + Math.sin(ang) * d.r * 0.92
+          x: d.x + Math.cos(ang) * d.r * 0.9,
+          y: d.y + Math.sin(ang) * d.r * 0.9
         };
-        const dd = (edge.x - x) ** 2 + (edge.y - y) ** 2;
+        // Strong priority near cities
+        const dd = (edge.x - x) ** 2 + (edge.y - y) ** 2 * 0.55;
         if (dd < bestD) {
           bestD = dd;
           best = edge;

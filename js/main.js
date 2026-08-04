@@ -15,14 +15,16 @@ document.getElementById('btn-toggle').addEventListener('click', (e) => {
 });
 
 const btnDraw = document.getElementById('btn-draw');
-const btnPan = document.getElementById('btn-pan');
 const btnErase = document.getElementById('btn-erase');
 const btnUpgrade = document.getElementById('btn-upgrade');
 const btnBridge = document.getElementById('btn-bridge');
 const btnBots = document.getElementById('btn-bots');
 const botPanel = document.getElementById('bot-panel');
+const hudEl = document.getElementById('ui');
 
 function setMode(mode) {
+  // pan mode removed from primary UX – keep for API safety
+  if (mode === 'pan') mode = 'draw';
   game.setMode(mode);
   const ring = (btn, on, color) => {
     if (!btn) return;
@@ -31,35 +33,43 @@ function setMode(mode) {
     btn.classList.toggle('ring-rose-500', on && color === 'rose');
     btn.classList.toggle('ring-sky-500', on && color === 'sky');
     btn.classList.toggle('ring-cyan-500', on && color === 'cyan');
-    btn.classList.toggle('ring-indigo-500', on && color === 'indigo');
+    btn.classList.toggle('is-active', on);
   };
   ring(btnDraw, mode === 'draw', 'emerald');
-  ring(btnPan, mode === 'pan', 'indigo');
   ring(btnErase, mode === 'erase', 'rose');
   ring(btnUpgrade, mode === 'upgrade', 'sky');
   ring(btnBridge, mode === 'bridge', 'cyan');
-  const styleTool = (btn, active, bg, border) => {
-    if (!btn) return;
-    btn.classList.toggle(bg, active);
-    btn.classList.toggle('text-white', active);
-    btn.classList.toggle(border, active);
-    btn.classList.toggle('bg-white/95', !active);
-    btn.classList.toggle('text-stone-700', !active);
-  };
-  styleTool(btnPan, mode === 'pan', 'bg-indigo-500', 'border-indigo-600');
-  styleTool(btnUpgrade, mode === 'upgrade', 'bg-sky-500', 'border-sky-600');
-  styleTool(btnBridge, mode === 'bridge', 'bg-cyan-600', 'border-cyan-700');
   canvas.style.cursor =
-    mode === 'pan' ? 'grab' :
     (mode === 'draw' || mode === 'bridge') ? 'crosshair' : 'pointer';
 }
 
 btnDraw.addEventListener('click', () => setMode('draw'));
-if (btnPan) btnPan.addEventListener('click', () => setMode('pan'));
 btnErase.addEventListener('click', () => setMode('erase'));
 if (btnUpgrade) btnUpgrade.addEventListener('click', () => setMode('upgrade'));
 if (btnBridge) btnBridge.addEventListener('click', () => setMode('bridge'));
 setMode('draw');
+
+// Mini-HUD: compact when zoomed in; expand via ☰ or status tap
+function setHudCompact(on) {
+  if (!hudEl) return;
+  hudEl.classList.toggle('hud-compact', !!on);
+  updateHudOffset();
+}
+function updateHudOffset() {
+  if (!hudEl) return;
+  document.documentElement.style.setProperty(
+    '--hud-offset',
+    `${Math.ceil(hudEl.getBoundingClientRect().height) + 8}px`
+  );
+}
+document.getElementById('btn-hud-expand')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setHudCompact(false);
+});
+hudEl?.querySelector('.hud-status')?.addEventListener('click', () => {
+  if (hudEl.classList.contains('hud-compact')) setHudCompact(false);
+});
 
 // Edge pan arrows (+ hold to repeat)
 function bindPanEdge(id, dir) {
@@ -94,12 +104,13 @@ bindPanEdge('pan-down', 'down');
 
 function updateBotButton() {
   const on = game.botsEnabled;
-  btnBots.textContent = on ? 'Bots: Til' : 'Bots: Fra';
-  btnBots.classList.toggle('bg-rose-500', on);
-  btnBots.classList.toggle('text-white', on);
-  btnBots.classList.toggle('border-rose-600', on);
-  btnBots.classList.toggle('bg-white/95', !on);
-  btnBots.classList.toggle('text-stone-700', !on);
+  if (btnBots) {
+    btnBots.textContent = on ? '🤖✓' : '🤖';
+    btnBots.title = on ? 'Bots: til' : 'Bots: fra';
+    btnBots.classList.toggle('is-active', on);
+    btnBots.classList.toggle('ring-2', on);
+    btnBots.classList.toggle('ring-rose-500', on);
+  }
   botPanel.classList.toggle('hidden', !on);
 }
 
@@ -541,13 +552,25 @@ setInterval(() => {
   refreshDistrictSheet();
   refreshGoalsUi();
   refreshZoomLabel();
-  // Hold pan/zoom free under stacked HUD
-  const hud = document.getElementById('ui');
-  if (hud) {
-    const h = Math.ceil(hud.getBoundingClientRect().height);
-    document.documentElement.style.setProperty('--hud-offset', `${h + 8}px`);
+  updateHudOffset();
+  // Auto mini-HUD when zoomed in (more map visible)
+  if (hudEl && game.running) {
+    const z = game.camera?.zoom || 1;
+    // Compact if clearly zoomed past "see half board"
+    const halfZ = (game.canvas?.width || 1) / Math.max(200, (game.worldW || 1000) * 0.55);
+    if (z > halfZ * 1.12) {
+      if (!hudEl.dataset.userExpanded) setHudCompact(true);
+    }
   }
 }, 280);
+
+// When user expands, don't auto-collapse for a while
+document.getElementById('btn-hud-expand')?.addEventListener('click', () => {
+  if (hudEl) {
+    hudEl.dataset.userExpanded = '1';
+    setTimeout(() => { if (hudEl) delete hudEl.dataset.userExpanded; }, 12000);
+  }
+});
 
 // Resize
 function resize() {

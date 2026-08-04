@@ -1,6 +1,6 @@
-/** Job / demand system – passengers & cargo between places */
+/** Job / demand system – passengers & cargo with real industry chains */
 
-import { jobRouteScore } from './places.js';
+import { jobRouteScore, pickFactorySink } from './places.js';
 
 export const JOB_TYPES = {
   passengers: {
@@ -27,7 +27,6 @@ let nextJobId = 1;
 
 export function createJob(from, to, typeKey, amount) {
   const type = JOB_TYPES[typeKey] || JOB_TYPES.passengers;
-  // Longer hauls pay a bit more (TTD-ish)
   const dist = Math.hypot((to.x || 0) - (from.x || 0), (to.y || 0) - (from.y || 0));
   const distBonus = Math.round(dist * 0.012);
   const reward = type.baseReward + amount * type.rewardPerUnit + distBonus;
@@ -63,7 +62,6 @@ export function randomJobAmount(typeKey, from, to) {
   let base;
   if (typeKey === 'cargo') base = 3 + Math.floor(Math.random() * 5);
   else base = 4 + Math.floor(Math.random() * 7);
-  // Heavy producers ship more
   if (typeKey === 'cargo' && (from?.type === 'farm' || from?.type === 'factory' || from?.type === 'harbor')) {
     base += 1 + Math.floor(Math.random() * 2);
   }
@@ -74,16 +72,43 @@ export function randomJobAmount(typeKey, from, to) {
 }
 
 /**
- * Generate a job preferring TTD-style chains (farm→factory, town↔town, …).
+ * Generate job with industry logic:
+ * factories always get cargo jobs TO harbor/capital/town when possible.
  */
 export function generateJob(districts, existingJobs = []) {
   if (!districts || districts.length < 2) return null;
 
+  const factories = districts.filter(d => d.type === 'factory');
+  const farms = districts.filter(d => d.type === 'farm');
+
+  // ~40% of jobs: force a meaningful factory chain
+  if (factories.length && Math.random() < 0.42) {
+    const factory = factories[Math.floor(Math.random() * factories.length)];
+    // Prefer outbound finished goods; sometimes inbound from farm
+    if (farms.length && Math.random() < 0.35) {
+      const farm = farms[Math.floor(Math.random() * farms.length)];
+      const amount = randomJobAmount('cargo', farm, factory);
+      return createJob(farm, factory, 'cargo', amount);
+    }
+    const sink = pickFactorySink(districts, factory, existingJobs);
+    if (sink) {
+      const amount = randomJobAmount('cargo', factory, sink);
+      return createJob(factory, sink, 'cargo', amount);
+    }
+  }
+
+  // Farm → factory boost
+  if (farms.length && factories.length && Math.random() < 0.25) {
+    const farm = farms[Math.floor(Math.random() * farms.length)];
+    const factory = factories[Math.floor(Math.random() * factories.length)];
+    return createJob(farm, factory, 'cargo', randomJobAmount('cargo', farm, factory));
+  }
+
   let best = null;
   let bestScore = -Infinity;
 
-  for (let attempt = 0; attempt < 28; attempt++) {
-    const typeKey = Math.random() < 0.48 ? 'passengers' : 'cargo';
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const typeKey = Math.random() < 0.45 ? 'passengers' : 'cargo';
     const from = districts[Math.floor(Math.random() * districts.length)];
     let to = districts[Math.floor(Math.random() * districts.length)];
     while (to === from) to = districts[Math.floor(Math.random() * districts.length)];
@@ -94,6 +119,9 @@ export function generateJob(districts, existingJobs = []) {
 
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
     const typeScore = jobRouteScore(from, to, typeKey);
+    // Hard reject nonsense cargo
+    if (typeKey === 'cargo' && typeScore < 0) continue;
+
     const score =
       typeScore +
       dist * 0.018 -
@@ -106,13 +134,24 @@ export function generateJob(districts, existingJobs = []) {
     }
   }
 
-  if (!best || bestScore < 10) {
-    // Fallback: any pair
-    const from = districts[Math.floor(Math.random() * districts.length)];
-    let to = districts[Math.floor(Math.random() * districts.length)];
-    while (to === from) to = districts[Math.floor(Math.random() * districts.length)];
-    const typeKey = Math.random() < 0.5 ? 'passengers' : 'cargo';
-    best = { from, to, typeKey };
+  if (!best || bestScore < 15) {
+    // Guaranteed sensible pair
+    if (factories.length) {
+      const factory = factories[0];
+      const sink = pickFactorySink(districts, factory, existingJobs);
+      if (sink) {
+        return createJob(
+          factory,
+          sink,
+          'cargo',
+          randomJobAmount('cargo', factory, sink)
+        );
+      }
+    }
+    const from = districts[0];
+    const to = districts[1] || districts[0];
+    if (from === to) return null;
+    best = { from, to, typeKey: 'passengers' };
   }
 
   const amount = randomJobAmount(best.typeKey, best.from, best.to);

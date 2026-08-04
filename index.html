@@ -35,16 +35,17 @@
 
       <!-- Række 2: værktøjer på én vandret scroll-række -->
       <div id="tool-bar" class="hud-tools" role="toolbar" aria-label="Værktøjer">
-        <button id="btn-draw" type="button" class="hud-tool">Tegn</button>
-        <button id="btn-pan" type="button" class="hud-tool" title="Flyt kort">Flyt</button>
-        <button id="btn-erase" type="button" class="hud-tool">Slet</button>
-        <button id="btn-upgrade" type="button" class="hud-tool" title="2-spor">2-spor</button>
-        <button id="btn-bridge" type="button" class="hud-tool" title="Bro">Bro</button>
-        <button id="btn-undo" type="button" class="hud-tool">Undo</button>
-        <button id="btn-clear" type="button" class="hud-tool">Clear</button>
-        <button id="btn-bots" type="button" class="hud-tool" title="Bots">Bots</button>
-        <button id="btn-toggle" type="button" class="hud-tool hud-tool-accent">Pause</button>
+        <button id="btn-draw" type="button" class="hud-tool" title="Tegn vej">✏️</button>
+        <button id="btn-erase" type="button" class="hud-tool" title="Slet vej">🗑️</button>
+        <button id="btn-upgrade" type="button" class="hud-tool" title="2-spor">🛣️</button>
+        <button id="btn-bridge" type="button" class="hud-tool" title="Bro">🌉</button>
+        <button id="btn-undo" type="button" class="hud-tool" title="Fortryd">↩️</button>
+        <button id="btn-clear" type="button" class="hud-tool" title="Ryd veje">✨</button>
+        <button id="btn-bots" type="button" class="hud-tool" title="Bots">🤖</button>
+        <button id="btn-toggle" type="button" class="hud-tool hud-tool-accent" title="Pause">⏸️</button>
+        <button id="btn-hud-expand" type="button" class="hud-tool hud-expand-btn" title="Vis menu">☰</button>
       </div>
+      <p class="hud-hint">Tip: træk fra by-kant = vej · tryk midt i by = køb bil · hold finger = flyt kort · 2 fingre = zoom</p>
 
       <!-- Række 3: opgaver (+ mål når campaign) -->
       <div class="hud-missions">
@@ -156,13 +157,13 @@
         Start med bots
       </label>
       <p class="text-[11px] text-stone-400 leading-relaxed mb-2">
-        <b>Flyt</b> / pile flytter kort · Tegn veje · Bro · 2-spor · Fit
+        Hold finger = flyt kort · 2 fingre = zoom · træk fra by = vej
       </p>
       <button type="button" id="btn-how" class="w-full text-xs text-stone-500 underline mb-1">Kort tip</button>
       <div id="how-box" class="hidden text-left text-xs text-stone-600 space-y-1 mb-2 bg-stone-50 rounded-xl p-3">
-        <p>• <b>Flyt</b>-tool eller pile i siderne: ryk kort uden at tegne</p>
-        <p>• Vand: brug <b>Bro</b> · træk fra by = pan (ikke vej)</p>
-        <p>• Køb biler ved tryk på sted · 2-spor på flaskehalse</p>
+        <p>• <b>Træk fra by-kant</b> = tegn vej · <b>tryk midt i by</b> = køb bil</p>
+        <p>• <b>Hold</b> finger / pile / 2 fingre = flyt eller zoom kort</p>
+        <p>• Kun inden for land · fabrikker sender gods til havn/by</p>
       </div>
     </div>
   </div>

@@ -180,11 +180,61 @@ body {
   color: #fff;
 }
 
-/* When JS toggles active tool styles */
-.hud-tool.bg-indigo-500,
-.hud-tool.bg-sky-500,
-.hud-tool.bg-cyan-600 {
-  border-color: transparent;
+.hud-tool.is-active,
+.hud-tool.ring-2 {
+  background: #ecfdf5;
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
+}
+
+.hud-tool.ring-rose-500.is-active,
+.hud-tool.ring-rose-500 {
+  background: #fff1f2;
+  border-color: #f43f5e;
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.3);
+}
+
+.hud-tool.ring-sky-500 {
+  background: #f0f9ff;
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.3);
+}
+
+.hud-tool.ring-cyan-500 {
+  background: #ecfeff;
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.3);
+}
+
+.hud-hint {
+  margin: 0;
+  font-size: 0.6rem;
+  color: #a8a29e;
+  line-height: 1.25;
+  padding: 0 0.15rem;
+}
+
+.hud-expand-btn {
+  display: none;
+}
+
+/* Mini HUD when zoomed in – only status; ☰ expands */
+.hud.hud-compact .hud-tools,
+.hud.hud-compact .hud-missions,
+.hud.hud-compact .hud-hint {
+  display: none;
+}
+
+.hud.hud-compact .hud-expand-btn {
+  display: inline-flex;
+}
+
+.hud.hud-compact .hud-inner {
+  padding-bottom: 0.35rem;
+}
+
+.hud.hud-compact .hud-status {
+  cursor: pointer;
 }
 
 /* Missions: jobs + goals side by side on wide, stack on narrow */
