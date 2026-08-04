@@ -23,12 +23,14 @@ Tegn veje mellem distrikter, transporter personer og gods, tjen penge – og kon
 Vanilla JS + Canvas + Tailwind (CDN)
 
 ## Kør lokalt
-Åbn `index.html` i browseren, eller servér mappen (anbefalet for ES modules):
+Åbn `index.html` i browseren, eller servér mappen (anbefalet for ES modules + PWA):
 
 ```bash
 npx serve .
 # eller: python3 -m http.server 8080
 ```
+
+**PWA:** servér over http(s) – browser kan installere Flowtown (manifest + service worker).
 
 ## Plan & backlog
 - [PLAN.md](./PLAN.md) – faseroadmap  

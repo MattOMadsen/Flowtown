@@ -451,6 +451,6 @@ Længere spilletid via **valg** (fart vs last vs specialisering), ikke kun “k�
 
 **Batch 1:** ~~IMP-A2 + IMP-D1~~ done.  
 **Batch 2:** ~~A3 baner + A4 flow-mål + A5 bygning-UI~~ done.  
-**Batch 3:** PWA + dagligt mini-mål + end-run polish.
+**Batch 3:** ~~PWA + dagligt mini-mål + end-run polish~~ done.
 
 Fuld ID-liste: [IMPROVEMENTS.md](./IMPROVEMENTS.md) § Forslag.

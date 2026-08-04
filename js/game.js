@@ -50,6 +50,14 @@ import {
   achievementProgress
 } from './achievements.js';
 import {
+  loadDaily,
+  saveDaily,
+  applyDailyProgress,
+  claimDaily,
+  dailyUi,
+  isDailyComplete
+} from './daily.js';
+import {
   submitScore,
   getLeaderboard,
   getPlayerName,
@@ -121,10 +129,14 @@ export class Game {
     this.playerDelivered = 0;
     this.totalSpawned = 0;
     this.sessionBest = 0;
+    this.sessionXp = 0;
+    this.sessionBuys = 0;
+    this.sessionStartLevel = 1;
     this.allTimeBest = this.loadBest();
     this.pendingRoadCost = 0;
     this.toast = null;
     this.toastTimer = 0;
+    this.daily = loadDaily();
 
     // Meta: XP / level (persists across sessions)
     this.meta = loadMeta();
@@ -270,6 +282,9 @@ export class Game {
     this.playerDelivered = 0;
     this.totalSpawned = 0;
     this.jobsCompleted = 0;
+    this.sessionXp = 0;
+    this.sessionBuys = 0;
+    this.sessionStartLevel = this.meta?.level || 1;
     this.runEnded = false;
     this.selectedDistrictName = null;
     this.currentStroke = null;
@@ -290,6 +305,7 @@ export class Game {
     this.flowPct = 0;
     this.flowHoldTimer = 0;
     this.flowHoldBest = 0;
+    this.daily = loadDaily();
 
     this.initDistricts();
     this.botsEnabled = !!opts.bots;
@@ -571,6 +587,81 @@ export class Game {
     } else {
       this.flowHoldTimer = 0;
     }
+    // Daily flow_hold uses fixed 65% threshold
+    if (this.daily?.type === 'flow_hold') {
+      if (this.flowPct >= 65) {
+        this._dailyFlowHold = (this._dailyFlowHold || 0) + dt;
+      } else {
+        this._dailyFlowHold = 0;
+      }
+    }
+    this.syncDailyProgress();
+  }
+
+  /** Push session stats into today's mini-goal */
+  syncDailyProgress() {
+    if (!this.daily) this.daily = loadDaily();
+    applyDailyProgress(this.daily, {
+      delivered: this.playerDelivered | 0,
+      jobs: this.jobsCompleted | 0,
+      score: this.playerScore | 0,
+      buys: this.sessionBuys | 0,
+      flowHold: this._dailyFlowHold || 0
+    });
+  }
+
+  getDailyUi() {
+    if (!this.daily) this.daily = loadDaily();
+    return dailyUi(this.daily);
+  }
+
+  /**
+   * Claim daily reward once complete.
+   * @returns {{ ok: boolean, xp?: number, money?: number, streak?: number, reason?: string }}
+   */
+  claimDailyReward() {
+    if (!this.daily) this.daily = loadDaily();
+    this.syncDailyProgress();
+    const res = claimDaily(this.daily);
+    if (!res.ok) {
+      if (res.reason === 'claimed') this.showToast('Dagens mål er allerede hentet');
+      else if (res.reason === 'incomplete') this.showToast('Dagens mål er ikke færdigt endnu');
+      return res;
+    }
+    this.money += res.money || 0;
+    if (res.xp) this.grantXp(res.xp, { silent: false });
+    this.showToast(
+      `📅 Dagsmål! +$${res.money} · +${res.xp} XP${res.streak > 1 ? ` · streak ${res.streak}` : ''}`,
+      3.2
+    );
+    playBuy();
+    return res;
+  }
+
+  /** Snapshot for end-of-run panel */
+  getRunSummary() {
+    const levelNow = this.meta?.level || 1;
+    const startLv = this.sessionStartLevel || levelNow;
+    const totalUp = this.meta?.totalUpgrades || 0;
+    let nextUnlock = null;
+    if (totalUp < 5) nextUnlock = { at: 5, label: 'Hurtig bil ⚡' };
+    else if (totalUp < 8) nextUnlock = { at: 8, label: 'Varebil 🚐' };
+    else if (totalUp < 10) nextUnlock = { at: 10, label: 'Tung lastbil 🚛' };
+    else if (totalUp < 15) nextUnlock = { at: 15, label: 'Bus 🚌' };
+    return {
+      stars: this.goalEval?.stars || 0,
+      delivered: this.playerDelivered | 0,
+      money: Math.floor(this.money),
+      jobs: this.jobsCompleted | 0,
+      score: this.playerScore | 0,
+      sessionXp: this.sessionXp | 0,
+      level: levelNow,
+      levelsGained: Math.max(0, levelNow - startLv),
+      totalUpgrades: totalUp,
+      nextUnlock,
+      scenarioName: this.scenario?.name || '',
+      shareLine: this.getShareScoreLine?.() || ''
+    };
   }
 
   /** Effects list for district sheet (IMP-A5) */
@@ -975,6 +1066,8 @@ export class Game {
     if (this.getPlayerFleet().length >= 5) this.tryAchievement('fleet_5');
     if (this.money >= 1500) this.tryAchievement('money_500');
     this._cityHintUntil = 0;
+    this.sessionBuys = (this.sessionBuys || 0) + 1;
+    this.syncDailyProgress();
     this.assignFleetJobs();
     this._sessionDirty = true;
     return { ok: true, vehicle: v, price };
@@ -1689,6 +1782,7 @@ export class Game {
   grantXp(amount, opts = {}) {
     const result = addXp(this.meta, amount);
     if (result.amount <= 0) return result;
+    this.sessionXp = (this.sessionXp || 0) + result.amount;
 
     if (opts.floatAt && !opts.silent) {
       this.addFloatText(opts.floatAt.x, opts.floatAt.y - 18, `+${result.amount} XP`, '#7c3aed');

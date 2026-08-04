@@ -438,6 +438,7 @@ function showEndPanel(stars) {
   end.classList.add('flex');
   game.paused = true;
 
+  const summary = game.getRunSummary?.() || {};
   const es = document.getElementById('end-stars');
   if (es) es.textContent = starString(stars);
   const title = document.getElementById('end-title');
@@ -450,18 +451,41 @@ function showEndPanel(stars) {
   }
   const et = document.getElementById('end-text');
   if (et) {
-    et.textContent = stars >= 3
+    let msg = stars >= 3
       ? 'Alle tre stjerner – du er klar til næste udfordring.'
       : stars === 2
         ? 'To stjerner gemt. Kan du hente den sidste?'
         : 'Stjerne gemt. Fortsæt eller prøv en ny bane.';
+    if (summary.levelsGained > 0) {
+      msg += ` Level ${summary.level}!`;
+    }
+    et.textContent = msg;
+  }
+  const exp = document.getElementById('end-xp');
+  if (exp) {
+    const xp = summary.sessionXp | 0;
+    exp.textContent = xp > 0
+      ? `✨ +${xp} XP denne runde · Lv ${summary.level || 1}`
+      : `Lv ${summary.level || 1} · spil videre for XP`;
   }
   const ed = document.getElementById('end-delivered');
-  if (ed) ed.textContent = String(game.playerDelivered | 0);
+  if (ed) ed.textContent = String((summary.delivered ?? game.playerDelivered) | 0);
   const em = document.getElementById('end-money');
-  if (em) em.textContent = `$${Math.floor(game.money)}`;
+  if (em) em.textContent = `$${summary.money ?? Math.floor(game.money)}`;
   const ej = document.getElementById('end-jobs');
-  if (ej) ej.textContent = String(game.jobsCompleted | 0);
+  if (ej) ej.textContent = String((summary.jobs ?? game.jobsCompleted) | 0);
+
+  const un = document.getElementById('end-unlock');
+  if (un) {
+    if (summary.nextUnlock) {
+      const left = Math.max(0, summary.nextUnlock.at - (summary.totalUpgrades | 0));
+      un.textContent = left > 0
+        ? `Næste bil-unlock: ${summary.nextUnlock.label} om ${left} opgradering${left === 1 ? '' : 'er'}`
+        : `Næste bil-unlock: ${summary.nextUnlock.label} er klar!`;
+    } else {
+      un.textContent = 'Alle biltyper ulåst · opgrader flåden videre!';
+    }
+  }
 
   // Næste bane i listen (hvis ulåst)
   const nextBtn = document.getElementById('end-next');
@@ -492,6 +516,27 @@ document.getElementById('btn-how')?.addEventListener('click', () => {
   document.getElementById('how-box')?.classList.toggle('hidden');
 });
 document.getElementById('end-map')?.addEventListener('click', () => openMapSelect());
+document.getElementById('end-share')?.addEventListener('click', async () => {
+  playUi();
+  const line = game.getShareScoreLine?.() || game.getRunSummary?.()?.shareLine || 'Flowtown';
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Flowtown', text: line });
+    } else if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(line);
+      game.showToast?.('Score kopieret!', 2.0);
+    } else {
+      game.showToast?.(line, 3.5);
+    }
+  } catch {
+    try {
+      await navigator.clipboard?.writeText(line);
+      game.showToast?.('Score kopieret!', 2.0);
+    } catch {
+      game.showToast?.(line, 3.0);
+    }
+  }
+});
 document.getElementById('end-continue')?.addEventListener('click', () => {
   const end = document.getElementById('end-panel');
   if (end) {
@@ -1287,9 +1332,52 @@ setInterval(() => {
   if (lbOpen) refreshLbSheet();
   refreshGoalsUi();
   refreshBottleneckUi();
+  refreshDailyUi();
   refreshZoomLabel();
   updateHudOffset();
 }, 280);
+
+function refreshDailyUi() {
+  const strip = document.getElementById('daily-strip');
+  if (!strip) return;
+  const ui = game.getDailyUi?.();
+  if (!ui) {
+    strip.classList.add('hidden');
+    return;
+  }
+  strip.classList.remove('hidden');
+  strip.classList.toggle('is-done', ui.complete || ui.claimed);
+  const icon = document.getElementById('daily-icon');
+  if (icon) icon.textContent = ui.claimed ? '✓' : (ui.icon || '📅');
+  const label = document.getElementById('daily-label');
+  if (label) {
+    label.textContent = ui.claimed
+      ? `Dagsmål hentet${ui.streak > 1 ? ` · streak ${ui.streak}` : ''}`
+      : ui.label;
+  }
+  const prog = document.getElementById('daily-prog');
+  if (prog) prog.textContent = ui.claimed ? 'OK' : `${ui.progress}/${ui.amount}`;
+  const claim = document.getElementById('daily-claim');
+  if (claim) {
+    const show = ui.complete && !ui.claimed;
+    claim.classList.toggle('hidden', !show);
+  }
+}
+
+document.getElementById('daily-claim')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  playUi();
+  game.claimDailyReward?.();
+  refreshDailyUi();
+});
+
+// PWA service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => { /* offline first fail ok */ });
+  });
+}
 
 // Resize
 function resize() {

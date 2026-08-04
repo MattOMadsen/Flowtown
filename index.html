@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Flowtown – Transport & trafik</title>
   <meta name="description" content="Cozy mini Transport Tycoon. Tegn veje, lever passagerer og gods, konkurrér mod bots." />
+  <meta name="theme-color" content="#059669" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Flowtown" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -73,6 +81,14 @@
         <span id="bottleneck-icon">🚦</span>
         <span id="bottleneck-text">Kø på vej</span>
         <button type="button" id="bottleneck-go" class="hud-bottleneck-btn touch-manipulation">Vis</button>
+      </div>
+
+      <!-- Dagligt mini-mål (kompakt strip) -->
+      <div id="daily-strip" class="hud-daily hidden" role="status">
+        <span id="daily-icon">📅</span>
+        <span id="daily-label" class="hud-daily-label truncate">Dagens mål</span>
+        <span id="daily-prog" class="hud-daily-prog tabular-nums">0/1</span>
+        <button type="button" id="daily-claim" class="hud-daily-claim hidden touch-manipulation">Hent</button>
       </div>
 
       <!-- Række 3: tynd mission-strip; lister som dropdown (dækker ikke HUD-højde) -->
@@ -295,8 +311,9 @@
       <p class="text-xs font-semibold uppercase tracking-wide text-amber-700/80 mb-1">Tillykke</p>
       <h3 id="end-title" class="text-xl font-extrabold text-stone-800 mb-1">Bane klaret!</h3>
       <p id="end-stars" class="text-3xl text-amber-500 font-bold mb-1 tracking-wide">★★★</p>
-      <p id="end-text" class="text-sm text-stone-600 mb-3">Godt arbejde!</p>
-      <div id="end-stats" class="grid grid-cols-3 gap-2 mb-4 text-center">
+      <p id="end-text" class="text-sm text-stone-600 mb-2">Godt arbejde!</p>
+      <p id="end-xp" class="text-sm font-semibold text-violet-700 mb-3">+0 XP denne runde</p>
+      <div id="end-stats" class="grid grid-cols-3 gap-2 mb-3 text-center">
         <div class="rounded-xl bg-white/80 border border-stone-100 py-2 px-1">
           <div class="text-[10px] text-stone-500 uppercase">Leveret</div>
           <div id="end-delivered" class="text-sm font-bold text-stone-800 tabular-nums">0</div>
@@ -310,9 +327,11 @@
           <div id="end-jobs" class="text-sm font-bold text-stone-800 tabular-nums">0</div>
         </div>
       </div>
+      <p id="end-unlock" class="text-[11px] text-stone-500 mb-3 px-1">Næste unlock…</p>
       <div class="flex flex-col gap-2">
         <button type="button" id="end-next" class="hidden py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-xl touch-manipulation">Næste bane →</button>
         <button type="button" id="end-map" class="py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl touch-manipulation">Vælg bane</button>
+        <button type="button" id="end-share" class="py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-medium rounded-xl border border-amber-200 touch-manipulation">📤 Del score</button>
         <button type="button" id="end-continue" class="py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-xl touch-manipulation">Fortsæt her</button>
       </div>
     </div>

@@ -89,7 +89,7 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 ### A – Høj værdi
 | ID | Forslag | Anbefaling | Status |
 |----|---------|------------|--------|
-| IMP-A1 | Daglige/ugentlige mini-mål | Ja | Mangler |
+| IMP-A1 | Daglige/ugentlige mini-mål | Ja | ~~Done~~ dagligt mål |
 | IMP-A2 | Flaskehals-feedback (glød, toast, hint) | Ja | ~~Done~~ Batch 1 |
 | IMP-A3 | Flere baner med personlighed | Ja | ~~Done~~ Ø-broerne + Nat-rush |
 | IMP-A4 | Flow-score som stjerne/mål | Hybrid | ~~Done~~ `flow` goal + hold-timer |
@@ -101,7 +101,7 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 | IMP-B1 | Daglig login-bonus (blød) | Ja | Mangler |
 | IMP-B2 | Flere unlock-milestones | Ja | Mangler |
 | IMP-B3 | Freeplay + valgfri challenges | Ja (efter baner) | Mangler |
-| IMP-B4 | End-of-run: XP, unlock, del-score | Ja | Delvist |
+| IMP-B4 | End-of-run: XP, unlock, del-score | Ja | ~~Done~~ Batch 3 |
 
 ### C – Trafik / TT
 | ID | Forslag | Anbefaling | Status |
@@ -136,7 +136,14 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 ### Batch-rækkefølge (anbefalet)
 1. ~~**IMP-A2 + IMP-D1**~~ flaskehals + mere-menu **DONE 2026-08-04**  
 2. ~~**IMP-A3 + A4 + A5**~~ baner, flow-stjerne, bygning-UI **DONE**  
-3. **PWA + IMP-A1 + IMP-B4** – app-følelse + habit + end-run  
+3. ~~**PWA + IMP-A1 + IMP-B4**~~ app-følelse + habit + end-run **DONE**
+
+---
+
+### Batch 3 (04/08)
+- [x] **PWA** – manifest, icons, service worker (offline shell)
+- [x] **IMP-A1** – dagligt mini-mål + blød streak + hent-belønning
+- [x] **IMP-B4** – end-run: XP, næste unlock, del-score
 
 ---
 
@@ -144,9 +151,9 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **PWA + IMP-A1 + B4** | Install, dagligt mål, end-run | Batch 3 |
-| 2 | **T-1–T-5** | Tests, cull, a11y | Kvalitet |
-| 3 | **Ægte multiplayer** | Live session / server | Backend |
+| 1 | **T-1–T-5** | Tests, cull, a11y | Kvalitet |
+| 2 | **Ægte multiplayer** | Live session / server | Backend |
+| 3 | **IMP-C1** | Connected-status tydeligere | Polish |
 
 ---
 

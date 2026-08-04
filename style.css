@@ -241,6 +241,46 @@ body {
   border-color: #c4b5fd;
 }
 
+/* Dagligt mål – under tools, over missions */
+.hud-daily {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.1rem 0 0;
+  padding: 0.32rem 0.5rem;
+  border-radius: 0.7rem;
+  background: linear-gradient(90deg, rgba(237, 233, 254, 0.95), rgba(224, 242, 254, 0.95));
+  border: 1px solid #ddd6fe;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #5b21b6;
+  min-height: 1.85rem;
+}
+.hud-daily.hidden { display: none !important; }
+.hud-daily.is-done {
+  background: linear-gradient(90deg, rgba(209, 250, 229, 0.98), rgba(254, 249, 195, 0.95));
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+.hud-daily-label { flex: 1; min-width: 0; }
+.hud-daily-prog {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  opacity: 0.9;
+}
+.hud-daily-claim {
+  flex-shrink: 0;
+  padding: 0.22rem 0.5rem;
+  border-radius: 0.45rem;
+  border: 1px solid #a7f3d0;
+  background: #10b981;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hud-daily-claim.hidden { display: none !important; }
+
 /* Flaskehals under tools – midt, ikke hjørner */
 .hud-bottleneck {
   display: flex;
