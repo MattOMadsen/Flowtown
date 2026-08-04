@@ -79,6 +79,7 @@ Distrikter (ca.):
 | 2026-08-04 | Bil kørte “tilbage med last” | `parkIdle` cargo=0; hent tom → last ved afsender → lever; ikon kun når loaded |
 | 2026-08-04 | Biler kørte sidelæns / i firkanter | Top-down sprite næse = op; draw med +π/2; tight-crop sprites |
 | 2026-08-04 | Lyst/hvidt skær over skærm efter tid | Atmosphere fog+guld for stærk – lavere alpha, kun kant-tåge |
+| 2026-08-04 | Vej under byer; ingen vej fra havn | Push stroke ud af hub; vand-carve + bugt længere fra havn |
 
 Når du retter en bruger-rapporteret bug: **tilføj en række** i tabellen ovenfor.
 

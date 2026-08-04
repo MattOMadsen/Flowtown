@@ -26,18 +26,19 @@ export function buildWaterBodies(worldW, worldH, districts = [], seed = 42) {
     if (d.type !== 'harbor') continue;
     const towardLeft = d.x < w * 0.5;
     const towardTop = d.y < h * 0.5;
-    // One smooth bay (not two overlapping blobs that look tiled)
+    // Bug: for tæt/for stor bugt slugte havne-hub → kunne ikke starte vej.
+    // Skub vand længere væk og hold en land-ring omkring byen.
     const bayCx = towardLeft
-      ? Math.max(d.r * 2.2, d.x - d.r * 2.4)
-      : Math.min(w - d.r * 2.2, d.x + d.r * 2.4);
-    const bayCy = d.y + (towardTop ? -d.r * 0.15 : d.r * 0.15);
+      ? Math.max(d.r * 2.2, d.x - d.r * 3.6)
+      : Math.min(w - d.r * 2.2, d.x + d.r * 3.6);
+    const bayCy = d.y + (towardTop ? -d.r * 0.2 : d.r * 0.2);
     bodies.push({
       kind: 'blob',
       role: 'bay',
       cx: bayCx,
       cy: bayCy,
-      rx: d.r * 4.8,
-      ry: d.r * 3.6,
+      rx: d.r * 3.9,
+      ry: d.r * 3.0,
       rot: (towardLeft ? -0.2 : 0.2) + (rng() - 0.5) * 0.12,
       lobes: 7 + Math.floor(rng() * 2),
       seed: (seed + d.x * 3) | 0
@@ -46,10 +47,10 @@ export function buildWaterBodies(worldW, worldH, districts = [], seed = 42) {
     bodies.push({
       kind: 'blob',
       role: 'sea',
-      cx: towardLeft ? Math.max(minSide * 0.06, bayCx - d.r * 1.8) : Math.min(w - minSide * 0.06, bayCx + d.r * 1.8),
-      cy: bayCy + (towardTop ? -d.r * 0.4 : d.r * 0.4),
-      rx: d.r * 5.5,
-      ry: d.r * 4.2,
+      cx: towardLeft ? Math.max(minSide * 0.06, bayCx - d.r * 2.2) : Math.min(w - minSide * 0.06, bayCx + d.r * 2.2),
+      cy: bayCy + (towardTop ? -d.r * 0.45 : d.r * 0.45),
+      rx: d.r * 5.0,
+      ry: d.r * 3.8,
       rot: (towardLeft ? 0.1 : -0.1),
       lobes: 8,
       seed: (seed + 99 + d.y * 2) | 0
@@ -139,15 +140,28 @@ export function pointInEllipse(x, y, b) {
   return (lx * lx) / (rx * rx) + (ly * ly) / (ry * ry) <= 1;
 }
 
-export function pointInWater(x, y, bodies) {
+/**
+ * @param {number} x
+ * @param {number} y
+ * @param {Array} bodies
+ * @param {Array|null} [districts] – hub/kyst-ring tæller ikke som vand (kan bygge fra havn)
+ */
+export function pointInWater(x, y, bodies, districts = null) {
   if (!bodies || !bodies.length) return false;
+  // Land-ring omkring byer (især havn) – bugt må ikke æde hub’en
+  if (districts?.length) {
+    for (const d of districts) {
+      const r = d.r || 40;
+      if (Math.hypot(x - d.x, y - d.y) < r * 1.4) return false;
+    }
+  }
   for (const b of bodies) {
     if ((b.kind === 'ellipse' || b.kind === 'blob') && pointInEllipse(x, y, b)) return true;
   }
   return false;
 }
 
-export function strokeWaterFraction(points, bodies) {
+export function strokeWaterFraction(points, bodies, districts = null) {
   if (!points || points.length < 2 || !bodies?.length) return 0;
   let waterLen = 0;
   let total = 0;
@@ -163,7 +177,7 @@ export function strokeWaterFraction(points, bodies) {
       const y = a.y + (b.y - a.y) * t;
       const dl = seg / steps;
       total += dl;
-      if (pointInWater(x, y, bodies)) waterLen += dl;
+      if (pointInWater(x, y, bodies, districts)) waterLen += dl;
     }
   }
   return total > 0 ? waterLen / total : 0;

@@ -29,7 +29,7 @@ import {
 import { saveMeta, setScenarioStars, getScenarioStars } from './meta.js';
 import { buildPlaceDefs, placeTypeMeta } from './places.js';
 import { drawWorldTerrain, drawPlaceHub } from './worlddraw.js';
-import { buildWaterBodies, strokeWaterFraction } from './water.js';
+import { buildWaterBodies, strokeWaterFraction, pointInWater } from './water.js';
 import { loadGameAssets } from './assets.js';
 import { buildTileMap } from './tilemap.js';
 import {
@@ -963,6 +963,90 @@ export class Game {
     return p.x >= m && p.y >= m && p.x <= (this.worldW || 0) - m && p.y <= (this.worldH || 0) - m;
   }
 
+  /**
+   * Skub punkt ud af by-kerne / bygningshub, så veje ikke ligger under byer.
+   * Endpoints tillades tæt på kanten (minR); midtpunkter skubbes til ring.
+   * @param {{x:number,y:number}} p
+   * @param {{ endpoint?: boolean }} [opts]
+   */
+  pushOutOfHubs(p, opts = {}) {
+    if (!p || !this.districts?.length) return p;
+    let x = p.x;
+    let y = p.y;
+    const endpoint = !!opts.endpoint;
+    for (const d of this.districts) {
+      const r = d.r || 40;
+      // Endpoints må ligge på kanten (~0.92r); midt-veje skal uden for ~0.88r
+      const minR = r * (endpoint ? 0.88 : 0.95);
+      const dx = x - d.x;
+      const dy = y - d.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < minR) {
+        if (dist < 1.5) {
+          // Præcis centrum: skub i en stabil retning (øst hvis intet andet)
+          x = d.x + minR;
+          y = d.y;
+        } else {
+          const s = minR / dist;
+          x = d.x + dx * s;
+          y = d.y + dy * s;
+        }
+      }
+    }
+    return this.clampToWorld({ x, y });
+  }
+
+  /** Hele stroke: skub midtpunkter ud af hubs; behold endpoint-snap til kant. */
+  sanitizeStrokeThroughHubs(points) {
+    if (!points || points.length < 2) return points;
+    const out = points.map((p, i) => {
+      const endpoint = i === 0 || i === points.length - 1;
+      return this.pushOutOfHubs({ x: p.x, y: p.y }, { endpoint });
+    });
+    // Drop næsten-duplikater efter push
+    const clean = [out[0]];
+    for (let i = 1; i < out.length; i++) {
+      const prev = clean[clean.length - 1];
+      if (Math.hypot(out[i].x - prev.x, out[i].y - prev.y) > 2) clean.push(out[i]);
+    }
+    if (clean.length < 2) clean.push(out[out.length - 1]);
+    return clean;
+  }
+
+  /**
+   * Startpunkt på by-kant, på land (vigtigt for havn).
+   * Prøver primær vinkel, derefter vifter rundt indtil land findes.
+   */
+  landEdgeFromDistrict(district, aimX, aimY) {
+    const baseAng = Math.atan2(aimY - district.y, aimX - district.x);
+    const r = (district.r || 40) * 0.95;
+    const tryEdge = (ang) => {
+      const e = {
+        x: district.x + Math.cos(ang) * r,
+        y: district.y + Math.sin(ang) * r
+      };
+      const c = this.clampToWorld(e);
+      // Land hvis ikke vand (med hub-undtagelse) eller tæt på hub
+      if (!pointInWater(c.x, c.y, this.waterBodies, this.districts)) return c;
+      return null;
+    };
+    let hit = tryEdge(baseAng);
+    if (hit) return hit;
+    // Vift ± op til 180°
+    for (let step = 1; step <= 12; step++) {
+      const da = (step / 12) * Math.PI;
+      hit = tryEdge(baseAng + da);
+      if (hit) return hit;
+      hit = tryEdge(baseAng - da);
+      if (hit) return hit;
+    }
+    // Fallback: kant i aim-retning alligevel (hub-carve gør den land)
+    return this.clampToWorld({
+      x: district.x + Math.cos(baseAng) * r,
+      y: district.y + Math.sin(baseAng) * r
+    });
+  }
+
   openDistrictSheet(district) {
     if (!district || !this.running) return;
     this.selectedDistrictName = district.name;
@@ -1475,7 +1559,7 @@ export class Game {
       len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
     }
     let cost = this.roadCostForLength(len);
-    const waterFrac = strokeWaterFraction(points, this.waterBodies);
+    const waterFrac = strokeWaterFraction(points, this.waterBodies, this.districts);
     if (bridge || waterFrac > 0.05) {
       // Broer er dyre – især over meget vand (lidt mildere end før)
       cost = Math.round(cost * (1.85 + waterFrac * 2.0) * this.roadCostMul());
@@ -2112,9 +2196,16 @@ export class Game {
       this.clearActiveSnap();
       return;
     }
-    const snapped = this.findSnapPoint(p.x, p.y);
-    const start = this.clampToWorld(snapped);
-    this.currentStroke = [{ x: start.x, y: start.y }];
+    let snapped = this.findSnapPoint(p.x, p.y);
+    snapped = this.pushOutOfHubs(this.clampToWorld(snapped), { endpoint: true });
+    // Undgå start midt i åbent vand (medmindre bro-mode)
+    if (this.mode !== 'bridge' && pointInWater(snapped.x, snapped.y, this.waterBodies, this.districts)) {
+      this.showToast('Start på land – eller brug Bro over vand');
+      this.currentStroke = null;
+      this.clearActiveSnap();
+      return;
+    }
+    this.currentStroke = [{ x: snapped.x, y: snapped.y }];
     this.pendingRoadCost = 0;
     this.updateActiveSnap(p.x, p.y);
   }
@@ -2127,17 +2218,25 @@ export class Game {
       || this.mode === 'oneway' || this.mode === 'light') return;
     const aim = this.clampToWorld(this.screenToWorld(screenX, screenY));
     const ang = Math.atan2(aim.y - district.y, aim.x - district.x);
-    const edge = {
-      x: district.x + Math.cos(ang) * district.r * 0.92,
-      y: district.y + Math.sin(ang) * district.r * 0.92
-    };
-    const start = this.clampToWorld(this.findSnapPoint(edge.x, edge.y));
+    // Start på land-kant (havn må ikke starte i vand)
+    let start = this.landEdgeFromDistrict(district, aim.x, aim.y);
+    start = this.pushOutOfHubs(this.clampToWorld(this.findSnapPoint(start.x, start.y)), { endpoint: true });
     this.currentStroke = [{ x: start.x, y: start.y }];
-    // Second point toward finger so stroke is valid quickly
-    const mid = this.clampToWorld({
-      x: start.x + Math.cos(ang) * 20 * this.dpr,
-      y: start.y + Math.sin(ang) * 20 * this.dpr
+    // Second point toward finger – også på land / uden for hub
+    let mid = this.clampToWorld({
+      x: start.x + Math.cos(ang) * 22 * this.dpr,
+      y: start.y + Math.sin(ang) * 22 * this.dpr
     });
+    mid = this.pushOutOfHubs(mid, { endpoint: false });
+    // Hvis mid rammer vand uden bro-mode: skub indad mod land langs fra by
+    if (this.mode !== 'bridge' && pointInWater(mid.x, mid.y, this.waterBodies, this.districts)) {
+      mid = this.landEdgeFromDistrict(district, aim.x, aim.y);
+      mid = this.clampToWorld({
+        x: mid.x + Math.cos(ang) * 12 * this.dpr,
+        y: mid.y + Math.sin(ang) * 12 * this.dpr
+      });
+      mid = this.pushOutOfHubs(mid, { endpoint: false });
+    }
     this.currentStroke.push(mid);
     this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke, {
       bridge: this.mode === 'bridge'
@@ -2171,6 +2270,14 @@ export class Game {
       const nearCity = this.districts.some(d => Math.hypot(d.x - p.x, d.y - p.y) < d.r * 1.6);
       if (!nearCity) pt = this.snapToHex(p.x, p.y, 0.38);
       pt = this.clampToWorld(pt);
+      // Ikke gennem by-kerne / under bygninger
+      pt = this.pushOutOfHubs(pt, { endpoint: false });
+      // Ikke frit ud i vand uden bro-mode (tillad kyst-ring via districts i pointInWater)
+      if (this.mode !== 'bridge' && pointInWater(pt.x, pt.y, this.waterBodies, this.districts)) {
+        // Drop point i vand – hold forrige; spilleren skal bruge bro
+        this.updateActiveSnap(p.x, p.y);
+        return;
+      }
       this.currentStroke.push(pt);
       const isBridge = this.mode === 'bridge'
         || this.strokeCrossesExistingRoads(this.currentStroke);
@@ -2209,7 +2316,20 @@ export class Game {
 
     points = this.snapEndpoints(points);
     points = points.map(p => this.clampToWorld(p));
-    const waterFrac = strokeWaterFraction(points, this.waterBodies);
+    // Veje må ikke ligge under byer/bygninger – skub midterpunkter til hub-kant
+    points = this.sanitizeStrokeThroughHubs(points);
+    points = this.snapEndpoints(points);
+    points = points.map((p, i) => this.pushOutOfHubs(this.clampToWorld(p), {
+      endpoint: i === 0 || i === points.length - 1
+    }));
+    if (points.length < 2) {
+      this.currentStroke = null;
+      this.pendingRoadCost = 0;
+      this.clearActiveSnap();
+      return;
+    }
+
+    const waterFrac = strokeWaterFraction(points, this.waterBodies, this.districts);
     const wantBridge = this.mode === 'bridge';
     const crossesWater = waterFrac > 0.08;
     const crossesRoad = this.strokeCrossesExistingRoads(points);
