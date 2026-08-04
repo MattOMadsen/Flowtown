@@ -168,184 +168,198 @@ export class Road {
   }
 
   /**
-   * Farver/bredder til tegning (bruges også til kryds-pads).
+   * 2026 map-style: flad, ren asfalt (som Apple Maps / moderne city-builders).
    */
   getDrawStyle(dpr) {
     const motor = this.lanes >= 3;
     const bridge = this.isBridge;
-    // Moderne, rene farver – mindre “tyk sort kant”
-    let edge = bridge ? '#334155' : motor ? '#1e293b' : '#374151';
-    let asphalt = bridge ? '#64748b' : motor ? '#4b5563' : '#6b7280';
-    let asphaltHi = bridge ? '#94a3b8' : motor ? '#9ca3af' : '#9ca3af';
-    let shoulder = 'rgba(120, 130, 100, 0.18)';
-    let lane = 'rgba(255,255,255,0.75)';
     const dens = this.effectiveDensity;
+
+    // Flade, lyse asfalt-toner (ikke mørke pølser)
+    let asphalt = bridge ? '#8b9bb0' : motor ? '#7a808c' : '#8a909a';
+    let edge = bridge ? 'rgba(45, 60, 80, 0.45)' : 'rgba(40, 48, 58, 0.38)';
+    let lane = 'rgba(255,255,255,0.88)';
+    let glow = 'rgba(255,255,255,0.14)';
+
     if (!bridge && dens >= 6) {
-      asphalt = '#be123c';
-      asphaltHi = '#fb7185';
-      edge = '#881337';
-      lane = 'rgba(255,228,230,0.85)';
-      shoulder = 'rgba(127, 29, 29, 0.2)';
+      asphalt = '#c45c6a';
+      edge = 'rgba(100, 30, 40, 0.4)';
+      lane = 'rgba(255,240,242,0.9)';
     } else if (!bridge && dens >= 3) {
-      asphalt = '#c2410c';
-      asphaltHi = '#fb923c';
-      edge = '#7c2d12';
-      lane = 'rgba(255,237,213,0.85)';
-      shoulder = 'rgba(154, 52, 18, 0.16)';
+      asphalt = '#c98a5a';
+      edge = 'rgba(100, 55, 30, 0.35)';
+      lane = 'rgba(255,248,240,0.9)';
     } else if (this.owner !== 'player' && this.ownerColor) {
-      asphalt = this.mixHex(this.ownerColor, '#6b7280', 0.42);
-      asphaltHi = this.mixHex(this.ownerColor, '#a1a1aa', 0.5);
-      edge = this.mixHex(this.ownerColor, '#1f2937', 0.28);
+      asphalt = this.mixHex(this.ownerColor, '#8a909a', 0.55);
+      edge = 'rgba(40, 48, 58, 0.4)';
     }
-    // Slanke, moderne veje
-    const wEdge = (motor ? 22 : bridge ? 18 : 17) * dpr;
-    const wBody = (motor ? 16 : bridge ? 13 : 12.5) * dpr;
-    const wInner = (motor ? 9 : 7) * dpr;
+
+    // Tynde veje – mere “kort” end “tykt rør”
+    const wBody = (motor ? 14 : bridge ? 12 : 11) * dpr;
+    const wEdge = wBody + 2.2 * dpr;
     return {
-      motor, bridge, dens, edge, asphalt, asphaltHi, shoulder, lane,
-      wEdge, wBody, wInner,
-      alpha: this.owner === 'player' ? 1 : 0.9
+      motor,
+      bridge,
+      dens,
+      edge,
+      asphalt,
+      lane,
+      glow,
+      wEdge,
+      wBody,
+      alpha: this.owner === 'player' ? 1 : 0.92
     };
   }
 
   /**
-   * Moderne vejtegning – ingen runde knopper i enderne.
-   * @param {{ joinStart?: boolean, joinEnd?: boolean }} [opts]
+   * Ren vektor-vej 2026 – ingen knopper, ingen pile-støj, elegant midterstribe.
+   * Trafiklys tegnes separat (drawTrafficLight) ved siden af vejen.
    */
   draw(ctx, dpr, opts = {}) {
     if (this.points.length < 2) return;
 
     const dual = !this.oneWay;
     const st = this.getDrawStyle(dpr);
-    const {
-      motor, bridge, dens, edge, asphalt, asphaltHi, shoulder, lane,
-      wEdge, wBody, wInner, alpha
-    } = st;
+    const { motor, bridge, dens, edge, asphalt, lane, glow, wEdge, wBody, alpha } = st;
 
     ctx.save();
-    // round cap giver bløde ender uden ekstra cirkel-knopper
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = alpha;
 
-    const strokePath = (width, style, a = alpha) => {
+    const stroke = (width, style, a = alpha, dash = null) => {
       ctx.beginPath();
       this.path(ctx);
       ctx.strokeStyle = style;
       ctx.lineWidth = width;
       ctx.globalAlpha = a;
+      if (dash) ctx.setLineDash(dash);
+      else ctx.setLineDash([]);
       ctx.stroke();
+      ctx.setLineDash([]);
       ctx.globalAlpha = alpha;
     };
 
-    // Blød skygge (ét lag)
-    strokePath(wBody + 5 * dpr, 'rgba(15, 20, 25, 0.18)');
+    // 1) Ultra-soft ground contact (næsten usynlig)
+    stroke(wBody + 4 * dpr, 'rgba(20, 28, 36, 0.1)');
 
-    // Diskret shoulder
-    if (!bridge) {
-      strokePath(wEdge + 3 * dpr, shoulder);
-    }
+    // 2) Hairline edge
+    stroke(wEdge, edge);
 
-    // Bridge: simple deck markers (ingen klodsede søjler)
+    // 3) Flat asphalt body
+    stroke(wBody, asphalt);
+
+    // 4) Subtle top sheen (smal)
+    stroke(wBody * 0.35, glow, alpha * 0.55);
+
+    // 5) Bridge: cool tint + thin rail dashes on sides via second pass color
     if (bridge) {
-      strokePath(wEdge + 2 * dpr, 'rgba(30, 58, 90, 0.35)');
+      stroke(wBody * 0.92, 'rgba(200, 220, 240, 0.12)');
     }
 
-    // Edge + body
-    strokePath(wEdge, edge);
-    strokePath(wBody, asphalt);
-
-    // Meget subtil texture
-    if (!bridge && dens < 4) {
-      const pat = asphaltPattern(ctx, dpr);
-      if (pat) strokePath(wBody * 0.85, pat, alpha * 0.2);
-    }
-
-    // Soft highlight
-    strokePath(wInner, asphaltHi, alpha * 0.28);
-
-    // Center line – clean dashed
+    // 6) Center marking – kun én elegant stiplet linje
     if (dual) {
-      ctx.beginPath();
-      this.path(ctx);
-      ctx.strokeStyle = lane;
-      ctx.lineWidth = motor ? 1.6 * dpr : 1.8 * dpr;
-      ctx.setLineDash(motor ? [5 * dpr, 8 * dpr] : [10 * dpr, 9 * dpr]);
       ctx.lineCap = 'butt';
-      ctx.stroke();
-      ctx.setLineDash([]);
+      stroke(
+        motor ? 1.4 * dpr : 1.5 * dpr,
+        lane,
+        alpha * 0.95,
+        motor ? [4 * dpr, 7 * dpr] : [8 * dpr, 8 * dpr]
+      );
       ctx.lineCap = 'round';
     } else {
-      ctx.beginPath();
-      this.path(ctx);
-      ctx.strokeStyle = this.oneWay === -1 ? 'rgba(251, 146, 60, 0.75)' : 'rgba(96, 165, 250, 0.8)';
-      ctx.lineWidth = 1.8 * dpr;
-      ctx.setLineDash([12 * dpr, 8 * dpr]);
       ctx.lineCap = 'butt';
-      ctx.stroke();
-      ctx.setLineDash([]);
+      stroke(
+        1.5 * dpr,
+        this.oneWay === -1 ? 'rgba(251, 146, 60, 0.85)' : 'rgba(96, 165, 250, 0.85)',
+        alpha,
+        [10 * dpr, 7 * dpr]
+      );
       ctx.lineCap = 'round';
     }
 
-    // Færre, mindre pile (retning)
-    const len = this.length;
-    const arrowCount = Math.max(0, Math.floor(len / (140 * dpr)));
-    for (let i = 1; i <= arrowCount; i++) {
-      const t = i / (arrowCount + 1);
-      const p = this.getPointAt(t);
-      const angle = this.getAngleAt(t);
+    // 7) Moderne trafiklys – lille signalhoved VED siden af vejen (ikke midt i asfalten)
+    if (this.hasLight) {
+      this.drawTrafficLight(ctx, dpr, wBody);
+    }
 
-      const drawArrow = (rot, fill) => {
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(rot);
-        ctx.fillStyle = fill;
-        ctx.beginPath();
-        ctx.moveTo(5 * dpr, 0);
-        ctx.lineTo(-3.2 * dpr, -2.6 * dpr);
-        ctx.lineTo(-3.2 * dpr, 2.6 * dpr);
-        ctx.closePath();
+    ctx.restore();
+  }
+
+  /**
+   * Kompakt LED-signal ved vejkanten – 2026 UI, ikke stor rød klat.
+   */
+  drawTrafficLight(ctx, dpr, wBody) {
+    const t = this.lightT != null ? this.lightT : 0.5;
+    const p = this.getPointAt(t);
+    const ang = this.getAngleAt(t);
+    // offset vinkelret ud til siden
+    const nx = Math.cos(ang + Math.PI / 2);
+    const ny = Math.sin(ang + Math.PI / 2);
+    const off = wBody * 0.85 + 5 * dpr;
+    const x = p.x + nx * off;
+    const y = p.y + ny * off;
+
+    const phase = this.lightPhase | 0; // 0 green, 1 yellow, 2 red
+    const lamps = [
+      { c: '#22c55e', on: phase === 0 },
+      { c: '#eab308', on: phase === 1 },
+      { c: '#ef4444', on: phase === 2 }
+    ];
+
+    const bw = 7 * dpr;
+    const bh = 16 * dpr;
+    const rr = 3 * dpr;
+
+    ctx.save();
+    // soft shadow
+    ctx.fillStyle = 'rgba(15, 20, 30, 0.2)';
+    ctx.beginPath();
+    roundRectPath(ctx, x - bw / 2 + dpr, y - bh / 2 + dpr, bw, bh, rr);
+    ctx.fill();
+
+    // body (mørk pill)
+    const body = ctx.createLinearGradient(x, y - bh / 2, x, y + bh / 2);
+    body.addColorStop(0, '#2a2f38');
+    body.addColorStop(1, '#1a1e26');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    roundRectPath(ctx, x - bw / 2, y - bh / 2, bw, bh, rr);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 0.8 * dpr;
+    ctx.stroke();
+
+    // three LEDs
+    const spacing = bh / 4;
+    for (let i = 0; i < 3; i++) {
+      const ly = y - spacing + i * spacing;
+      const lamp = lamps[i];
+      ctx.beginPath();
+      ctx.arc(x, ly, 1.7 * dpr, 0, Math.PI * 2);
+      if (lamp.on) {
+        ctx.fillStyle = lamp.c;
         ctx.fill();
-        ctx.restore();
-      };
-
-      const fill = dens >= 3 && !bridge
-        ? 'rgba(255,255,255,0.55)'
-        : 'rgba(255,255,255,0.45)';
-      if (dual) {
-        const ang = angle + Math.PI / 2;
-        const off = 3.2 * dpr;
-        ctx.save();
-        ctx.translate(Math.cos(ang) * off, Math.sin(ang) * off);
-        drawArrow(angle, fill);
-        ctx.restore();
-        ctx.save();
-        ctx.translate(-Math.cos(ang) * off, -Math.sin(ang) * off);
-        drawArrow(angle + Math.PI, fill);
-        ctx.restore();
+        // glow
+        ctx.beginPath();
+        ctx.arc(x, ly, 3.2 * dpr, 0, Math.PI * 2);
+        ctx.fillStyle = lamp.c;
+        ctx.globalAlpha = 0.28;
+        ctx.fill();
+        ctx.globalAlpha = 1;
       } else {
-        drawArrow(this.oneWay === -1 ? angle + Math.PI : angle, fill);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fill();
       }
     }
 
-    // Trafiklys (ved kryds eller midt)
-    if (this.hasLight) {
-      const lp = this.getPointAt(this.lightT != null ? this.lightT : 0.5);
-      const phase = this.lightPhase | 0;
-      const colors = ['#22c55e', '#eab308', '#ef4444'];
-      const col = colors[Math.max(0, Math.min(2, phase))] || colors[0];
-      ctx.beginPath();
-      ctx.arc(lp.x, lp.y, 7 * dpr, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(28,25,23,0.75)';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(lp.x, lp.y, 4.5 * dpr, 0, Math.PI * 2);
-      ctx.fillStyle = col;
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = 1 * dpr;
-      ctx.stroke();
-    }
+    // thin pole toward road
+    ctx.strokeStyle = 'rgba(50, 55, 65, 0.65)';
+    ctx.lineWidth = 1.1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(x - nx * (bw * 0.4), y - ny * (bw * 0.4));
+    ctx.lineTo(p.x + nx * (wBody * 0.35), p.y + ny * (wBody * 0.35));
+    ctx.stroke();
 
     ctx.restore();
   }
@@ -363,4 +377,14 @@ export class Road {
     if (!m) return null;
     return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
   }
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
 }

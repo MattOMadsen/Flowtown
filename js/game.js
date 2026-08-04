@@ -4092,15 +4092,14 @@ export class Game {
     for (const road of this.roads) {
       const m = joinMeta?.get(road);
       if (!m?.joins?.length) continue;
-      const st = road.getDrawStyle?.(dpr) || { wBody: 18 * dpr, asphalt: '#5c5a62', edge: '#2a2623' };
+      const st = road.getDrawStyle?.(dpr) || { wBody: 11 * dpr, asphalt: '#8a909a', edge: 'rgba(40,48,58,0.38)' };
       for (const j of m.joins) {
         pads.push({
           x: j.x,
           y: j.y,
-          r: st.wBody * (j.cross ? 0.72 : 0.58),
+          r: st.wBody * (j.cross ? 0.95 : 0.75),
           asphalt: st.asphalt,
           edge: st.edge,
-          hi: st.asphaltHi || '#7a7882',
           cross: !!j.cross
         });
       }
@@ -4142,17 +4141,22 @@ export class Game {
     }
 
     for (const p of merged) {
-      // Diskret moderne kryds – lille asfalt-disk, ingen knopper
-      const rr = p.r * 0.85;
+      // Blød kryds-plade der matcher vejfarven – ingen mørk “knap”
+      const rr = Math.max(p.r * 0.72, 6 * dpr);
+      const asphalt = p.asphalt || '#8a909a';
       ctx.beginPath();
-      ctx.arc(p.x, p.y, rr * 1.08, 0, Math.PI * 2);
-      ctx.fillStyle = p.edge;
-      ctx.globalAlpha = 0.55;
+      ctx.arc(p.x, p.y, rr + 1.2 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(40, 48, 58, 0.12)';
       ctx.fill();
       ctx.beginPath();
       ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
-      ctx.fillStyle = p.asphalt;
-      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = asphalt;
+      ctx.globalAlpha = 0.98;
+      ctx.fill();
+      // subtil highlight
+      ctx.beginPath();
+      ctx.arc(p.x - rr * 0.15, p.y - rr * 0.2, rr * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
       ctx.fill();
       ctx.globalAlpha = 1;
     }
