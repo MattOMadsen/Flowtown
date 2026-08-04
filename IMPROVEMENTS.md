@@ -27,6 +27,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-VIS1** Bedre verdenskort (terrain, vand, markers, hubs)
 - [x] **PROG-D1** Vand/kyst + bro-tool
 - [x] **PROG-VIS2** Skarpere steder + vej/bro-art
+- [x] **PROG-VIS3** Playable board, tæt start-zoom, sprites (ingen bobler)
 
 ---
 

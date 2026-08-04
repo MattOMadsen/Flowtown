@@ -26,6 +26,7 @@ import { saveMeta, setScenarioStars, getScenarioStars } from './meta.js';
 import { buildPlaceDefs, placeTypeMeta } from './places.js';
 import { drawWorldTerrain, drawPlaceHub } from './worlddraw.js';
 import { buildWaterBodies, strokeWaterFraction } from './water.js';
+import { loadGameAssets } from './assets.js';
 import {
   SCENARIOS,
   getScenario,
@@ -89,13 +90,13 @@ export class Game {
 
     // Camera (canvas-pixel space)
     this.camera = { x: 0, y: 0, zoom: 1 };
-    // Larger world than viewport – pan/zoom to explore (mobile: Fit)
-    this.minZoom = 0.22;
-    this.maxZoom = 2.8;
-    this.worldW = 2400;
-    this.worldH = 1800;
+    // Playable map is a finite board (not endless empty land)
+    this.minZoom = 0.55;
+    this.maxZoom = 2.6;
+    this.worldW = 1600;
+    this.worldH = 1200;
     this.mapSeed = 42;
-    this.worldScale = 1.95;
+    this.worldScale = 1.15;
     this.scenario = getScenario('intro');
     this.scenarioId = 'intro';
     this.jobsCompleted = 0;
@@ -136,23 +137,30 @@ export class Game {
   }
 
   updateDistrictPositions() {
-    const cw = this.canvas.width || 1200;
-    const ch = this.canvas.height || 800;
-    const scale = this.worldScale || 1.95;
-    this.worldW = Math.max(cw * scale, 2000 * (this.dpr || 1));
-    this.worldH = Math.max(ch * scale, 1500 * (this.dpr || 1));
+    const dpr = this.dpr || 1;
+    // Playable board size in canvas pixels – scales with mapScale, NOT raw screen*2
+    const scale = this.worldScale || 1.15;
+    const baseW = 1180 * dpr;
+    const baseH = 860 * dpr;
+    this.worldW = baseW * scale;
+    this.worldH = baseH * scale;
     const w = this.worldW;
     const h = this.worldH;
     const minSide = Math.min(w, h);
+    // Keep places inside padded map (margin so labels/roads fit)
+    const mx = 0.1;
+    const my = 0.11;
     const prev = this.districts;
     this.districts = this.districtDefs.map((d, i) => {
       const typeMeta = placeTypeMeta(d.type);
       const prevMatch = prev.find(p => p.name === d.name) || prev[i];
+      const rx = mx + (d.rx ?? 0.5) * (1 - 2 * mx);
+      const ry = my + (d.ry ?? 0.5) * (1 - 2 * my);
       return {
         id: d.id,
-        x: d.rx * w,
-        y: d.ry * h,
-        r: d.rr * minSide,
+        x: rx * w,
+        y: ry * h,
+        r: Math.max(28 * dpr, (d.rr || 0.035) * minSide * 1.15),
         color: d.color || typeMeta.color,
         name: d.name,
         type: d.type || 'town',
@@ -216,13 +224,14 @@ export class Game {
     this.running = true;
     this.paused = false;
     this.lastTime = performance.now();
-    this.fitCamera(48);
+    loadGameAssets().then(() => this.requestDraw());
+    this.startCamera();
     this.addJob();
     this.addJob();
     if ((this.districts.length || 0) >= 6) this.addJob();
     if (this.getPlayerFleet().length === 0) {
       const name = this.scenario?.name || 'kortet';
-      this.showToast(`${name}: tryk et sted · køb bil · Fit viser det hele`, 3.6);
+      this.showToast(`${name}: zoomet ind · Fit = hele brættet · tryk sted for bil`, 3.6);
     }
     this.refreshGoals();
     if (!this._loopStarted) {
@@ -570,35 +579,42 @@ export class Game {
   /**
    * Fit all districts (+ roads) into view with padding.
    */
-  fitCamera(paddingCss = 56) {
+  /** Fit entire playable board (Fit-knap) */
+  fitCamera(paddingCss = 40) {
     const w = this.canvas.width || 1;
     const h = this.canvas.height || 1;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    const expand = (x, y, r = 0) => {
-      minX = Math.min(minX, x - r);
-      minY = Math.min(minY, y - r);
-      maxX = Math.max(maxX, x + r);
-      maxY = Math.max(maxY, y + r);
-    };
-    for (const d of this.districts) expand(d.x, d.y, d.r * 1.4);
-    for (const road of this.roads) {
-      for (const p of road.points) expand(p.x, p.y, 10 * this.dpr);
-    }
-    if (!Number.isFinite(minX)) {
-      this.resetCamera();
-      return;
-    }
-    const bw = Math.max(40, maxX - minX);
-    const bh = Math.max(40, maxY - minY);
+    const bw = Math.max(40, this.worldW || 1);
+    const bh = Math.max(40, this.worldH || 1);
     const pad = paddingCss * this.dpr;
     const zx = (w - pad * 2) / bw;
     const zy = (h - pad * 2) / bh;
-    const z = this.clampZoom(Math.min(zx, zy, 1.35));
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
+    const z = this.clampZoom(Math.min(zx, zy));
+    const cx = bw / 2;
+    const cy = bh / 2;
     this.camera.zoom = z;
     this.camera.x = w / 2 - cx * z;
     this.camera.y = h / 2 - cy * z;
+    this.requestDraw();
+  }
+
+  /**
+   * Start closer: ~50–60% of the board visible, centered on capital/mid.
+   * (Ikke “se alt det tomme land”.)
+   */
+  startCamera() {
+    const w = this.canvas.width || 1;
+    const h = this.canvas.height || 1;
+    const focus =
+      this.districts.find(d => d.type === 'capital') ||
+      this.districts[Math.floor(this.districts.length / 2)] ||
+      { x: this.worldW / 2, y: this.worldH / 2 };
+
+    // Want to see roughly half the map width
+    const viewWorldW = Math.max(200, this.worldW * 0.52);
+    const z = this.clampZoom(w / viewWorldW);
+    this.camera.zoom = z;
+    this.camera.x = w / 2 - focus.x * z;
+    this.camera.y = h / 2 - focus.y * z;
     this.requestDraw();
   }
 
@@ -1609,9 +1625,9 @@ export class Game {
     const h = this.canvas.height;
     const cam = this.camera;
 
-    // Screen-space clear (covers pan gaps) – soft outside-world tone
+    // Outside playable board = void (not fake buildable land)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#a8a396';
+    ctx.fillStyle = '#2c2925';
     ctx.fillRect(0, 0, w, h);
 
     // World transform

@@ -1,8 +1,10 @@
 import { Game } from './game.js';
 import { upgradePrice } from './fleet.js';
+import { loadGameAssets } from './assets.js';
 
 const canvas = document.getElementById('game');
 const game = new Game(canvas);
+loadGameAssets().then(() => game.requestDraw?.());
 
 // UI buttons
 document.getElementById('btn-undo').addEventListener('click', () => game.undo());

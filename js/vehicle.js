@@ -1,6 +1,7 @@
 /** Player / bot vehicles: passenger cars and cargo trucks */
 
 import { getClass, cargoCapacity as fleetCargoCap } from './fleet.js';
+import { getVehicleSprite } from './assets.js';
 
 const CAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6', '#06b6d4'];
 const TRUCK_COLORS = ['#b45309', '#92400e', '#a16207', '#78350f'];
@@ -464,7 +465,11 @@ export class Vehicle {
     ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * (isHeavy ? 1.65 : 1.45), s * (isHeavy ? 0.95 : 0.8), 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (this.kind === 'truck') {
+    const sprite = getVehicleSprite(this.classId, this.kind);
+    if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+      const sc = (isHeavy ? 2.85 : isFast ? 2.4 : 2.55) * s;
+      ctx.drawImage(sprite, -sc / 2, -sc / 2, sc, sc);
+    } else if (this.kind === 'truck') {
       this.drawTruck(ctx, s, dpr, isHeavy);
     } else {
       this.drawCar(ctx, s, dpr, isFast);
