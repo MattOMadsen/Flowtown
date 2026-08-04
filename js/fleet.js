@@ -20,7 +20,9 @@ export const FLEET = {
   maxUpgradeRank: 3,
   /** Meta unlock thresholds (total upgrades ever) */
   unlockFastAt: 5,
-  unlockHeavyAt: 10
+  unlockHeavyAt: 10,
+  unlockBusAt: 15,
+  unlockVanAt: 8
 };
 
 /** Vehicle class catalog */
@@ -76,6 +78,34 @@ export const VEHICLE_CLASSES = {
     speedMul: 0.72,
     sizeMul: 1.15,
     unlockAt: FLEET.unlockHeavyAt
+  },
+  /** Høj passager-kapacitet – personjobs */
+  bus: {
+    id: 'bus',
+    kind: 'car',
+    label: 'Bus',
+    short: 'Bus',
+    icon: '🚌',
+    desc: 'Mange passagerer, rolig fart',
+    basePrice: 160,
+    baseCargo: 3,
+    speedMul: 0.85,
+    sizeMul: 1.28,
+    unlockAt: FLEET.unlockBusAt
+  },
+  /** Hurtig lille gods-vogn */
+  van: {
+    id: 'van',
+    kind: 'truck',
+    label: 'Varebil',
+    short: 'Varebil',
+    icon: '🚐',
+    desc: 'Hurtig gods, medium last',
+    basePrice: 115,
+    baseCargo: 2,
+    speedMul: 1.12,
+    sizeMul: 1.05,
+    unlockAt: FLEET.unlockVanAt
   }
 };
 

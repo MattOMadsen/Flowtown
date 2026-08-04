@@ -2212,15 +2212,21 @@ export class Game {
         let classFit = 0;
         if (job.type === 'cargo') {
           if (vehicle.classId === 'truck_heavy') classFit = remaining >= 5 ? 55 : 20;
+          else if (vehicle.classId === 'van') classFit = remaining <= 6 ? 40 : 22;
           else if (vehicle.classId === 'truck_std') classFit = 15;
         } else if (job.type === 'express') {
           if (vehicle.classId === 'car_fast') classFit = 70;
+          else if (vehicle.classId === 'van') classFit = 25;
           else if (vehicle.classId === 'car_std') classFit = 10;
+          else if (vehicle.classId === 'bus') classFit = -10; // bus er ikke ekspres
         } else if (job.type === 'tourist') {
-          if (vehicle.classId === 'car_std') classFit = 40;
+          if (vehicle.classId === 'bus') classFit = 65;
+          else if (vehicle.classId === 'car_std') classFit = 40;
           else if (vehicle.classId === 'car_fast') classFit = 35;
         } else {
-          if (vehicle.classId === 'car_fast') classFit = remaining <= 6 ? 50 : 18;
+          // passengers
+          if (vehicle.classId === 'bus') classFit = remaining >= 4 ? 70 : 45;
+          else if (vehicle.classId === 'car_fast') classFit = remaining <= 6 ? 50 : 18;
           else if (vehicle.classId === 'car_std') classFit = 15;
         }
         // Overkill penalty: huge capacity on tiny leftover job

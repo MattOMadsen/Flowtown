@@ -496,17 +496,19 @@ export class Vehicle {
     const s = this.size * dpr;
     const isFast = this.classId === 'car_fast';
     const isHeavy = this.classId === 'truck_heavy';
+    const isBus = this.classId === 'bus';
+    const isVan = this.classId === 'van';
     const rank = this.upgradeRank || 0;
 
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
     ctx.beginPath();
-    ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * (isHeavy ? 1.65 : 1.45), s * (isHeavy ? 0.95 : 0.8), 0, 0, Math.PI * 2);
+    ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * (isBus || isHeavy ? 1.7 : 1.45), s * (isHeavy || isBus ? 0.95 : 0.8), 0, 0, Math.PI * 2);
     ctx.fill();
 
     const sprite = getVehicleSprite(this.classId, this.kind);
     if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-      const sc = (isHeavy ? 2.85 : isFast ? 2.4 : 2.55) * s;
+      const sc = (isBus ? 3.05 : isHeavy ? 2.85 : isVan ? 2.65 : isFast ? 2.4 : 2.55) * s;
       ctx.drawImage(sprite, -sc / 2, -sc / 2, sc, sc);
     } else if (this.kind === 'truck') {
       this.drawTruck(ctx, s, dpr, isHeavy);
@@ -532,11 +534,17 @@ export class Vehicle {
     }
 
     // Class accent ring
-    if (this.fleetOwned && (isFast || isHeavy)) {
-      ctx.strokeStyle = isFast ? 'rgba(244, 63, 94, 0.85)' : 'rgba(68, 64, 60, 0.8)';
+    if (this.fleetOwned && (isFast || isHeavy || isBus || isVan)) {
+      ctx.strokeStyle = isBus
+        ? 'rgba(13, 148, 136, 0.9)'
+        : isVan
+          ? 'rgba(59, 130, 246, 0.85)'
+          : isFast
+            ? 'rgba(244, 63, 94, 0.85)'
+            : 'rgba(68, 64, 60, 0.8)';
       ctx.lineWidth = 1.8 * dpr;
       ctx.beginPath();
-      ctx.arc(0, 0, s * (isHeavy ? 1.7 : 1.5), 0, Math.PI * 2);
+      ctx.arc(0, 0, s * (isBus || isHeavy ? 1.75 : 1.5), 0, Math.PI * 2);
       ctx.stroke();
     }
 

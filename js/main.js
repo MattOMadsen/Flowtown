@@ -19,6 +19,13 @@ import {
   shouldShowTutorial,
   setTutorialDone
 } from './tutorial.js';
+import {
+  getCloudCode,
+  publishToCloud,
+  pullFromCloud,
+  exportPack,
+  importPack
+} from './leaderboard.js';
 
 const canvas = document.getElementById('game');
 const game = new Game(canvas);
@@ -641,6 +648,11 @@ function refreshLbSheet() {
     tabGl.classList.toggle('bg-stone-100', lbTab !== 'global');
     tabGl.classList.toggle('text-stone-700', lbTab !== 'global');
   }
+  const codeEl = document.getElementById('lb-cloud-code');
+  if (codeEl) {
+    const c = getCloudCode();
+    codeEl.textContent = c ? c.slice(0, 12) + (c.length > 12 ? '…' : '') : '—';
+  }
   const list = document.getElementById('lb-list');
   if (!list) return;
   const rows = lbTab === 'global' ? (ui.global || []) : (ui.scenario || []);
@@ -689,10 +701,12 @@ bindTap('lb-save-name', () => {
 });
 bindTap('lb-share', async () => {
   const line = game.getShareScoreLine?.() || '';
+  const pack = exportPack();
+  const text = `${line}\n\nFlowtown-pakke (indsæt under Hent/import):\n${pack}`;
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(line);
-      game.showToast?.('Score kopieret – del med venner!', 2.2);
+      await navigator.clipboard.writeText(text);
+      game.showToast?.('Score + pakke kopieret!', 2.2);
     } else {
       game.showToast?.(line, 3.5);
     }
@@ -700,6 +714,64 @@ bindTap('lb-share', async () => {
     game.showToast?.(line, 3.5);
   }
   playUi();
+});
+
+bindTap('lb-cloud-pub', async () => {
+  playUi();
+  game.showToast?.('Publicerer topscore…', 1.2);
+  const res = await publishToCloud();
+  if (res.ok) {
+    game.showToast?.(`Cloud klar · kode ${String(res.code).slice(0, 10)}…`, 3.2);
+    refreshLbSheet();
+  } else {
+    game.showToast?.(`Cloud fejlede: ${res.error || 'ukendt'}`, 3.0);
+  }
+});
+
+bindTap('lb-cloud-pull', async () => {
+  playUi();
+  game.showToast?.('Henter cloud…', 1.0);
+  const res = await pullFromCloud();
+  if (res.ok) {
+    game.showToast?.(`Hentet · ${res.merged || 0} poster flettet`, 2.6);
+    refreshLbSheet();
+  } else {
+    game.showToast?.(res.error || 'Kunne ikke hente', 2.8);
+  }
+});
+
+bindTap('lb-cloud-use', async () => {
+  playUi();
+  const input = document.getElementById('lb-cloud-input');
+  const raw = (input?.value || '').trim();
+  if (!raw) {
+    game.showToast?.('Indsæt cloud-kode eller pakke', 2.0);
+    return;
+  }
+  // Long base64 pack?
+  if (raw.length > 40) {
+    const imp = importPack(raw);
+    if (imp.ok) {
+      game.showToast?.(`Pakke importeret (${imp.merged || 0})`, 2.4);
+      refreshLbSheet();
+      return;
+    }
+  }
+  const res = await pullFromCloud(raw);
+  if (res.ok) {
+    game.showToast?.('Cloud-kode gemt · scores flettet', 2.6);
+    if (input) input.value = '';
+    refreshLbSheet();
+  } else {
+    // try as pack fallback
+    const imp = importPack(raw);
+    if (imp.ok) {
+      game.showToast?.(`Pakke importeret (${imp.merged || 0})`, 2.4);
+      refreshLbSheet();
+    } else {
+      game.showToast?.(res.error || imp.error || 'Ugyldig kode', 2.8);
+    }
+  }
 });
 
 // Achievements (P2-4)
@@ -921,7 +993,9 @@ function refreshDistrictSheet() {
   if (metaEl) {
     let next = null;
     if (totalUp < 5) next = 5;
+    else if (totalUp < 8) next = 8;
     else if (totalUp < 10) next = 10;
+    else if (totalUp < 15) next = 15;
     metaEl.textContent = next
       ? `Opgraderinger i alt: ${totalUp} · næste bil-unlock ved ${next}`
       : `Opgraderinger i alt: ${totalUp} · alle biltyper ulåst`;
@@ -992,7 +1066,11 @@ function refreshDistrictSheet() {
   if (upEmpty) upEmpty.classList.toggle('hidden', vehicles.length > 0);
   if (upList) {
     upList.innerHTML = vehicles.map(v => {
-      const clsIcon = v.classId === 'car_fast' ? '⚡' : v.classId === 'truck_heavy' ? '🚛' : (v.kind === 'truck' ? '📦' : '👤');
+      const clsIcon = v.classId === 'bus' ? '🚌'
+        : v.classId === 'van' ? '🚐'
+        : v.classId === 'car_fast' ? '⚡'
+        : v.classId === 'truck_heavy' ? '🚛'
+        : (v.kind === 'truck' ? '📦' : '👤');
       const rank = v.upgradeRank || 0;
       const cap = v.getCargoCapacity?.() || 1;
       const maxed = rank >= 3;

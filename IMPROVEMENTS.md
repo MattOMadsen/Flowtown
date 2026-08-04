@@ -73,13 +73,21 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 
 ---
 
+### Cloud + bus/van (04/08)
+- [x] Zoom-grid: **−** hvor Fit før stod (`+ Fit / − %`)
+- [x] Grøn by-hint **over** pan-ned (midt-bund)
+- [x] **P3-4** Cloud topscore via JSONBlob-kode + pakke import/export
+- [x] **Bus** 🚌 (unlock 15) + **varebil** 🚐 (unlock 8) + sprites
+
+---
+
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
 | 1 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
-| 2 | **P3-4 cloud** | Online leaderboard / multiplayer | Backend |
-| 3 | **Bus / flere sprites** | Flåde-variation | Art |
+| 2 | **Ægte multiplayer** | Live session / server | Backend |
+| 3 | **PWA offline** | manifest + service worker | Polish |
 
 ### Hurtige polish der stadig kan give værdi
 - [ ] Tydelig “tryk by for at købe”-hint første minut

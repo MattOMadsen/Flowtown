@@ -16,7 +16,9 @@ const VEHICLE_SRC = {
   car: 'assets/vehicles/car.png',
   truck: 'assets/vehicles/truck.png',
   car_fast: 'assets/vehicles/car_fast.png',
-  truck_heavy: 'assets/vehicles/truck_heavy.png'
+  truck_heavy: 'assets/vehicles/truck_heavy.png',
+  bus: 'assets/vehicles/bus.png',
+  van: 'assets/vehicles/van.png'
 };
 
 const TILE_SRC = {
@@ -78,8 +80,11 @@ export function getPlaceSprite(type, variant = null) {
 
 export function getVehicleSprite(classId, kind) {
   if (classId && vehicleImgs[classId]) return vehicleImgs[classId];
-  if (kind === 'truck') return vehicleImgs.truck || null;
-  return vehicleImgs.car || null;
+  // class id aliases
+  if (classId === 'car_std') return vehicleImgs.car || null;
+  if (classId === 'truck_std') return vehicleImgs.truck || null;
+  if (kind === 'truck') return vehicleImgs.truck || vehicleImgs.van || null;
+  return vehicleImgs.car || vehicleImgs.bus || null;
 }
 
 export function getTileImages() {

@@ -130,3 +130,157 @@ export function clearLeaderboard() {
     localStorage.removeItem(LB_KEY);
   } catch { /* ignore */ }
 }
+
+/* ─── P3-4: simpel cloud via JSONBlob (gratis, ingen API-nøgle) ─── */
+
+const CLOUD_KEY = 'flowtown-cloud-blob-id';
+const JSONBLOB = 'https://jsonblob.com/api/jsonBlob';
+
+export function getCloudCode() {
+  try {
+    return localStorage.getItem(CLOUD_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setCloudCode(id) {
+  try {
+    if (id) localStorage.setItem(CLOUD_KEY, id);
+    else localStorage.removeItem(CLOUD_KEY);
+  } catch { /* ignore */ }
+}
+
+function mergeBoards(a, b) {
+  const map = new Map();
+  for (const e of [...(a || []), ...(b || [])]) {
+    const k = `${e.name}|${e.scenarioId}|${e.score}|${e.stars}|${e.delivered}`;
+    const prev = map.get(k);
+    if (!prev || (e.at | 0) > (prev.at | 0)) map.set(k, e);
+  }
+  return sortEntries([...map.values()]).slice(0, MAX_ENTRIES);
+}
+
+/**
+ * Publish local scores to cloud. Creates or updates blob.
+ * @returns {Promise<{ ok: boolean, code?: string, error?: string }>}
+ */
+export async function publishToCloud() {
+  const data = loadRaw();
+  const payload = {
+    version: 1,
+    app: 'flowtown',
+    updatedAt: Date.now(),
+    global: data.global,
+    byScenario: data.byScenario
+  };
+  const code = getCloudCode();
+  try {
+    if (code) {
+      const res = await fetch(`${JSONBLOB}/${encodeURIComponent(code)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return { ok: true, code };
+    }
+    const res = await fetch(JSONBLOB, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Location: .../jsonBlob/<id>
+    const loc = res.headers.get('Location') || res.headers.get('location') || '';
+    const m = loc.match(/jsonBlob\/([^/?#]+)/i);
+    let id = m ? m[1] : '';
+    if (!id) {
+      try {
+        const j = await res.json();
+        id = j.id || j.blobId || '';
+      } catch { /* ignore */ }
+    }
+    if (!id) throw new Error('Ingen cloud-kode i svar');
+    setCloudCode(id);
+    return { ok: true, code: id };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Pull cloud board and merge into local.
+ * @param {string} [code]
+ * @returns {Promise<{ ok: boolean, merged?: number, error?: string }>}
+ */
+export async function pullFromCloud(code = null) {
+  const id = (code || getCloudCode() || '').trim();
+  if (!id) return { ok: false, error: 'Mangler cloud-kode' };
+  try {
+    const res = await fetch(`${JSONBLOB}/${encodeURIComponent(id)}`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const remote = await res.json();
+    if (!remote || remote.app !== 'flowtown') {
+      // still accept if it has global array
+      if (!Array.isArray(remote?.global)) throw new Error('Ugyldig cloud-data');
+    }
+    const local = loadRaw();
+    local.global = mergeBoards(local.global, remote.global || []);
+    const scen = { ...(local.byScenario || {}) };
+    for (const [k, list] of Object.entries(remote.byScenario || {})) {
+      scen[k] = mergeBoards(scen[k] || [], list || []);
+    }
+    local.byScenario = scen;
+    saveRaw(local);
+    setCloudCode(id);
+    return { ok: true, merged: (remote.global || []).length, code: id };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+}
+
+/** Export compact pack for clipboard (offline fallback) */
+export function exportPack() {
+  const data = loadRaw();
+  const json = JSON.stringify({
+    v: 1,
+    app: 'flowtown',
+    g: data.global,
+    s: data.byScenario
+  });
+  try {
+    return btoa(unescape(encodeURIComponent(json)));
+  } catch {
+    return json;
+  }
+}
+
+export function importPack(raw) {
+  try {
+    let text = String(raw || '').trim();
+    if (!text) return { ok: false, error: 'Tom pakke' };
+    let data;
+    try {
+      data = JSON.parse(decodeURIComponent(escape(atob(text))));
+    } catch {
+      data = JSON.parse(text);
+    }
+    if (!data || (data.app && data.app !== 'flowtown')) {
+      if (!data?.g && !data?.global) return { ok: false, error: 'Ugyldig pakke' };
+    }
+    const local = loadRaw();
+    local.global = mergeBoards(local.global, data.g || data.global || []);
+    const scen = { ...(local.byScenario || {}) };
+    for (const [k, list] of Object.entries(data.s || data.byScenario || {})) {
+      scen[k] = mergeBoards(scen[k] || [], list || []);
+    }
+    local.byScenario = scen;
+    saveRaw(local);
+    return { ok: true, merged: (data.g || data.global || []).length };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'Kunne ikke læse pakke' };
+  }
+}
