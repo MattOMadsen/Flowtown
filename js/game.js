@@ -178,6 +178,9 @@ export class Game {
     this.timeOfDay = 0.35; // 0–1 (0 midnat, 0.25 morgen, 0.5 middag)
     this.weather = 'clear'; // clear | rain | fog
     this.weatherTimer = 0;
+    /** Mission-vejviser: job-id der fremhæves på kortet (null = alle dæmpet) */
+    this.guideJobId = null;
+    this.guideJobUntil = 0;
     this._cityHintShown = false;
     this._cityHintUntil = 0;
     for (const b of this.bots) b.enabled = false;
@@ -1417,6 +1420,96 @@ export class Game {
     return cost;
   }
 
+  /**
+   * Proper segment intersection (not shared endpoint / collinear overlap).
+   * Returns true if segments AB and CD cross properly.
+   */
+  _segmentsCrossProper(ax, ay, bx, by, cx, cy, dx, dy) {
+    const cross = (ox, oy, px, py, qx, qy) => (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
+    const d1 = cross(cx, cy, dx, dy, ax, ay);
+    const d2 = cross(cx, cy, dx, dy, bx, by);
+    const d3 = cross(ax, ay, bx, by, cx, cy);
+    const d4 = cross(ax, ay, bx, by, dx, dy);
+    if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
+      && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * True if stroke crosses an existing road in the middle (not mere T-junction snap).
+   * Endpoints within `endSkip` of either segment are ignored so connecting roads stay flat.
+   */
+  strokeCrossesExistingRoads(points, endSkip = 28) {
+    if (!points || points.length < 2 || !this.roads?.length) return false;
+    const skip = endSkip * Math.max(1, this.dpr || 1);
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+      if (segLen < 4) continue;
+      for (const road of this.roads) {
+        const rp = road.points;
+        if (!rp || rp.length < 2) continue;
+        for (let j = 1; j < rp.length; j++) {
+          const c = rp[j - 1];
+          const d = rp[j];
+          const otherLen = Math.hypot(d.x - c.x, d.y - c.y);
+          if (otherLen < 4) continue;
+          if (!this._segmentsCrossProper(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)) continue;
+          // Intersection point (param on AB)
+          const den = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+          if (Math.abs(den) < 1e-8) continue;
+          const t = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / den;
+          const u = -((a.x - b.x) * (a.y - c.y) - (a.y - b.y) * (a.x - c.x)) / den;
+          if (t < 0.08 || t > 0.92 || u < 0.08 || u > 0.92) continue; // near ends = junction
+          const ix = a.x + t * (b.x - a.x);
+          const iy = a.y + t * (b.y - a.y);
+          // Also skip if very close to any endpoint of either stroke (T-junction)
+          const nearEnd = (p) => Math.hypot(ix - p.x, iy - p.y) < skip;
+          if (nearEnd(a) || nearEnd(b) || nearEnd(c) || nearEnd(d)) continue;
+          if (nearEnd(points[0]) || nearEnd(points[points.length - 1])) continue;
+          if (nearEnd(rp[0]) || nearEnd(rp[rp.length - 1])) continue;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** Vælg mission til vejviser på kortet (fra→til). */
+  setGuideJob(jobId, seconds = 18) {
+    this.guideJobId = jobId != null ? jobId : null;
+    this.guideJobUntil = jobId != null
+      ? (this.sessionTime || 0) + Math.max(4, seconds)
+      : 0;
+    if (jobId != null) {
+      const job = this.jobs.find(j => j.id === jobId && j.active);
+      if (job) {
+        const from = this.districts.find(d => d.name === job.from.name) || job.from;
+        const to = this.districts.find(d => d.name === job.to.name) || job.to;
+        if (from && to) {
+          // Fit kamera omkring ruten (let padding)
+          const midX = (from.x + to.x) / 2;
+          const midY = (from.y + to.y) / 2;
+          const dist = Math.hypot(to.x - from.x, to.y - from.y);
+          const z = Math.max(0.45, Math.min(1.35, (Math.min(this.canvas.width, this.canvas.height) * 0.55) / Math.max(220, dist + 180)));
+          this.camera.zoom = z;
+          this.camera.x = this.canvas.width / 2 - midX * z;
+          this.camera.y = this.canvas.height / 2 - midY * z;
+          this.showToast(`Vejviser: ${from.name} → ${to.name}`);
+        }
+      }
+    }
+    this.requestDraw?.();
+  }
+
+  clearGuideJob() {
+    this.guideJobId = null;
+    this.guideJobUntil = 0;
+  }
+
   /** PROG-B2 shop catalog for UI */
   getShopUi() {
     const d = this.getSelectedDistrict();
@@ -1594,7 +1687,8 @@ export class Game {
       if (!nearCity) pt = this.snapToHex(p.x, p.y, 0.38);
       pt = this.clampToWorld(pt);
       this.currentStroke.push(pt);
-      const isBridge = this.mode === 'bridge';
+      const isBridge = this.mode === 'bridge'
+        || this.strokeCrossesExistingRoads(this.currentStroke);
       this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke, { bridge: isBridge });
     }
     this.updateActiveSnap(p.x, p.y);
@@ -1633,6 +1727,8 @@ export class Game {
     const waterFrac = strokeWaterFraction(points, this.waterBodies);
     const wantBridge = this.mode === 'bridge';
     const crossesWater = waterFrac > 0.08;
+    // Auto-bro når ny vej krydser en eksisterende (ikke bare T-kryds)
+    const crossesRoad = this.strokeCrossesExistingRoads(points);
 
     if (crossesWater && !wantBridge) {
       this.showToast('Over vand: brug Bro-værktøjet');
@@ -1644,8 +1740,8 @@ export class Game {
       return;
     }
 
-    // Bridge without water is just an expensive road (ok) or soft warn
-    const isBridge = wantBridge || crossesWater;
+    // Bro: manuelt værktøj, vand, eller kryds over anden vej
+    const isBridge = wantBridge || crossesWater || crossesRoad;
     const cost = this.estimateStrokeCost(points, { bridge: isBridge });
 
     if (this.money < cost) {
@@ -1659,7 +1755,11 @@ export class Game {
     }
 
     this.addRoadForOwner(points, 'player', null, cost, true, { isBridge });
-    if (isBridge) this.showToast(crossesWater ? 'Bro bygget!' : 'Bro-segment (dyrt)');
+    if (isBridge) {
+      if (crossesWater) this.showToast('Bro bygget over vand!');
+      else if (crossesRoad) this.showToast('Bro over vejen!');
+      else this.showToast('Bro-segment (dyrt)');
+    }
     playRoad();
     this.tryAchievement('first_road');
     this._sessionDirty = true;
@@ -2803,31 +2903,174 @@ export class Game {
   }
 
   drawJobMarkers(ctx) {
+    // Udløb vejviser
+    if (this.guideJobId != null && this.guideJobUntil > 0
+      && (this.sessionTime || 0) > this.guideJobUntil) {
+      this.clearGuideJob();
+    }
+
     const active = this.jobs.filter(j => j.active);
+    const guided = this.guideJobId != null
+      ? active.find(j => j.id === this.guideJobId)
+      : null;
+
     for (const job of active) {
       const from = this.districts.find(d => d.name === job.from.name) || job.from;
       const to = this.districts.find(d => d.name === job.to.name) || job.to;
+      if (!from || !to) continue;
 
       const meta = job.typeMeta || JOB_TYPES[job.type] || JOB_TYPES.passengers;
       const hex = meta.color || '#2563eb';
-      // Dashed route hint
+      const isGuide = guided && job.id === guided.id;
+      // Når vejviser er aktiv: dæmp andre, fremhæv valgte
+      if (guided && !isGuide) {
+        const left = Math.max(0, job.amount - job.delivered);
+        this.drawBadge(ctx, from.x, from.y - from.r - 14 * this.dpr, `${meta.icon}${left}`, 'rgba(120,113,108,0.55)');
+        continue;
+      }
+
+      const alpha = isGuide ? 0.92 : 0.38;
+      const lw = (isGuide ? 4.5 : 2) * this.dpr;
+      const dashOff = isGuide ? -((this.sessionTime || 0) * 48) % 40 : 0;
       ctx.beginPath();
-      ctx.setLineDash([6 * this.dpr, 8 * this.dpr]);
+      ctx.setLineDash(isGuide
+        ? [10 * this.dpr, 8 * this.dpr]
+        : [6 * this.dpr, 8 * this.dpr]);
+      ctx.lineDashOffset = dashOff;
       ctx.strokeStyle = hex.length === 7
-        ? `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},0.38)`
-        : 'rgba(37, 99, 235, 0.35)';
-      ctx.lineWidth = 2 * this.dpr;
+        ? `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${alpha})`
+        : `rgba(37, 99, 235, ${alpha})`;
+      ctx.lineWidth = lw;
+      ctx.lineCap = 'round';
       ctx.moveTo(from.x, from.y);
       ctx.lineTo(to.x, to.y);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
 
-      // Origin badge
+      if (isGuide) {
+        this.drawJobWayfinder(ctx, from, to, hex, meta);
+      }
+
       const left = Math.max(0, job.amount - job.delivered);
       this.drawBadge(ctx, from.x, from.y - from.r - 14 * this.dpr, `${meta.icon}${left}`, hex);
-      // Dest arrow badge
       this.drawBadge(ctx, to.x, to.y - to.r - 14 * this.dpr, '⚑', '#059669');
     }
+  }
+
+  /** Smart vejviser: pulserende FRA/TIL + retningspile langs ruten */
+  drawJobWayfinder(ctx, from, to, hex, meta) {
+    const dpr = this.dpr || 1;
+    const t = this.sessionTime || 0;
+    const pulse = 0.55 + 0.45 * Math.sin(t * 3.2);
+
+    const parseRgb = (h) => {
+      if (!h || h.length !== 7) return [37, 99, 235];
+      return [
+        parseInt(h.slice(1, 3), 16),
+        parseInt(h.slice(3, 5), 16),
+        parseInt(h.slice(5, 7), 16)
+      ];
+    };
+    const [cr, cg, cb] = parseRgb(hex);
+
+    // Glow rings
+    for (const [p, label, col] of [
+      [from, 'FRA', `rgba(${cr},${cg},${cb},`],
+      [to, 'TIL', 'rgba(5,150,105,']
+    ]) {
+      const r0 = (p.r || 28) + 10 * dpr;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r0 + 8 * dpr * pulse, 0, Math.PI * 2);
+      ctx.strokeStyle = `${col}${(0.55 * pulse).toFixed(3)})`;
+      ctx.lineWidth = 3 * dpr;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r0 + 18 * dpr * pulse, 0, Math.PI * 2);
+      ctx.strokeStyle = `${col}${(0.22 * pulse).toFixed(3)})`;
+      ctx.lineWidth = 2 * dpr;
+      ctx.stroke();
+
+      // Label pill
+      ctx.font = `bold ${Math.max(11, 12 * dpr)}px system-ui`;
+      const tw = ctx.measureText(label).width;
+      const padX = 7 * dpr;
+      const ph = 16 * dpr;
+      const pw = tw + padX * 2;
+      const lx = p.x;
+      const ly = p.y + (p.r || 28) + 22 * dpr;
+      ctx.fillStyle = label === 'FRA'
+        ? `rgba(${cr},${cg},${cb},0.92)`
+        : 'rgba(5, 150, 105, 0.92)';
+      ctx.beginPath();
+      const rr = 7 * dpr;
+      const bx = lx - pw / 2;
+      const by = ly - ph / 2;
+      ctx.moveTo(bx + rr, by);
+      ctx.arcTo(bx + pw, by, bx + pw, by + ph, rr);
+      ctx.arcTo(bx + pw, by + ph, bx, by + ph, rr);
+      ctx.arcTo(bx, by + ph, bx, by, rr);
+      ctx.arcTo(bx, by, bx + pw, by, rr);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, lx, ly + 0.5 * dpr);
+    }
+
+    // Chevrons along the line (animated)
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const px = -uy;
+    const py = ux;
+    const n = Math.max(2, Math.min(8, Math.floor(len / (70 * dpr))));
+    const phase = (t * 0.35) % 1;
+    ctx.fillStyle = `rgba(${cr},${cg},${cb},0.85)`;
+    for (let i = 0; i < n; i++) {
+      const u = ((i + 0.5) / n + phase * 0.15) % 1;
+      if (u < 0.08 || u > 0.92) continue;
+      const cx = from.x + ux * len * u;
+      const cy = from.y + uy * len * u;
+      const s = 7 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(cx + ux * s, cy + uy * s);
+      ctx.lineTo(cx - ux * s * 0.55 + px * s * 0.7, cy - uy * s * 0.55 + py * s * 0.7);
+      ctx.lineTo(cx - ux * s * 0.55 - px * s * 0.7, cy - uy * s * 0.55 - py * s * 0.7);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Midt-label med ikon
+    const mx = (from.x + to.x) / 2;
+    const my = (from.y + to.y) / 2;
+    const midLabel = `${meta?.icon || '•'} rute`;
+    ctx.font = `bold ${Math.max(11, 11.5 * dpr)}px system-ui`;
+    const mtw = ctx.measureText(midLabel).width;
+    const mpad = 6 * dpr;
+    const mh = 18 * dpr;
+    const mw = mtw + mpad * 2;
+    ctx.fillStyle = 'rgba(28, 25, 23, 0.78)';
+    ctx.beginPath();
+    {
+      const rr = 8 * dpr;
+      const bx = mx - mw / 2;
+      const by = my - mh / 2 - 12 * dpr;
+      ctx.moveTo(bx + rr, by);
+      ctx.arcTo(bx + mw, by, bx + mw, by + mh, rr);
+      ctx.arcTo(bx + mw, by + mh, bx, by + mh, rr);
+      ctx.arcTo(bx, by + mh, bx, by, rr);
+      ctx.arcTo(bx, by, bx + mw, by, rr);
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.fillStyle = '#fafaf9';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(midLabel, mx, my - 12 * dpr + 0.5 * dpr);
   }
 
   drawBadge(ctx, x, y, text, color) {
@@ -3251,38 +3494,42 @@ export class Game {
     });
   }
 
-  /** P3-1: soft day/night + weather overlay (screen space) */
+  /** P3-1: soft day/night + weather overlay (screen space). Hold alphas lave – undgå “hvidt skær”. */
   drawAtmosphereOverlay(ctx, w, h) {
     const t = this.timeOfDay ?? 0.4;
-    // Night darkness: peak at midnight (0 and 1)
+    // Night darkness: peak at midnight (0 and 1) – dæmpet så spillet ikke gråner
     const night = Math.max(0, Math.cos((t - 0.5) * Math.PI * 2));
-    const dark = Math.pow(Math.max(0, night - 0.15), 1.2) * 0.42;
-    if (dark > 0.02) {
+    const dark = Math.pow(Math.max(0, night - 0.22), 1.35) * 0.26;
+    if (dark > 0.03) {
       ctx.fillStyle = `rgba(15, 23, 42, ${dark.toFixed(3)})`;
       ctx.fillRect(0, 0, w, h);
-      // Soft warm windows at night
-      if (dark > 0.18) {
-        ctx.fillStyle = `rgba(251, 191, 36, ${(dark * 0.06).toFixed(3)})`;
-        ctx.fillRect(0, 0, w, h * 0.35);
+      // Meget blød varm top – ingen guld-slør over hele skærmen
+      if (dark > 0.14) {
+        ctx.fillStyle = `rgba(251, 191, 36, ${(dark * 0.025).toFixed(3)})`;
+        ctx.fillRect(0, 0, w, h * 0.22);
       }
     }
-    // Dawn / dusk tint
+    // Dawn / dusk tint (svag)
     if (t > 0.2 && t < 0.35) {
-      const a = (1 - Math.abs(t - 0.28) / 0.1) * 0.12;
-      ctx.fillStyle = `rgba(251, 146, 60, ${Math.max(0, a).toFixed(3)})`;
-      ctx.fillRect(0, 0, w, h);
+      const a = (1 - Math.abs(t - 0.28) / 0.1) * 0.06;
+      if (a > 0.01) {
+        ctx.fillStyle = `rgba(251, 146, 60, ${a.toFixed(3)})`;
+        ctx.fillRect(0, 0, w, h);
+      }
     } else if (t > 0.62 && t < 0.78) {
-      const a = (1 - Math.abs(t - 0.7) / 0.1) * 0.14;
-      ctx.fillStyle = `rgba(244, 114, 182, ${Math.max(0, a).toFixed(3)})`;
-      ctx.fillRect(0, 0, w, h);
+      const a = (1 - Math.abs(t - 0.7) / 0.1) * 0.07;
+      if (a > 0.01) {
+        ctx.fillStyle = `rgba(244, 114, 182, ${a.toFixed(3)})`;
+        ctx.fillRect(0, 0, w, h);
+      }
     }
     if (this.weather === 'rain') {
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.06)';
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.035)';
       ctx.fillRect(0, 0, w, h);
       const dpr = this.dpr || 1;
-      ctx.strokeStyle = 'rgba(186, 230, 253, 0.35)';
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.28)';
       ctx.lineWidth = 1.2 * dpr;
-      const n = 28;
+      const n = 22;
       const seed = ((this.sessionTime || 0) * 40) | 0;
       for (let i = 0; i < n; i++) {
         const x = ((i * 97 + seed * 3) % 1000) / 1000 * w;
@@ -3293,11 +3540,14 @@ export class Game {
         ctx.stroke();
       }
     } else if (this.weather === 'fog') {
-      ctx.fillStyle = 'rgba(226, 232, 240, 0.18)';
-      ctx.fillRect(0, 0, w, h);
-      const g = ctx.createRadialGradient(w * 0.5, h * 0.55, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.55);
-      g.addColorStop(0, 'rgba(241, 245, 249, 0.05)');
-      g.addColorStop(1, 'rgba(148, 163, 184, 0.22)');
+      // Kun kant-slør – undgå flad hvid film midt på skærmen
+      const g = ctx.createRadialGradient(
+        w * 0.5, h * 0.5, Math.min(w, h) * 0.22,
+        w * 0.5, h * 0.5, Math.max(w, h) * 0.62
+      );
+      g.addColorStop(0, 'rgba(241, 245, 249, 0)');
+      g.addColorStop(0.55, 'rgba(226, 232, 240, 0.04)');
+      g.addColorStop(1, 'rgba(148, 163, 184, 0.12)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
     }

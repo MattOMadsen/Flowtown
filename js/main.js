@@ -677,6 +677,7 @@ function renderJobs() {
     list.innerHTML = '<li class="text-stone-400 italic">Ingen endnu…</li>';
     return;
   }
+  const guideId = game.guideJobId;
   list.innerHTML = jobs.map(j => {
     const pct = Math.round(j.progress * 100);
     let barColor = 'bg-blue-500';
@@ -684,8 +685,9 @@ function renderJobs() {
     else if (j.type === 'express') barColor = 'bg-pink-500';
     else if (j.type === 'tourist') barColor = 'bg-violet-500';
     const head = `${j.icon || ''} ${j.remaining ?? '?'} ${j.unit || ''}`.trim();
+    const sel = guideId != null && j.id === guideId ? ' job-item--guide' : '';
     return `
-      <li class="job-item">
+      <li class="job-item${sel}" data-job-id="${j.id}" role="button" tabindex="0" title="Vis vejviser på kortet">
         <div class="job-item-top">
           <span class="job-item-head">${escapeHtml(head)}</span>
           <span class="job-item-pay">$${j.reward}</span>
@@ -698,9 +700,28 @@ function renderJobs() {
         <div class="job-item-bar">
           <div class="${barColor} h-full transition-all duration-300" style="width:${pct}%"></div>
         </div>
-        <div class="job-item-meta">${j.delivered || 0}/${j.amount || 0} leveret · ${pct}%</div>
+        <div class="job-item-meta">${j.delivered || 0}/${j.amount || 0} leveret · ${pct}% · tryk = vejviser</div>
       </li>`;
   }).join('');
+
+  list.querySelectorAll('.job-item[data-job-id]').forEach(el => {
+    const activate = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = Number(el.getAttribute('data-job-id'));
+      if (!Number.isFinite(id)) return;
+      if (game.guideJobId === id) {
+        game.clearGuideJob();
+      } else {
+        game.setGuideJob(id, 20);
+      }
+      renderJobs();
+    };
+    el.addEventListener('click', activate);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') activate(e);
+    });
+  });
 }
 
 function renderBots() {

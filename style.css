@@ -611,6 +611,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  cursor: pointer;
+  border-radius: 0.55rem;
+  padding: 0.28rem 0.35rem;
+  margin: 0 -0.2rem;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.job-item:hover,
+.job-item:focus-visible {
+  background: rgba(14, 116, 144, 0.08);
+  outline: none;
+}
+.job-item--guide {
+  background: rgba(14, 116, 144, 0.12);
+  box-shadow: inset 0 0 0 1.5px rgba(14, 116, 144, 0.45);
 }
 .job-item-top {
   display: flex;

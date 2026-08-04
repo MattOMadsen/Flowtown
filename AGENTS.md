@@ -78,6 +78,7 @@ Distrikter (ca.):
 | 2026-08-04 | Opgaver-dropdown viste kun ét bynavn | Ingen `truncate` på job; 2 linjer (mængde + A→B); bredere dropdown |
 | 2026-08-04 | Bil kørte “tilbage med last” | `parkIdle` cargo=0; hent tom → last ved afsender → lever; ikon kun når loaded |
 | 2026-08-04 | Biler kørte sidelæns / i firkanter | Top-down sprite næse = op; draw med +π/2; tight-crop sprites |
+| 2026-08-04 | Lyst/hvidt skær over skærm efter tid | Atmosphere fog+guld for stærk – lavere alpha, kun kant-tåge |
 
 Når du retter en bruger-rapporteret bug: **tilføj en række** i tabellen ovenfor.
 
