@@ -62,6 +62,8 @@ const btnDraw = document.getElementById('btn-draw');
 const btnErase = document.getElementById('btn-erase');
 const btnUpgrade = document.getElementById('btn-upgrade');
 const btnBridge = document.getElementById('btn-bridge');
+const btnOneway = document.getElementById('btn-oneway');
+const btnLight = document.getElementById('btn-light');
 const btnBots = document.getElementById('btn-bots');
 const botPanel = document.getElementById('bot-panel');
 const hudEl = document.getElementById('ui');
@@ -77,12 +79,16 @@ function setMode(mode) {
     btn.classList.toggle('ring-rose-500', on && color === 'rose');
     btn.classList.toggle('ring-sky-500', on && color === 'sky');
     btn.classList.toggle('ring-cyan-500', on && color === 'cyan');
+    btn.classList.toggle('ring-amber-500', on && color === 'amber');
+    btn.classList.toggle('ring-violet-500', on && color === 'violet');
     btn.classList.toggle('is-active', on);
   };
   ring(btnDraw, mode === 'draw', 'emerald');
   ring(btnErase, mode === 'erase', 'rose');
   ring(btnUpgrade, mode === 'upgrade', 'sky');
   ring(btnBridge, mode === 'bridge', 'cyan');
+  ring(btnOneway, mode === 'oneway', 'amber');
+  ring(btnLight, mode === 'light', 'violet');
   canvas.style.cursor =
     (mode === 'draw' || mode === 'bridge') ? 'crosshair' : 'pointer';
 }
@@ -91,6 +97,8 @@ btnDraw.addEventListener('click', () => setMode('draw'));
 btnErase.addEventListener('click', () => setMode('erase'));
 if (btnUpgrade) btnUpgrade.addEventListener('click', () => setMode('upgrade'));
 if (btnBridge) btnBridge.addEventListener('click', () => setMode('bridge'));
+if (btnOneway) btnOneway.addEventListener('click', () => setMode('oneway'));
+if (btnLight) btnLight.addEventListener('click', () => setMode('light'));
 setMode('draw');
 
 // HUD offset for pan arrows / bot panel (menu forsvinder IKKE automatisk)
@@ -536,6 +544,48 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Achievements (P2-4)
+const achieveSheet = document.getElementById('achieve-sheet');
+let achieveOpen = false;
+
+function setAchieveOpen(on) {
+  achieveOpen = !!on;
+  if (!achieveSheet) return;
+  achieveSheet.classList.toggle('hidden', !achieveOpen);
+  if (achieveOpen) {
+    setShopOpen(false);
+    if (districtSheet) districtSheet.classList.add('hidden');
+    refreshAchieveSheet();
+  }
+}
+
+function refreshAchieveSheet() {
+  if (!achieveSheet || !achieveOpen) return;
+  const prog = game.getAchievementsUi?.() || { unlocked: 0, total: 0, list: [] };
+  const sub = document.getElementById('achieve-sub');
+  if (sub) sub.textContent = `${prog.unlocked}/${prog.total} ulåst`;
+  const list = document.getElementById('achieve-list');
+  if (!list) return;
+  list.innerHTML = (prog.list || []).map(a => `
+    <div class="flex gap-2 items-start p-2.5 rounded-xl border ${
+      a.done ? 'border-amber-200 bg-amber-50' : 'border-stone-200 bg-stone-50 opacity-75'
+    }">
+      <span class="text-xl shrink-0">${a.done ? a.icon : '🔒'}</span>
+      <div class="min-w-0 flex-1">
+        <div class="text-sm font-semibold text-stone-800">${escapeHtml(a.title)}</div>
+        <div class="text-[11px] text-stone-500">${escapeHtml(a.desc)}</div>
+      </div>
+      <span class="text-[10px] font-bold tabular-nums ${a.done ? 'text-amber-700' : 'text-stone-400'}">+${a.xp} XP</span>
+    </div>
+  `).join('');
+}
+
+bindTap('btn-achieve', () => {
+  playUi();
+  setAchieveOpen(!achieveOpen);
+});
+bindTap('achieve-close', () => setAchieveOpen(false));
+
 // Global shop (PROG-B2)
 const shopSheet = document.getElementById('shop-sheet');
 let shopOpen = false;
@@ -547,6 +597,7 @@ function setShopOpen(on) {
   if (shopOpen) {
     // Skjul by-sheet visuelt, men behold valgt by (til station/lager/depot)
     if (districtSheet) districtSheet.classList.add('hidden');
+    if (achieveOpen) setAchieveOpen(false);
     refreshShopSheet();
   }
 }
@@ -659,10 +710,14 @@ function refreshDistrictSheet() {
     districtSheet.classList.add('hidden');
     return;
   }
-  // By-tap mens shop er åben: skift til by-sheet
+  // By-tap mens shop/achievements er åben: skift til by-sheet
   if (shopOpen) {
     shopOpen = false;
     if (shopSheet) shopSheet.classList.add('hidden');
+  }
+  if (achieveOpen) {
+    achieveOpen = false;
+    if (achieveSheet) achieveSheet.classList.add('hidden');
   }
   districtSheet.classList.remove('hidden');
   setDsTab(dsTab);
@@ -897,6 +952,7 @@ setInterval(() => {
   renderBots();
   refreshDistrictSheet();
   if (shopOpen) refreshShopSheet();
+  if (achieveOpen) refreshAchieveSheet();
   refreshGoalsUi();
   refreshZoomLabel();
   updateHudOffset();

@@ -46,7 +46,9 @@ export function serializeSession(game) {
       owner: r.owner || 'player',
       lanes: r.lanes || 2,
       isBridge: !!r.isBridge,
-      paidCost: r.paidCost || 0
+      paidCost: r.paidCost || 0,
+      oneWay: r.oneWay === -1 || r.oneWay === 1 ? r.oneWay : 0,
+      hasLight: !!r.hasLight
     }));
 
   const jobs = (game.jobs || [])

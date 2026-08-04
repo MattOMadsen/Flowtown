@@ -54,19 +54,22 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **P2-3** Station / lager / depot på by (demand + assign-bonus), ikoner på kort
 - [x] Pan-ned flyttet væk fra minimap (bottom-left, ikke midt på kort)
 
+### Safe-area + trafik + trophies (04/08 P0-5 / P2-1 / P2-4)
+- [x] **P0-5** `viewport-fit=cover`, safe-area CSS-vars, zoom/pan/HUD/sheets respekterer notch/home
+- [x] **P2-1** Envejs (➡️ cycle) + trafiklys (🚦) med bil-respekt og gem i session
+- [x] **P2-4** Achievements (🏆): 15 badges, XP + toast, localStorage
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **P0-5** | Safe-area polish (notch/home) | Delvist `env(safe-area-*)` |
-| 2 | **P2-1** | Trafiklys / envejsveje | Valgfrit tool |
-| 3 | **P2-4** | Achievements | localStorage flags |
-| 4 | **P3-2** | Stærkere bot-AI | bot.js |
-| 5 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
-| 6 | **P3-3/4** | Multiplayer / leaderboard | Backend |
-| 7 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
+| 1 | **P3-2** | Stærkere bot-AI | bot.js |
+| 2 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
+| 3 | **P2-4 polish** | End-of-run celebratory + first-minute hint | UX |
+| 4 | **P3-3/4** | Multiplayer / leaderboard | Backend |
+| 5 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
 
 ### Hurtige polish der stadig kan give værdi
 - [ ] Tydelig “tryk by for at købe”-hint første minut
@@ -84,7 +87,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | P0-2 | ~~Minimap + fit all~~ | Done (+ viewport-fix 04/08) |
 | P0-3 | ~~Bedre pathfinding~~ | Done – kan altid finpudses |
 | P0-4 | ~~Tydeligere snap-feedback~~ | Done 2026-08-04 |
-| P0-5 | Safe-area padding | Delvist `env(safe-area-inset-*)` |
+| P0-5 | ~~Safe-area padding~~ | Done 2026-08-04 |
 
 ## P0+ – Spil-kerne (se DESIGN-PROGRESSION.md)
 

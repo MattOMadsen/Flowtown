@@ -30,7 +30,9 @@ export function defaultMeta() {
     /** Extra fleet slots bought with $ (F3) */
     extraFleetSlots: 0,
     /** PROG-B2: one-time shop buffs { roads_cheap: true, ... } */
-    shopOwned: {}
+    shopOwned: {},
+    /** P2-4: achievement id → { at } */
+    achievements: {}
   };
 }
 
@@ -56,7 +58,8 @@ export function loadMeta() {
         ? data.scenarioStars
         : {},
       extraFleetSlots: Math.max(0, Math.min(4, parseInt(data.extraFleetSlots, 10) || 0)),
-      shopOwned: data.shopOwned && typeof data.shopOwned === 'object' ? data.shopOwned : {}
+      shopOwned: data.shopOwned && typeof data.shopOwned === 'object' ? data.shopOwned : {},
+      achievements: data.achievements && typeof data.achievements === 'object' ? data.achievements : {}
     };
   } catch {
     return defaultMeta();
@@ -76,7 +79,8 @@ export function saveMeta(meta) {
       unlockedClasses: meta.unlockedClasses || ['car_std', 'truck_std'],
       scenarioStars: meta.scenarioStars || {},
       extraFleetSlots: meta.extraFleetSlots || 0,
-      shopOwned: meta.shopOwned || {}
+      shopOwned: meta.shopOwned || {},
+      achievements: meta.achievements || {}
     }));
   } catch {
     /* private mode / quota */

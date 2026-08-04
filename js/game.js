@@ -44,6 +44,10 @@ import {
   hasShopBuff,
   BUILDING_META
 } from './shop.js';
+import {
+  unlockAchievement,
+  achievementProgress
+} from './achievements.js';
 
 const START_MONEY = 1400;
 const MAX_JOBS = 5;
@@ -331,7 +335,9 @@ export class Game {
         owner: r.owner || 'player',
         lanes: r.lanes != null ? r.lanes : 2,
         isBridge: !!r.isBridge,
-        paidCost: r.paidCost || 0
+        paidCost: r.paidCost || 0,
+        oneWay: r.oneWay === -1 || r.oneWay === 1 ? r.oneWay : 0,
+        hasLight: !!r.hasLight
       });
       if (r.id) road.id = r.id;
       this.roads.push(road);
@@ -453,6 +459,7 @@ export class Game {
     if (improved) {
       this.grantXp(12 + stars * 18, { silent: false });
       this.showToast(`${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} gemt!`, 2.8);
+      if (stars >= 1) this.tryAchievement('star_1');
     }
     if (stars >= 3) this.runEnded = true;
     if (force) this.runEnded = true;
@@ -546,6 +553,7 @@ export class Game {
     this.addFloatText(v.x, v.y - 10, `+$${refund}`, '#15803d');
     this.showToast(`Solgt ${cls.icon} ${cls.short} · +$${refund}`);
     playBuy();
+    this.tryAchievement('sell_car');
     this._sessionDirty = true;
     return { ok: true, refund };
   }
@@ -735,6 +743,9 @@ export class Game {
     this.addFloatText(d.x, d.y - d.r, `−$${price}`, '#b91c1c');
     this.showToast(`${cls.icon} ${cls.label} købt i ${d.name}`);
     playBuy();
+    this.tryAchievement('first_car');
+    if (this.getPlayerFleet().length >= 5) this.tryAchievement('fleet_5');
+    if (this.money >= 1500) this.tryAchievement('money_500');
     this.assignFleetJobs();
     this._sessionDirty = true;
     return { ok: true, vehicle: v, price };
@@ -797,6 +808,118 @@ export class Game {
 
   setMode(mode) {
     this.mode = mode;
+  }
+
+  /**
+   * P2-4: unlock achievement once; toast + small XP.
+   * @returns {boolean} newly unlocked
+   */
+  tryAchievement(id) {
+    const def = unlockAchievement(this.meta, id);
+    if (!def) return false;
+    saveMeta(this.meta);
+    if (def.xp) this.grantXp(def.xp, { silent: true });
+    this.showToast(`${def.icon} Achievement: ${def.title}`, 2.8);
+    return true;
+  }
+
+  getAchievementsUi() {
+    return achievementProgress(this.meta);
+  }
+
+  /** P2-1: cycle one-way on tapped road */
+  setOneWayNear(screenX, screenY) {
+    const hit = this._hitPlayerRoad(screenX, screenY);
+    if (!hit) {
+      this.showToast('Tryk på din vej for envejs');
+      return false;
+    }
+    const road = hit.road;
+    const cost = 22;
+    // free to clear one-way
+    const next = road.oneWay === 0 ? 1 : road.oneWay === 1 ? -1 : 0;
+    if (next !== 0 && this.money < cost) {
+      this.showToast(`Ikke råd (mangler $${cost - Math.floor(this.money)})`);
+      playError();
+      return false;
+    }
+    if (next !== 0) {
+      this.money -= cost;
+      this.addFloatText(hit.point.x, hit.point.y - 12, `Envejs −$${cost}`, '#2563eb');
+    } else {
+      this.addFloatText(hit.point.x, hit.point.y - 12, 'Tovejs', '#57534e');
+    }
+    road.oneWay = next;
+    const msg = next === 0 ? 'Tovejs igen' : next === 1 ? 'Envejs →' : 'Envejs ←';
+    this.showToast(msg);
+    playRoad();
+    if (next !== 0) this.tryAchievement('oneway');
+    this._sessionDirty = true;
+    this.requestDraw();
+    return true;
+  }
+
+  /** P2-1: toggle traffic light on road */
+  toggleLightNear(screenX, screenY) {
+    const hit = this._hitPlayerRoad(screenX, screenY);
+    if (!hit) {
+      this.showToast('Tryk på din vej for trafiklys');
+      return false;
+    }
+    const road = hit.road;
+    if (road.hasLight) {
+      road.hasLight = false;
+      road.lightPhase = 0;
+      this.addFloatText(hit.point.x, hit.point.y - 12, 'Lys fjernet', '#57534e');
+      this.showToast('Trafiklys fjernet');
+    } else {
+      const cost = 38;
+      if (this.money < cost) {
+        this.showToast(`Ikke råd (mangler $${cost - Math.floor(this.money)})`);
+        playError();
+        return false;
+      }
+      this.money -= cost;
+      road.hasLight = true;
+      road.lightPhase = 0;
+      this.addFloatText(hit.point.x, hit.point.y - 12, `🚦 −$${cost}`, '#16a34a');
+      this.showToast('Trafiklys sat');
+      this.tryAchievement('traffic_light');
+    }
+    playRoad();
+    this._sessionDirty = true;
+    this.requestDraw();
+    return true;
+  }
+
+  _hitPlayerRoad(screenX, screenY, maxDistCss = 48) {
+    const p = this.screenToWorld(screenX, screenY);
+    let best = null;
+    let bestDist = maxDistCss * this.dpr;
+    for (const road of this.roads) {
+      if (road.owner !== 'player') continue;
+      const c = road.closestPoint(p.x, p.y);
+      if (c.dist < bestDist) {
+        bestDist = c.dist;
+        best = { road, point: c.point, t: c.t };
+      }
+    }
+    return best;
+  }
+
+  /** Update traffic light phases (global cycle with per-road offset) */
+  tickTrafficLights() {
+    const t = this.sessionTime || 0;
+    // 10s cycle: green 6, yellow 1.2, red 2.8
+    for (const road of this.roads) {
+      if (!road.hasLight) continue;
+      let h = 0;
+      for (let i = 0; i < (road.id || '').length; i++) h = (h + road.id.charCodeAt(i) * 17) % 97;
+      const phaseT = (t + h * 0.11) % 10;
+      if (phaseT < 6) road.lightPhase = 0;
+      else if (phaseT < 7.2) road.lightPhase = 1;
+      else road.lightPhase = 2;
+    }
   }
 
   setBotsEnabled(on) {
@@ -1028,6 +1151,7 @@ export class Game {
       this.addFloatText(d.x, d.y - d.r, `${item.icon} ${item.label}`, BUILDING_META[item.building]?.color || '#0f766e');
       this.showToast(`${item.icon} ${item.label} i ${d.name} (−$${item.price})`);
       playBuy();
+      this.tryAchievement('builder');
       this._sessionDirty = true;
       this.requestDraw();
       return { ok: true, building: item.building, district: d };
@@ -1074,6 +1198,14 @@ export class Game {
       this.upgradeRoadNear(x, y);
       return;
     }
+    if (this.mode === 'oneway') {
+      this.setOneWayNear(x, y);
+      return;
+    }
+    if (this.mode === 'light') {
+      this.toggleLightNear(x, y);
+      return;
+    }
     const p = this.clampToWorld(this.screenToWorld(x, y));
     if (!this.isOnBoard(p)) {
       this.currentStroke = null;
@@ -1091,7 +1223,8 @@ export class Game {
    * Start a road from a district hub edge toward the pointer (easy connect).
    */
   beginStrokeFromDistrict(district, screenX, screenY) {
-    if (!district || this.mode === 'pan' || this.mode === 'erase' || this.mode === 'upgrade') return;
+    if (!district || this.mode === 'pan' || this.mode === 'erase' || this.mode === 'upgrade'
+      || this.mode === 'oneway' || this.mode === 'light') return;
     const aim = this.clampToWorld(this.screenToWorld(screenX, screenY));
     const ang = Math.atan2(aim.y - district.y, aim.x - district.x);
     const edge = {
@@ -1121,7 +1254,8 @@ export class Game {
   }
 
   continueStroke(x, y) {
-    if (this.mode === 'erase' || this.mode === 'upgrade' || !this.currentStroke) return;
+    if (this.mode === 'erase' || this.mode === 'upgrade' || this.mode === 'oneway'
+      || this.mode === 'light' || !this.currentStroke) return;
     const raw = this.screenToWorld(x, y);
     // Stop extending far outside board
     if (!this.isOnBoard(raw) && !this.isOnBoard(this.clampToWorld(raw))) {
@@ -1145,7 +1279,8 @@ export class Game {
   }
 
   endStroke() {
-    if (this.mode === 'erase' || this.mode === 'upgrade' || !this.currentStroke || this.currentStroke.length < 2) {
+    if (this.mode === 'erase' || this.mode === 'upgrade' || this.mode === 'oneway'
+      || this.mode === 'light' || !this.currentStroke || this.currentStroke.length < 2) {
       this.currentStroke = null;
       this.pendingRoadCost = 0;
       this.clearActiveSnap();
@@ -1204,6 +1339,7 @@ export class Game {
     this.addRoadForOwner(points, 'player', null, cost, true, { isBridge });
     if (isBridge) this.showToast(crossesWater ? 'Bro bygget!' : 'Bro-segment (dyrt)');
     playRoad();
+    this.tryAchievement('first_road');
     this._sessionDirty = true;
     this.currentStroke = null;
     this.pendingRoadCost = 0;
@@ -1237,6 +1373,7 @@ export class Game {
     if (owner === 'player') {
       this.checkFirstLinks();
       this.refreshGoals();
+      if (this.allPlacesHaveRoad()) this.tryAchievement('connect_all');
     }
     return true;
   }
@@ -1340,6 +1477,7 @@ export class Game {
         3.2
       );
       playLevelUp();
+      if (result.level >= 3) this.tryAchievement('level_3');
     } else if (opts.toast) {
       this.showToast(opts.toast, 2.0);
     }
@@ -1485,7 +1623,9 @@ export class Game {
         ownerColor: road.ownerColor,
         lanes: road.lanes,
         isBridge: road.isBridge,
-        paidCost: Math.round((road.paidCost || 0) * frac)
+        paidCost: Math.round((road.paidCost || 0) * frac),
+        oneWay: road.oneWay || 0,
+        hasLight: !!road.hasLight
       }));
     };
 
@@ -1744,6 +1884,7 @@ export class Game {
       this.addFloatText(district.x, district.y - district.r, `By vokser ${g}`, '#0d9488');
       if (g >= 3) this.showToast(`${district.name} vokser (størrelse ${g})`, 2.0);
     }
+    if (g >= 3) this.tryAchievement('growth_3');
     return true;
   }
 
@@ -2011,6 +2152,13 @@ export class Game {
       this.playerScore += reward;
       this.playerDelivered += applied;
       this.arrivedCount++;
+      this.tryAchievement('first_delivery');
+      if (jobJustCompleted) {
+        this.tryAchievement('first_job');
+        if (this.rushActive) this.tryAchievement('rush_job');
+      }
+      if (this.money >= 1500) this.tryAchievement('money_500');
+      if ((this.meta?.level || 1) >= 3) this.tryAchievement('level_3');
       if (this.arrivedCount > this.sessionBest) this.sessionBest = this.arrivedCount;
       if (this.arrivedCount > this.allTimeBest) {
         this.allTimeBest = this.arrivedCount;
@@ -2076,9 +2224,10 @@ export class Game {
       if (this.toastTimer <= 0) this.toast = null;
     }
 
-    // P1-3 rush hour + P1-4 growth
+    // P1-3 rush hour + P1-4 growth + P2-1 lights
     this.tickRushHour(dt);
     this.tickDistrictGrowth(dt);
+    this.tickTrafficLights();
 
     // Jobs (faster spawn during rush)
     this.jobTimer += dt;
@@ -2637,7 +2786,9 @@ export class Game {
     const mapW = mapCssW * dpr;
     const mapH = mapCssH * dpr;
     const mx = (w - mapW) / 2;
-    const my = h - mapH - Math.max(24, 18) * dpr;
+    // Lidt ekstra luft over home-indikator / safe-bottom
+    const safeBotCss = 12;
+    const my = h - mapH - Math.max(28, 20 + safeBotCss) * dpr;
 
     // Ens scale i x/y – bræt fylder panelet (evt. lille padding)
     const pad = 3 * dpr;

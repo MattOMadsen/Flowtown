@@ -178,6 +178,9 @@ export class Vehicle {
 
   /** True if reverse travel from t gets closer to target than forward */
   _preferReverse(road, t) {
+    // Envejs: retning er låst
+    if (road?.oneWay === 1) return false;
+    if (road?.oneWay === -1) return true;
     if (!this.target) return false;
     const tx = this.target.x;
     const ty = this.target.y;
@@ -231,7 +234,16 @@ export class Vehicle {
         const lookRev = r.getPointAt(Math.max(0.02, tEnter - 0.12));
         const distFwd = Math.hypot(tx - lookFwd.x, ty - lookFwd.y);
         const distRev = Math.hypot(tx - lookRev.x, ty - lookRev.y);
-        const goForward = distFwd <= distRev;
+        let goForward = distFwd <= distRev;
+        // Envejs begrænser retning
+        if (r.oneWay === 1) goForward = true;
+        else if (r.oneWay === -1) goForward = false;
+        else if (r.allowsDirection && !r.allowsDirection(!goForward)) {
+          goForward = !goForward;
+          if (r.allowsDirection && !r.allowsDirection(!goForward)) continue;
+        }
+        if (r.allowsDirection && !r.allowsDirection(!goForward)) continue;
+
         const look = goForward ? lookFwd : lookRev;
         const progressAfter = goForward
           ? Math.min(0.97, tEnter + 0.02)
@@ -251,6 +263,8 @@ export class Vehicle {
         const densityPenalty = dens * 6;
         const ownerBonus = r.owner === this.owner ? 20 : 0;
         const endpointBonus = (c.t < 0.08 || c.t > 0.92) ? 25 : 0;
+        // Rødt lys: undgå vejen midlertidigt
+        const lightPenalty = r.isLightRed?.() ? 80 : 0;
 
         const score =
           directionScore * 160 +
@@ -258,7 +272,8 @@ export class Vehicle {
           d * 1.5 -
           densityPenalty +
           ownerBonus +
-          endpointBonus;
+          endpointBonus -
+          lightPenalty;
 
         if (score > bestScore) {
           bestScore = score;
@@ -378,6 +393,20 @@ export class Vehicle {
     // 2-spor: mindre opbremsning ved tæt trafik
     const laneEase = this.currentRoad?.lanes >= 2 ? 0.55 : 1;
     this.speed = this.baseSpeed * Math.max(0.14, 1 - nearby * 0.13 * laneEase);
+    // Envejs: korrektér ulovlig retning
+    if (this.currentRoad.oneWay === 1 && this.reverse) this.reverse = false;
+    if (this.currentRoad.oneWay === -1 && !this.reverse) this.reverse = true;
+    // Trafiklys: stop nær midten ved rødt
+    if (this.currentRoad.hasLight && this.currentRoad.isLightRed?.()) {
+      const t = this.progress;
+      const approaching =
+        (!this.reverse && t > 0.35 && t < 0.52) ||
+        (this.reverse && t < 0.65 && t > 0.48);
+      if (approaching || (t > 0.45 && t < 0.55)) {
+        this.speed *= 0.04;
+        this.idleTime += dt * 0.35;
+      }
+    }
     if (nearby >= (this.currentRoad?.lanes >= 2 ? 6 : 4)) this.idleTime += dt;
     else this.idleTime = Math.max(0, this.idleTime - dt * 0.5);
     this.stuck = this.idleTime > 8;
@@ -419,13 +448,22 @@ export class Vehicle {
       if (next) {
         this.attachToRoad(next.road, next.t, !!next.reverse, true);
       } else {
-        // U-turn on same road (animated via blend + reverse flip)
-        if (!this._triedReverse) {
+        // U-turn on same road (kun hvis tovejs tillader det)
+        const canUturn = !this.currentRoad.oneWay ||
+          this.currentRoad.allowsDirection?.(!this.reverse);
+        if (!this._triedReverse && canUturn) {
           this._triedReverse = true;
           const newReverse = !this.reverse;
-          const t = clampTravelT(this.progress);
-          this.attachToRoad(this.currentRoad, t, newReverse, true);
-          this._turnTimer = 0.12;
+          if (this.currentRoad.allowsDirection && !this.currentRoad.allowsDirection(newReverse)) {
+            this._triedReverse = false;
+          } else {
+            const t = clampTravelT(this.progress);
+            this.attachToRoad(this.currentRoad, t, newReverse, true);
+            this._turnTimer = 0.12;
+          }
+        } else if (!this._triedReverse) {
+          this._triedReverse = true; // skip illegal U-turn once
+          this.pickBestRoad();
         } else {
           this._triedReverse = false;
           // Last resort: re-pick nearby road toward target

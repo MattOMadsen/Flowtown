@@ -29,7 +29,11 @@ export class Road {
     ownerColor = null,
     lanes = 1,
     isBridge = false,
-    paidCost = 0
+    paidCost = 0,
+    /** 0 = tovejs, 1 = kun t:0→1, -1 = kun t:1→0 */
+    oneWay = 0,
+    /** Trafiklys midt på segmentet */
+    hasLight = false
   } = {}) {
     this.points = points;
     this.id = Math.random().toString(36).slice(2);
@@ -40,7 +44,23 @@ export class Road {
     this.isBridge = !!isBridge;
     /** Full $ paid for this segment (for fair refunds) */
     this.paidCost = Math.max(0, paidCost | 0);
+    this.oneWay = oneWay === -1 || oneWay === 1 ? oneWay : 0;
+    this.hasLight = !!hasLight;
+    /** 0 green, 1 yellow, 2 red – set by game tick */
+    this.lightPhase = 0;
     this._length = null;
+  }
+
+  /** Allowed travel: reverse=false means increasing t */
+  allowsDirection(reverse) {
+    if (!this.oneWay) return true;
+    if (this.oneWay === 1) return !reverse;
+    if (this.oneWay === -1) return !!reverse;
+    return true;
+  }
+
+  isLightRed() {
+    return this.hasLight && this.lightPhase === 2;
   }
 
   /** Recalculate paidCost proportionally after length change */
@@ -141,8 +161,8 @@ export class Road {
   draw(ctx, dpr) {
     if (this.points.length < 2) return;
 
-    // Always two-way look; lanes 3 = motorway (wider)
-    const dual = true;
+    // dual = tovejs markering; oneWay får enkelt pil-retning
+    const dual = !this.oneWay;
     const motor = this.lanes >= 3;
     const bridge = this.isBridge;
     let edge = bridge ? '#1e3a5f' : motor ? '#1c1917' : '#292524';
@@ -275,11 +295,12 @@ export class Road {
       ctx.lineWidth = 1.2 * dpr;
       ctx.stroke();
     } else {
+      // Envejs: solid midterstribe + farvet kant-tint
       ctx.beginPath();
       this.path(ctx);
-      ctx.strokeStyle = lane;
-      ctx.lineWidth = 2 * dpr;
-      ctx.setLineDash([8 * dpr, 10 * dpr]);
+      ctx.strokeStyle = this.oneWay === -1 ? 'rgba(251, 146, 60, 0.85)' : 'rgba(96, 165, 250, 0.9)';
+      ctx.lineWidth = 2.4 * dpr;
+      ctx.setLineDash([14 * dpr, 8 * dpr]);
       ctx.lineCap = 'butt';
       ctx.stroke();
       ctx.setLineDash([]);
@@ -312,7 +333,9 @@ export class Road {
         ? 'rgba(254, 226, 226, 0.9)'
         : bridge
           ? 'rgba(224, 242, 254, 0.95)'
-          : 'rgba(254, 243, 199, 0.95)';
+          : this.oneWay
+            ? 'rgba(147, 197, 253, 0.95)'
+            : 'rgba(254, 243, 199, 0.95)';
       if (dual) {
         const ang = angle + Math.PI / 2;
         const off = 4.5 * dpr;
@@ -325,8 +348,28 @@ export class Road {
         drawArrow(angle + Math.PI, fill);
         ctx.restore();
       } else {
-        drawArrow(angle, fill);
+        // oneWay 1 = along angle; -1 = reverse
+        drawArrow(this.oneWay === -1 ? angle + Math.PI : angle, fill);
       }
+    }
+
+    // Trafiklys midt på vejen
+    if (this.hasLight) {
+      const lp = this.getPointAt(0.5);
+      const phase = this.lightPhase | 0;
+      const colors = ['#22c55e', '#eab308', '#ef4444'];
+      const col = colors[Math.max(0, Math.min(2, phase))] || colors[0];
+      ctx.beginPath();
+      ctx.arc(lp.x, lp.y, 7 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(28,25,23,0.75)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(lp.x, lp.y, 4.5 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1 * dpr;
+      ctx.stroke();
     }
 
     ctx.restore();
