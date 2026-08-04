@@ -12,7 +12,7 @@
   <!-- Top HUD – app-layout: status → værktøjer → opgaver (som mobil city-builders) -->
   <header id="ui" class="hud fixed top-0 left-0 right-0 z-20 pointer-events-none">
     <div class="hud-inner pointer-events-auto">
-      <!-- Række 1: titel + ressourcer + XP (helt i top) -->
+      <!-- Række 1: brand + ressourcer + XP + live-stats (alt i top – ingen bund-bar) -->
       <div class="hud-status">
         <div class="hud-brand">
           <span class="hud-title">Flowtown</span>
@@ -22,7 +22,7 @@
             Lv <span id="level-count">1</span>
           </div>
           <div id="money-badge" class="hud-chip hud-chip-money" title="Penge">
-            $<span id="money-count">1100</span>
+            $<span id="money-count">1200</span>
           </div>
         </div>
         <div id="xp-strip" class="hud-xp" title="Erfaring">
@@ -31,9 +31,18 @@
           </div>
           <span id="xp-label" class="hud-xp-label">0/36</span>
         </div>
+        <div id="stats" class="hud-stats" aria-label="Status">
+          <span title="Flåde">🚛 <b id="fleet-count">0/3</b></span>
+          <span title="Biler ude">🚗 <b id="car-count">0</b></span>
+          <span title="Veje">🛤️ <b id="road-count">0</b></span>
+          <span title="Leveret">📦 <b id="arrived-count">0</b></span>
+          <span title="Score">⭐ <b id="best-count">0</b></span>
+          <span title="Rekord">🏆 <b id="alltime-count">0</b></span>
+          <span title="Flow">💨 <b id="flow-pct">0%</b></span>
+        </div>
       </div>
 
-      <!-- Række 2: værktøjer på én vandret scroll-række -->
+      <!-- Række 2: værktøjer -->
       <div id="tool-bar" class="hud-tools" role="toolbar" aria-label="Værktøjer">
         <button id="btn-draw" type="button" class="hud-tool" title="Tegn vej">✏️</button>
         <button id="btn-erase" type="button" class="hud-tool" title="Slet vej">🗑️</button>
@@ -46,46 +55,30 @@
         <button id="btn-hud-mini" type="button" class="hud-tool" title="Skjul menu">▴</button>
         <button id="btn-hud-expand" type="button" class="hud-tool hud-expand-btn" title="Vis menu">☰</button>
       </div>
-      <!-- Række 3: kompakte missioner (lukket som standard – dækker mindre kort) -->
+
+      <!-- Række 3: tynd mission-strip; lister som dropdown (dækker ikke HUD-højde) -->
       <div class="hud-missions">
         <div id="jobs-panel" class="hud-jobs">
-          <button type="button" id="btn-jobs-toggle" class="hud-jobs-toggle touch-manipulation">
+          <button type="button" id="btn-jobs-toggle" class="hud-jobs-toggle touch-manipulation" aria-expanded="false">
             <span class="hud-jobs-title">
               Opgaver <span id="jobs-count" class="hud-jobs-count">(0)</span>
             </span>
             <span id="jobs-chevron" class="hud-jobs-chevron">▶</span>
           </button>
-          <ul id="jobs-list" class="hud-jobs-list hidden">
+          <ul id="jobs-list" class="hud-jobs-list hud-drop hidden">
             <li class="text-stone-400 italic">Ingen endnu…</li>
           </ul>
         </div>
         <div id="goals-panel" class="hud-goals hidden">
-          <button type="button" id="btn-goals-toggle" class="hud-goals-head hud-goals-toggle touch-manipulation">
+          <button type="button" id="btn-goals-toggle" class="hud-goals-head hud-goals-toggle touch-manipulation" aria-expanded="false">
             <span id="goals-title" class="truncate">Mål</span>
             <span class="flex items-center gap-1">
               <span id="goals-stars" class="hud-stars">☆☆☆</span>
               <span id="goals-chevron" class="hud-jobs-chevron">▶</span>
             </span>
           </button>
-          <ul id="goals-list" class="hud-goals-list hidden"></ul>
+          <ul id="goals-list" class="hud-goals-list hud-drop hidden"></ul>
         </div>
-      </div>
-
-      <!-- Række 4: live-stats (flyttet fra bunden) -->
-      <div id="stats" class="hud-stats" aria-label="Status">
-        <span title="Flåde"><b id="fleet-count">0/3</b> flåde</span>
-        <span class="hud-stats-dot">·</span>
-        <span title="Biler ude"><b id="car-count">0</b> ude</span>
-        <span class="hud-stats-dot">·</span>
-        <span title="Veje"><b id="road-count">0</b> veje</span>
-        <span class="hud-stats-dot">·</span>
-        <span title="Leveret"><b id="arrived-count">0</b></span>
-        <span class="hud-stats-dot">·</span>
-        <span title="Score"><b id="best-count">0</b></span>
-        <span class="hud-stats-dot">·</span>
-        <span title="Rekord">★ <b id="alltime-count">0</b></span>
-        <span class="hud-stats-dot">·</span>
-        <span title="Flow"><b id="flow-pct">0%</b></span>
       </div>
     </div>
   </header>
@@ -110,7 +103,7 @@
   </div>
 
   <!-- Zoom – høj z-index, store knapper til mobil -->
-  <div id="zoom-controls" class="fixed right-2 sm:right-3 bottom-16 sm:bottom-20 z-40 flex flex-col gap-1.5 pointer-events-auto">
+  <div id="zoom-controls" class="fixed right-2 sm:right-3 bottom-6 sm:bottom-8 z-40 flex flex-col gap-1.5 pointer-events-auto">
     <button id="btn-zoom-in" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ind" aria-label="Zoom ind">+</button>
     <button id="btn-zoom-out" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ud" aria-label="Zoom ud">−</button>
     <button id="btn-zoom-fit" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[10px] font-bold text-stone-700 active:scale-95 transition" title="Se hele byen" aria-label="Se hele byen">Fit</button>

@@ -35,12 +35,12 @@ import {
   goalLabel
 } from './scenarios.js';
 
-const START_MONEY = 1200;
+const START_MONEY = 1400;
 const MAX_JOBS = 5;
-const ROAD_BASE_COST = 8;
-const ROAD_COST_PER_PX = 0.03;
-const STUCK_PENALTY_INTERVAL = 5;
-const STUCK_PENALTY = 2;
+const ROAD_BASE_COST = 6;
+const ROAD_COST_PER_PX = 0.024;
+const STUCK_PENALTY_INTERVAL = 6;
+const STUCK_PENALTY = 1;
 
 export class Game {
   constructor(canvas) {
@@ -689,7 +689,7 @@ export class Game {
   roadCostForLength(lenCssPx) {
     // len may be in canvas (dpr) units — normalize roughly
     const len = lenCssPx / Math.max(1, this.dpr);
-    return Math.max(15, Math.round(ROAD_BASE_COST + len * ROAD_COST_PER_PX * 22));
+    return Math.max(12, Math.round(ROAD_BASE_COST + len * ROAD_COST_PER_PX * 20));
   }
 
   estimateStrokeCost(points, { bridge = false } = {}) {
@@ -701,9 +701,9 @@ export class Game {
     let cost = this.roadCostForLength(len);
     const waterFrac = strokeWaterFraction(points, this.waterBodies);
     if (bridge || waterFrac > 0.05) {
-      // Broer er dyre – især over meget vand
-      cost = Math.round(cost * (2.15 + waterFrac * 2.4));
-      cost = Math.max(cost, 55);
+      // Broer er dyre – især over meget vand (lidt mildere end før)
+      cost = Math.round(cost * (1.85 + waterFrac * 2.0));
+      cost = Math.max(cost, 42);
     }
     return cost;
   }

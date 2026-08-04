@@ -46,13 +46,20 @@ body {
   max-width: 100%;
 }
 
-/* Status row: brand | chips | XP full remaining */
+/* Status row: brand | chips | XP | compact live-stats */
 .hud-status {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto auto minmax(3.5rem, 1fr) auto;
   align-items: center;
-  gap: 0.4rem 0.5rem;
-  min-height: 1.75rem;
+  gap: 0.3rem 0.4rem;
+  min-height: 1.65rem;
+}
+
+@media (max-width: 420px) {
+  .hud-brand { display: none; }
+  .hud-status {
+    grid-template-columns: auto minmax(2.5rem, 1fr) auto;
+  }
 }
 
 .hud-brand {
@@ -251,51 +258,64 @@ body {
   cursor: pointer;
 }
 
-/* Missions: jobs + goals side by side on wide, stack on narrow */
+/* Missions: én tynd strip (jobs + mål side om side). Lister = floating dropdown. */
 .hud-missions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: stretch;
   gap: 0.3rem;
   min-width: 0;
 }
 
-@media (min-width: 640px) {
-  .hud-missions {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-  .hud-jobs { flex: 1.2; min-width: 0; }
-  .hud-goals { flex: 1; min-width: 0; }
-}
-
-.hud-jobs {
-  border-radius: 0.75rem;
-  border: 1px solid #e7e5e4;
-  background: linear-gradient(180deg, #ffffff, #fafaf9);
-  padding: 0.3rem 0.45rem;
+.hud-jobs,
+.hud-goals {
+  position: relative;
+  flex: 1;
   min-width: 0;
+  border-radius: 0.65rem;
+  padding: 0.12rem 0.35rem;
   box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
 }
 
-.hud-jobs-toggle {
+.hud-jobs {
+  border: 1px solid #e7e5e4;
+  background: linear-gradient(180deg, #ffffff, #fafaf9);
+}
+
+.hud-goals {
+  border: 1px solid #fde68a;
+  background: linear-gradient(180deg, #fffbeb, #fef3c7);
+}
+
+.hud-goals.hidden {
+  display: none !important;
+}
+
+.hud-jobs-toggle,
+.hud-goals-toggle {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.35rem;
   background: transparent;
   border: 0;
-  padding: 0.2rem 0.15rem;
+  padding: 0.18rem 0.1rem;
+  min-height: 1.55rem;
   cursor: pointer;
   text-align: left;
+  touch-action: manipulation;
 }
 
 .hud-jobs-title {
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: #78716c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hud-jobs-count {
@@ -305,57 +325,13 @@ body {
 }
 
 .hud-jobs-chevron {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: #a8a29e;
-}
-
-.hud-jobs-list {
-  list-style: none;
-  margin: 0.15rem 0 0;
-  padding: 0;
-  max-height: 3.4rem; /* max ~2–3 jobs – sparer kortflade */
-  overflow-y: auto;
-  font-size: 0.68rem;
-  color: #44403c;
-  line-height: 1.25;
-}
-
-.hud-jobs-list.hidden {
-  display: none;
-}
-
-.hud-jobs-list li {
-  padding: 0.15rem 0.1rem;
-  border-top: 1px solid #f5f5f4;
-}
-
-.hud-jobs-list::-webkit-scrollbar {
-  width: 3px;
-}
-.hud-jobs-list::-webkit-scrollbar-thumb {
-  background: #d6d3d1;
-  border-radius: 4px;
-}
-
-.hud-goals {
-  border-radius: 0.75rem;
-  border: 1px solid #fde68a;
-  background: linear-gradient(180deg, #fffbeb, #fef3c7);
-  padding: 0.35rem 0.5rem;
-  min-width: 0;
-  box-shadow: 0 1px 3px rgba(146, 64, 14, 0.08);
-}
-
-.hud-goals.hidden {
-  display: none !important;
+  flex-shrink: 0;
 }
 
 .hud-goals-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: #92400e;
 }
@@ -365,45 +341,90 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.hud-goals-list {
+/* Floating dropdown – udvider IKKE HUD (mindre permanent dække af kort) */
+.hud-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.2rem);
+  z-index: 40;
   list-style: none;
-  margin: 0.2rem 0 0;
-  padding: 0;
-  font-size: 0.68rem;
-  color: #78716c;
-  line-height: 1.3;
-  max-height: 3.2rem;
+  margin: 0;
+  padding: 0.35rem 0.45rem;
+  max-height: min(28vh, 7.5rem);
   overflow-y: auto;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 28px rgba(28, 25, 23, 0.18);
+  border: 1px solid #e7e5e4;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
+.hud-jobs-list {
+  color: #44403c;
+}
+
+.hud-goals-list {
+  color: #78716c;
+  border-color: #fde68a;
+  background: rgba(255, 251, 235, 0.98);
+}
+
+.hud-jobs-list.hidden,
 .hud-goals-list.hidden {
   display: none;
 }
 
-.hud-goals-toggle {
-  width: 100%;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
+.hud-jobs-list li,
+.hud-goals-list li {
+  padding: 0.2rem 0.1rem;
+  border-top: 1px solid #f5f5f4;
 }
 
-/* Live stats strip in top HUD (was bottom bar) */
+.hud-jobs-list li:first-child,
+.hud-goals-list li:first-child {
+  border-top: 0;
+}
+
+.hud-drop::-webkit-scrollbar {
+  width: 3px;
+}
+.hud-drop::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 4px;
+}
+
+/* Live stats – kompakt i status-række (var bund-bar) */
 .hud-stats {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.15rem 0.35rem;
-  padding: 0.28rem 0.4rem;
-  border-radius: 0.65rem;
+  gap: 0.25rem 0.4rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 999px;
   background: linear-gradient(180deg, #f5f5f4, #eeeee9);
   border: 1px solid #e7e5e4;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 600;
   color: #57534e;
   font-variant-numeric: tabular-nums;
-  line-height: 1.25;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hud-stats::-webkit-scrollbar {
+  display: none;
+}
+
+.hud-stats span {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .hud-stats b {
@@ -418,6 +439,12 @@ body {
 
 .hud.hud-compact .hud-stats {
   display: none;
+}
+
+@media (max-width: 360px) {
+  .hud-stats span:nth-child(n+5) {
+    display: none;
+  }
 }
 
 /* Money pulse */
@@ -507,6 +534,7 @@ body {
   border-radius: 0.9rem !important;
 }
 
+/* legacy – stats er nu .hud-stats i header */
 #stats > div {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(250, 250, 249, 0.9)) !important;
   backdrop-filter: blur(10px);

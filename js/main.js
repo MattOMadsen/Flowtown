@@ -286,6 +286,9 @@ function setJobsExpanded(on) {
   jobsExpanded = on;
   if (jobsList) jobsList.classList.toggle('hidden', !on);
   if (jobsChevron) jobsChevron.textContent = on ? '▼' : '▶';
+  const btn = document.getElementById('btn-jobs-toggle');
+  if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+  // Dropdown flyder – HUD-højde ændrer sig næsten ikke
   requestAnimationFrame(updateHudOffset);
 }
 setJobsExpanded(false);
@@ -296,12 +299,16 @@ function setGoalsExpanded(on) {
   const gc = document.getElementById('goals-chevron');
   if (gl) gl.classList.toggle('hidden', !on);
   if (gc) gc.textContent = on ? '▼' : '▶';
+  const btn = document.getElementById('btn-goals-toggle');
+  if (btn) btn.setAttribute('aria-expanded', on ? 'true' : 'false');
   requestAnimationFrame(updateHudOffset);
 }
 setGoalsExpanded(false);
 document.getElementById('btn-goals-toggle')?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
+  // Kun én dropdown åben ad gangen
+  if (!goalsExpanded) setJobsExpanded(false);
   setGoalsExpanded(!goalsExpanded);
 });
 function bindTap(id, fn) {
@@ -319,7 +326,22 @@ function bindTap(id, fn) {
   el.addEventListener('click', fire);
   el.addEventListener('touchend', fire, { passive: false });
 }
-bindTap('btn-jobs-toggle', () => setJobsExpanded(!jobsExpanded));
+bindTap('btn-jobs-toggle', () => {
+  if (!jobsExpanded) setGoalsExpanded(false);
+  setJobsExpanded(!jobsExpanded);
+});
+// Luk mission-dropdowns ved tryk udenfor
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (t.closest('#jobs-panel') || t.closest('#goals-panel')) return;
+    if (jobsExpanded) setJobsExpanded(false);
+    if (goalsExpanded) setGoalsExpanded(false);
+  },
+  true
+);
 
 function renderJobs() {
   const list = document.getElementById('jobs-list');

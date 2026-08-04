@@ -70,6 +70,7 @@ Distrikter (ca.):
 | 2026-08-03 | GitHub HTTPS auth fejlede | SSH remote / `gh auth login` – husk at færdiggøre device flow |
 | 2026-08-03 | Minimap bottom-left dækkede Vest igen | Minimap = bottom-**center** (ikke hjørner) |
 | 2026-08-03 | Jobs expanded dækkede Nord på mobil | Default **collapsed** på smal skærm; smallere panel |
+| 2026-08-04 | Bund-stats + mission-lister dækkede kort | Stats i top-status; missioner som tynd strip + floating dropdown |
 
 Når du retter en bruger-rapporteret bug: **tilføj en række** i tabellen ovenfor.
 
