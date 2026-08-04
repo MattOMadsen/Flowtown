@@ -46,26 +46,46 @@
         <button id="btn-hud-mini" type="button" class="hud-tool" title="Skjul menu">▴</button>
         <button id="btn-hud-expand" type="button" class="hud-tool hud-expand-btn" title="Vis menu">☰</button>
       </div>
-      <!-- Række 3: opgaver (+ mål når campaign) -->
+      <!-- Række 3: kompakte missioner (lukket som standard – dækker mindre kort) -->
       <div class="hud-missions">
         <div id="jobs-panel" class="hud-jobs">
           <button type="button" id="btn-jobs-toggle" class="hud-jobs-toggle touch-manipulation">
             <span class="hud-jobs-title">
               Opgaver <span id="jobs-count" class="hud-jobs-count">(0)</span>
             </span>
-            <span id="jobs-chevron" class="hud-jobs-chevron">▼</span>
+            <span id="jobs-chevron" class="hud-jobs-chevron">▶</span>
           </button>
-          <ul id="jobs-list" class="hud-jobs-list">
+          <ul id="jobs-list" class="hud-jobs-list hidden">
             <li class="text-stone-400 italic">Ingen endnu…</li>
           </ul>
         </div>
         <div id="goals-panel" class="hud-goals hidden">
-          <div class="hud-goals-head">
+          <button type="button" id="btn-goals-toggle" class="hud-goals-head hud-goals-toggle touch-manipulation">
             <span id="goals-title" class="truncate">Mål</span>
-            <span id="goals-stars" class="hud-stars">☆☆☆</span>
-          </div>
-          <ul id="goals-list" class="hud-goals-list"></ul>
+            <span class="flex items-center gap-1">
+              <span id="goals-stars" class="hud-stars">☆☆☆</span>
+              <span id="goals-chevron" class="hud-jobs-chevron">▶</span>
+            </span>
+          </button>
+          <ul id="goals-list" class="hud-goals-list hidden"></ul>
         </div>
+      </div>
+
+      <!-- Række 4: live-stats (flyttet fra bunden) -->
+      <div id="stats" class="hud-stats" aria-label="Status">
+        <span title="Flåde"><b id="fleet-count">0/3</b> flåde</span>
+        <span class="hud-stats-dot">·</span>
+        <span title="Biler ude"><b id="car-count">0</b> ude</span>
+        <span class="hud-stats-dot">·</span>
+        <span title="Veje"><b id="road-count">0</b> veje</span>
+        <span class="hud-stats-dot">·</span>
+        <span title="Leveret"><b id="arrived-count">0</b></span>
+        <span class="hud-stats-dot">·</span>
+        <span title="Score"><b id="best-count">0</b></span>
+        <span class="hud-stats-dot">·</span>
+        <span title="Rekord">★ <b id="alltime-count">0</b></span>
+        <span class="hud-stats-dot">·</span>
+        <span title="Flow"><b id="flow-pct">0%</b></span>
       </div>
     </div>
   </header>
@@ -97,29 +117,10 @@
     <button id="btn-zoom-reset" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[11px] font-semibold text-stone-700 active:scale-95 transition" title="Nulstil zoom" aria-label="Nulstil zoom"><span id="zoom-label">100%</span></button>
   </div>
 
-  <!-- Stats -->
-  <div id="stats" class="fixed bottom-2 left-2 right-2 sm:left-4 sm:right-4 z-20 pointer-events-none">
-    <div class="bg-white/90 backdrop-blur rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 shadow border border-stone-200 text-[10px] sm:text-sm text-stone-700 flex flex-wrap gap-x-1.5 sm:gap-x-2 gap-y-0.5 justify-center sm:justify-start">
-      <span>flåde <span id="fleet-count">0/3</span></span>
-      <span>·</span>
-      <span><span id="car-count">0</span> ude</span>
-      <span>·</span>
-      <span><span id="road-count">0</span> veje</span>
-      <span>·</span>
-      <span><span id="arrived-count">0</span> leveret</span>
-      <span>·</span>
-      <span>score <span id="best-count">0</span></span>
-      <span>·</span>
-      <span>rekord <span id="alltime-count">0</span></span>
-      <span>·</span>
-      <span>flow <span id="flow-pct">0%</span></span>
-    </div>
-  </div>
-
   <!-- By-panel: køb / opgrader flåde (bottom sheet – mobilvenlig) -->
   <div id="district-sheet" class="fixed inset-x-0 bottom-0 z-30 hidden pointer-events-none">
     <div class="pointer-events-auto mx-auto w-full max-w-md px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <div class="bg-white/95 backdrop-blur rounded-t-2xl sm:rounded-2xl shadow-xl border border-stone-200 p-3 sm:p-4 mb-14 sm:mb-16 max-h-[min(70vh,28rem)] flex flex-col">
+      <div class="bg-white/95 backdrop-blur rounded-t-2xl sm:rounded-2xl shadow-xl border border-stone-200 p-3 sm:p-4 mb-4 sm:mb-6 max-h-[min(70vh,28rem)] flex flex-col">
         <div class="flex items-start justify-between gap-2 mb-2 shrink-0">
           <div class="min-w-0">
             <h3 id="ds-title" class="text-lg font-bold text-stone-800 truncate">By</h3>

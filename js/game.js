@@ -35,12 +35,12 @@ import {
   goalLabel
 } from './scenarios.js';
 
-const START_MONEY = 950;
+const START_MONEY = 1200;
 const MAX_JOBS = 5;
-const ROAD_BASE_COST = 9;
-const ROAD_COST_PER_PX = 0.034; // cheaper early roads so missions are playable
-const STUCK_PENALTY_INTERVAL = 4;
-const STUCK_PENALTY = 3;
+const ROAD_BASE_COST = 8;
+const ROAD_COST_PER_PX = 0.03;
+const STUCK_PENALTY_INTERVAL = 5;
+const STUCK_PENALTY = 2;
 
 export class Game {
   constructor(canvas) {
@@ -2013,8 +2013,8 @@ export class Game {
     const mapW = mapCssW * dpr;
     const mapH = mapCssH * dpr;
     const mx = (w - mapW) / 2;
-    // Above stats bar + safe home indicator
-    const my = h - mapH - Math.max(56, 48) * dpr;
+    // Stats er i top-HUD – minimap kan sidde lavere (over home indicator)
+    const my = h - mapH - Math.max(28, 20) * dpr;
 
     const worldW = Math.max(1, this.worldW || w);
     const worldH = Math.max(1, this.worldH || h);

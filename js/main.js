@@ -211,6 +211,8 @@ function refreshGoalsUi() {
         <span class="truncate">${d.done ? '✓' : '○'} ${escapeHtml(d.label)}</span>
         <span class="tabular-nums shrink-0 text-stone-500">${escapeHtml(d.progress)}</span>
       </li>`).join('');
+    // Keep collapsed unless user opened
+    list.classList.toggle('hidden', !goalsExpanded);
   }
 
   // Auto-save stars when they increase; show end panel at 3★
@@ -275,26 +277,33 @@ bindZoomBtn('btn-zoom-out', () => game.zoomBy(1 / 1.2));
 bindZoomBtn('btn-zoom-fit', () => game.fitCamera());
 bindZoomBtn('btn-zoom-reset', () => game.resetCamera());
 
-// Foldbare opgaver – default lukket på smal skærm (Nord må ikke dækkes)
-let jobsExpanded = !window.matchMedia('(max-width: 640px)').matches;
+// Foldbare opgaver/mål – altid lukket som standard (mindre kort-dække)
+let jobsExpanded = false;
+let goalsExpanded = false;
 const jobsList = document.getElementById('jobs-list');
 const jobsChevron = document.getElementById('jobs-chevron');
 function setJobsExpanded(on) {
   jobsExpanded = on;
   if (jobsList) jobsList.classList.toggle('hidden', !on);
   if (jobsChevron) jobsChevron.textContent = on ? '▼' : '▶';
-  // Recalc HUD offset after expand/collapse
-  requestAnimationFrame(() => {
-    const hud = document.getElementById('ui');
-    if (hud) {
-      document.documentElement.style.setProperty(
-        '--hud-offset',
-        `${Math.ceil(hud.getBoundingClientRect().height) + 8}px`
-      );
-    }
-  });
+  requestAnimationFrame(updateHudOffset);
 }
-setJobsExpanded(jobsExpanded);
+setJobsExpanded(false);
+
+function setGoalsExpanded(on) {
+  goalsExpanded = on;
+  const gl = document.getElementById('goals-list');
+  const gc = document.getElementById('goals-chevron');
+  if (gl) gl.classList.toggle('hidden', !on);
+  if (gc) gc.textContent = on ? '▼' : '▶';
+  requestAnimationFrame(updateHudOffset);
+}
+setGoalsExpanded(false);
+document.getElementById('btn-goals-toggle')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setGoalsExpanded(!goalsExpanded);
+});
 function bindTap(id, fn) {
   const el = document.getElementById(id);
   if (!el) return;

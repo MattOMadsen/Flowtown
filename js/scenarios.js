@@ -49,14 +49,14 @@ export const SCENARIOS = [
     name: 'Første forbindelser',
     blurb: 'Lille dal – lær at forbinde by og landbrug.',
     seed: 101,
-    startMoney: 1100,
+    startMoney: 1250,
     worldScale: 1.08,
     unlockLevel: 1,
     layout: LAYOUT_INTRO,
     goals: [
-      { type: 'deliver', amount: 10, stars: 1 },
+      { type: 'deliver', amount: 8, stars: 1 },
       { type: 'connect_all', stars: 1 },
-      { type: 'money', amount: 500, stars: 1 }
+      { type: 'money', amount: 400, stars: 1 }
     ]
   },
   {
@@ -64,14 +64,14 @@ export const SCENARIOS = [
     name: 'Kyststrækningen',
     blurb: 'Havn, fabrik og marker – gods skal ud.',
     seed: 202,
-    startMoney: 1000,
+    startMoney: 1150,
     worldScale: 1.22,
     unlockLevel: 2,
     layout: LAYOUT_COAST,
     goals: [
-      { type: 'deliver', amount: 18, stars: 1 },
-      { type: 'jobs', amount: 3, stars: 1 },
-      { type: 'money', amount: 550, stars: 1 }
+      { type: 'deliver', amount: 14, stars: 1 },
+      { type: 'jobs', amount: 2, stars: 1 },
+      { type: 'money', amount: 450, stars: 1 }
     ]
   },
   {
@@ -79,14 +79,14 @@ export const SCENARIOS = [
     name: 'Industri-dalen',
     blurb: 'Stort kort – fuld netværks-udfordring.',
     seed: 303,
-    startMoney: 950,
+    startMoney: 1100,
     worldScale: 1.42,
     unlockLevel: 3,
     layout: LAYOUT_VALLEY,
     goals: [
-      { type: 'deliver', amount: 28, stars: 1 },
+      { type: 'deliver', amount: 22, stars: 1 },
       { type: 'connect_all', stars: 1 },
-      { type: 'jobs', amount: 5, stars: 1 }
+      { type: 'jobs', amount: 4, stars: 1 }
     ]
   },
   {
@@ -94,7 +94,7 @@ export const SCENARIOS = [
     name: 'Sandkasse',
     blurb: 'Fri leg på det store standardkort. Ingen stjerne-krav.',
     seed: 42,
-    startMoney: 1200,
+    startMoney: 1400,
     worldScale: 1.38,
     unlockLevel: 1,
     layout: null, // default full layout
