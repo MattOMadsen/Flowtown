@@ -2002,13 +2002,19 @@ export class Game {
 
   /**
    * Minimap over hele spilbrættet (worldW/H) – bottom-center over stats.
+   * Størrelse skalerer med skærm (større touch-mål på mobil).
    */
   drawMinimap(ctx, w, h) {
     const dpr = this.dpr || 1;
-    const mapW = 120 * dpr;
-    const mapH = 90 * dpr;
+    const cssW = w / dpr;
+    // Mobile: ~32% of width, min 140 / max 200 css px; desktop a bit larger
+    const mapCssW = Math.min(200, Math.max(140, cssW * 0.34));
+    const mapCssH = mapCssW * 0.78;
+    const mapW = mapCssW * dpr;
+    const mapH = mapCssH * dpr;
     const mx = (w - mapW) / 2;
-    const my = h - mapH - 52 * dpr;
+    // Above stats bar + safe home indicator
+    const my = h - mapH - Math.max(56, 48) * dpr;
 
     const worldW = Math.max(1, this.worldW || w);
     const worldH = Math.max(1, this.worldH || h);
@@ -2078,17 +2084,17 @@ export class Game {
       ctx.stroke();
     }
 
-    // Places
+    // Places – larger dots for mobile readability
     for (const d of this.districts) {
       const px = ox + d.x * scale;
       const py = oy + d.y * scale;
-      const pr = Math.max(3 * dpr, d.r * scale * 0.7);
+      const pr = Math.max(4.5 * dpr, d.r * scale * 0.85);
       ctx.beginPath();
       ctx.fillStyle = d.color || '#a8a29e';
       ctx.arc(px, py, pr, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = 0.8 * dpr;
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+      ctx.lineWidth = 1.1 * dpr;
       ctx.stroke();
     }
 
