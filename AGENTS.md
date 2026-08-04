@@ -76,6 +76,7 @@ Distrikter (ca.):
 | 2026-08-04 | Pan-ned dækkede minimap midt | Minimap bottom-**left**; pan-ned midt-bund; zoom 2×2 højre |
 | 2026-08-04 | Minimap midt dækkede pan | Kort = venstre bund (brugerønske) |
 | 2026-08-04 | Opgaver-dropdown viste kun ét bynavn | Ingen `truncate` på job; 2 linjer (mængde + A→B); bredere dropdown |
+| 2026-08-04 | Bil kørte “tilbage med last” | `parkIdle` cargo=0; hent tom → last ved afsender → lever; ikon kun når loaded |
 
 Når du retter en bruger-rapporteret bug: **tilføj en række** i tabellen ovenfor.
 

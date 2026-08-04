@@ -2520,12 +2520,16 @@ export class Game {
       }
       this.grantXp(xpGain, { floatAt: { x: vehicle.x, y: vehicle.y } });
 
-      // F1: fleet vehicles park at destination and stay
+      // F1: fleet vehicles park empty at destination
       if (vehicle.fleetOwned) {
         const parkAt = (job && this.districts.find(d => d.name === job.to.name))
           || vehicle.target
           || this.districts[0];
+        vehicle.cargo = 0;
+        vehicle.haulPhase = 'idle';
         vehicle.parkIdle(parkAt, this.roads);
+      } else {
+        vehicle.cargo = 0;
       }
     } else {
       const bot = this.bots.find(b => b.id === vehicle.owner);
@@ -2533,6 +2537,7 @@ export class Game {
         bot.onDelivery(reward, applied);
         this.addFloatText(vehicle.x, vehicle.y - 10, `${bot.name} +$${reward}`, bot.color);
       }
+      vehicle.cargo = 0;
     }
 
     this.addArrivalParticles(vehicle.x, vehicle.y, vehicle.color);
@@ -2755,11 +2760,17 @@ export class Game {
       v.update(dt, this.roads, this.vehicles);
 
       if (v.arrived && v.job) {
+        // Two-leg haul: arrived at pickup empty → load, then go to destination
+        if (v.haulPhase === 'to_pickup') {
+          v.loadAtPickup();
+          continue;
+        }
+        // Loaded arrival at destination → unload / complete
         this.completeDelivery(v);
         if (!v.fleetOwned) {
           this.vehicles.splice(i, 1);
         }
-        // fleetOwned already parked inside completeDelivery
+        // fleetOwned already parked empty inside completeDelivery → parkIdle
       } else if (!v.fleetOwned && v.life > 90) {
         this.vehicles.splice(i, 1);
       } else if (!v.fleetOwned && v.idleTime > 14 && v.life > 12) {

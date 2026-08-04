@@ -76,7 +76,10 @@ export class Vehicle {
       this.color = ownerColor || palette[Math.floor(Math.random() * palette.length)];
     }
     this.applyClassStats();
-    this.cargo = cargo ?? this.getCargoCapacity();
+    // Only start loaded if spawned with an active job
+    this.cargo = job ? (cargo ?? this.getCargoCapacity()) : 0;
+    this.haulPhase = job ? 'loaded' : 'idle';
+    this.dest = job?.to || null;
 
     this.angle = 0;
     this.progress = 0.5;
@@ -297,7 +300,7 @@ export class Vehicle {
     return a + d * t;
   }
 
-  /** Park idle at a district (fleet-owned after delivery) */
+  /** Park idle at a district (fleet-owned after delivery) – always empty */
   parkIdle(district, roads) {
     this.job = null;
     this.arrived = false;
@@ -306,7 +309,8 @@ export class Vehicle {
     this.life = 0;
     this._triedReverse = false;
     this.origin = null;
-    this.cargo = this.getCargoCapacity();
+    this.cargo = 0;
+    this.haulPhase = 'idle'; // idle | to_pickup | loaded
     if (district) {
       this.target = district;
       this.parkName = district.name;
@@ -322,24 +326,70 @@ export class Vehicle {
     }
   }
 
+  /**
+   * Assign job.
+   * - If already near pickup (or spawn places us there): load and go to destination.
+   * - Else: drive empty to pickup first (no cargo), then load.
+   */
   assignJob(job, toDistrict, fromDistrict, roads, spawn) {
     this.job = job;
     this.origin = fromDistrict || job?.from || null;
-    this.target = toDistrict || job?.to || this.target;
+    this.dest = toDistrict || job?.to || null;
     this.arrived = false;
     this.stuck = false;
     this.idleTime = 0;
     this.life = 0;
     this._triedReverse = false;
-    this.cargo = this.getCargoCapacity();
     this.roads = roads || this.roads;
-    if (spawn?.road) {
-      this.attachToRoad(spawn.road, spawn.t, !!spawn.reverse, false);
-    } else if (fromDistrict) {
-      this.x = fromDistrict.x;
-      this.y = fromDistrict.y;
-      this.pickBestRoad();
+
+    const from = this.origin;
+    const to = this.dest || job?.to || this.target;
+
+    // Where are we before repositioning?
+    const wasNearPickup = from
+      && Math.hypot(this.x - from.x, this.y - from.y) < (from.r || 40) * 2.4;
+
+    if (wasNearPickup || !from) {
+      // At pickup already → load and deliver
+      this.haulPhase = 'loaded';
+      this.cargo = this.getCargoCapacity();
+      this.target = to;
+      if (spawn?.road) {
+        this.attachToRoad(spawn.road, spawn.t, !!spawn.reverse, true);
+      } else {
+        this.pickBestRoad();
+      }
+      return;
     }
+
+    // Far from pickup: stay where we are (or soft-attach local road), empty, drive to from
+    this.haulPhase = 'to_pickup';
+    this.cargo = 0;
+    this.target = from;
+    // Do NOT teleport to from via spawn — that skipped the empty leg
+    this.pickBestRoad();
+  }
+
+  /** After arriving at pickup: load cargo and head to destination */
+  loadAtPickup() {
+    if (!this.job) return false;
+    const to = this.dest || this.job.to;
+    if (!to) return false;
+    this.haulPhase = 'loaded';
+    this.cargo = this.getCargoCapacity();
+    this.target = to;
+    this.arrived = false;
+    this.stuck = false;
+    this.idleTime = 0;
+    this._triedReverse = false;
+    // Prefer road attachment near pickup facing destination
+    this.pickBestRoad();
+    return true;
+  }
+
+  /** True if currently hauling cargo on an active job */
+  isLoaded() {
+    return !!(this.job && (this.cargo | 0) > 0 && this.haulPhase !== 'to_pickup');
   }
 
   update(dt, roads, allVehicles) {
@@ -560,16 +610,26 @@ export class Vehicle {
       ctx.globalAlpha = 1;
     }
 
-    // Cargo / class icon hint
+    // Cargo / class icon – only show load icon when actually carrying
     ctx.save();
     ctx.rotate(-this.angle);
     ctx.font = `${Math.max(8, 9 * dpr)}px system-ui`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    if (isHeavy) ctx.fillText('🚛', 0, -s * 1.85);
-    else if (this.kind === 'truck') ctx.fillText('📦', 0, -s * 1.6);
-    else if (isFast) ctx.fillText('⚡', 0, -s * 1.55);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    if (this.isLoaded?.() || (this.job && (this.cargo | 0) > 0 && this.haulPhase !== 'to_pickup')) {
+      if (isHeavy) ctx.fillText('🚛', 0, -s * 1.85);
+      else if (this.kind === 'truck' || this.classId === 'van') ctx.fillText('📦', 0, -s * 1.6);
+      else if (this.classId === 'bus') ctx.fillText('👤', 0, -s * 1.7);
+      else ctx.fillText('👤', 0, -s * 1.55);
+    } else if (this.haulPhase === 'to_pickup' && this.job) {
+      // Empty → on the way to pickup
+      ctx.globalAlpha = 0.75;
+      ctx.fillText('↓', 0, -s * 1.55);
+      ctx.globalAlpha = 1;
+    } else if (isFast && this.job) {
+      ctx.fillText('⚡', 0, -s * 1.55);
+    }
     ctx.restore();
 
     ctx.restore();
