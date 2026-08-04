@@ -1,3 +1,28 @@
+import { getAsphaltImage } from './assets.js';
+
+let _asphaltPattern = null;
+let _asphaltPatternKey = null;
+
+function asphaltPattern(ctx, dpr) {
+  const img = getAsphaltImage?.();
+  if (!img || !img.complete || !img.naturalWidth) return null;
+  const key = `${img.naturalWidth}_${dpr}`;
+  if (_asphaltPattern && _asphaltPatternKey === key) return _asphaltPattern;
+  try {
+    const c = document.createElement('canvas');
+    const ts = Math.max(32, Math.round(48 * (dpr || 1)));
+    c.width = ts;
+    c.height = ts;
+    const cctx = c.getContext('2d');
+    cctx.drawImage(img, 0, 0, ts, ts);
+    _asphaltPattern = ctx.createPattern(c, 'repeat');
+    _asphaltPatternKey = key;
+    return _asphaltPattern;
+  } catch {
+    return null;
+  }
+}
+
 export class Road {
   constructor(points, { owner = 'player', ownerColor = null, lanes = 1, isBridge = false } = {}) {
     this.points = points;
@@ -176,19 +201,33 @@ export class Road {
     ctx.lineWidth = wEdge;
     ctx.stroke();
 
-    // Asphalt / deck
+    // Asphalt / deck (base color)
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = asphalt;
     ctx.lineWidth = wBody;
     ctx.stroke();
 
+    // Asphalt texture overlay (grain) – not on heavy congestion red
+    if (!bridge && dens < 3) {
+      const pat = asphaltPattern(ctx, dpr);
+      if (pat) {
+        ctx.beginPath();
+        this.path(ctx);
+        ctx.strokeStyle = pat;
+        ctx.lineWidth = wBody * 0.92;
+        ctx.globalAlpha = alpha * 0.42;
+        ctx.stroke();
+        ctx.globalAlpha = alpha;
+      }
+    }
+
     // Highlight
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = asphaltHi;
     ctx.lineWidth = wInner;
-    ctx.globalAlpha = alpha * 0.38;
+    ctx.globalAlpha = alpha * 0.32;
     ctx.stroke();
     ctx.globalAlpha = alpha;
 

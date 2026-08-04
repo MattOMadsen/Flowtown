@@ -31,6 +31,9 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-VIS4** Seamless tile-map (græs/dirt/skov/vand)
 - [x] **PROG-PAN** Flyt-tool + kantpile + piletaster
 - [x] **PROG-VIS5** Flere græs/dirt-varianter
+- [x] **PROG-UI-XP** XP under titel (ikke over knapper)
+- [x] **PROG-WATER2** Organiske søer/bugter
+- [x] **PROG-ROAD-TEX** Asfalt-tekstur på veje
 
 ---
 

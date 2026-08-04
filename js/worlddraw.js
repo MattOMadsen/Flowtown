@@ -34,11 +34,9 @@ export function drawWorldTerrain(ctx, worldW, worldH, dpr, districts = [], seed 
     drawTileMap(ctx, tileMap, getTileImages());
   }
 
-  // Soft water highlight on top of water tiles (from geometry bodies)
+  // Organic lakes/bays on top of tiles (pretty water, not flat ellipses)
   if (waterBodies?.length) {
-    ctx.globalAlpha = 0.55;
     drawWaterBodies(ctx, waterBodies, dpr);
-    ctx.globalAlpha = 1;
   }
 
   // Very light farm stripe overlay (detail)

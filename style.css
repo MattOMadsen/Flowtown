@@ -83,7 +83,8 @@ body {
 }
 .pan-edge-right:active { transform: translateY(-50%) scale(0.94); }
 .pan-edge-up {
-  top: max(5.5rem, calc(env(safe-area-inset-top) + 4.5rem));
+  /* under top toolbar so den ikke dækker knapper */
+  top: max(6.25rem, calc(env(safe-area-inset-top) + 5.5rem));
   left: 50%;
   transform: translateX(-50%) rotate(90deg);
 }

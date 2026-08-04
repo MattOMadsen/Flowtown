@@ -513,7 +513,7 @@ setInterval(() => {
   const xpFill = document.getElementById('xp-fill');
   if (xpFill) xpFill.style.width = `${Math.round(prog.ratio * 100)}%`;
   const xpLabel = document.getElementById('xp-label');
-  if (xpLabel) xpLabel.textContent = `${prog.xp}/${prog.need} XP`;
+  if (xpLabel) xpLabel.textContent = `${prog.xp}/${prog.need}`;
 
   const flowEl = document.getElementById('flow-pct');
   if (flowEl) {

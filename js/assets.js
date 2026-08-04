@@ -25,7 +25,8 @@ const TILE_SRC = {
   dirt2: 'assets/tiles/dirt2.png',
   dirt3: 'assets/tiles/dirt3.png',
   forest: 'assets/tiles/forest.png',
-  water: 'assets/tiles/water.png'
+  water: 'assets/tiles/water.png',
+  asphalt: 'assets/tiles/asphalt.png'
 };
 
 const placeImgs = {};
@@ -76,6 +77,10 @@ export function getVehicleSprite(classId, kind) {
 
 export function getTileImages() {
   return tileImgs;
+}
+
+export function getAsphaltImage() {
+  return tileImgs.asphalt || null;
 }
 
 export function assetsReady() {
