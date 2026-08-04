@@ -44,6 +44,15 @@ export class InputHandler {
       }
       if (e.key === '+' || e.key === '=') this.game.zoomBy(1.15);
       if (e.key === '-' || e.key === '_') this.game.zoomBy(1 / 1.15);
+      // Drej kamera (kun yaw) – Q/E eller [ ]
+      if (e.key === 'q' || e.key === 'Q' || e.key === '[') {
+        e.preventDefault();
+        this.game.rotateBy?.(-Math.PI / 12);
+      }
+      if (e.key === 'e' || e.key === 'E' || e.key === ']') {
+        e.preventDefault();
+        this.game.rotateBy?.(Math.PI / 12);
+      }
       if (e.key === '0' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         this.game.resetCamera();
@@ -145,6 +154,10 @@ export class InputHandler {
     };
   }
 
+  touchAngle(t0, t1) {
+    return Math.atan2(t1.clientY - t0.clientY, t1.clientX - t0.clientX);
+  }
+
   startPinch(touches) {
     const t0 = touches[0];
     const t1 = touches[1];
@@ -152,7 +165,9 @@ export class InputHandler {
     const cam = this.game.camera;
     this.pinch = {
       dist: this.touchDist(t0, t1),
+      angle: this.touchAngle(t0, t1),
       zoom: cam.zoom,
+      rotation: cam.rotation || 0,
       camX: cam.x,
       camY: cam.y,
       originMidX: mid.x,
@@ -167,20 +182,37 @@ export class InputHandler {
     if (!this.pinch || touches.length < 2) return;
     const mid = this.touchMid(touches[0], touches[1]);
     const dist = this.touchDist(touches[0], touches[1]);
+    const ang = this.touchAngle(touches[0], touches[1]);
     const scale = dist / Math.max(1, this.pinch.dist);
     const newZoom = this.game.clampZoom(this.pinch.zoom * scale);
+    // Drej: vinkelforskel mellem fingre (kun yaw)
+    let dAng = ang - this.pinch.angle;
+    while (dAng > Math.PI) dAng -= Math.PI * 2;
+    while (dAng < -Math.PI) dAng += Math.PI * 2;
+    const newRot = (this.pinch.rotation || 0) + dAng;
 
+    // World-punkt under pinch-start midt
     const dpr = this.game.dpr;
     const ox = this.pinch.originMidX * dpr;
     const oy = this.pinch.originMidY * dpr;
-    const wx = (ox - this.pinch.camX) / this.pinch.zoom;
-    const wy = (oy - this.pinch.camY) / this.pinch.zoom;
+    const z0 = this.pinch.zoom;
+    const r0 = this.pinch.rotation || 0;
+    const c0 = Math.cos(r0);
+    const s0 = Math.sin(r0);
+    const dx0 = ox - this.pinch.camX;
+    const dy0 = oy - this.pinch.camY;
+    const wx = (c0 * dx0 + s0 * dy0) / z0;
+    const wy = (-s0 * dx0 + c0 * dy0) / z0;
+
     const nx = mid.x * dpr;
     const ny = mid.y * dpr;
+    const c1 = Math.cos(newRot);
+    const s1 = Math.sin(newRot);
 
     this.game.camera.zoom = newZoom;
-    this.game.camera.x = nx - wx * newZoom;
-    this.game.camera.y = ny - wy * newZoom;
+    this.game.camera.rotation = newRot;
+    this.game.camera.x = nx - (newZoom * c1 * wx - newZoom * s1 * wy);
+    this.game.camera.y = ny - (newZoom * s1 * wx + newZoom * c1 * wy);
     this.game.requestDraw();
   }
 

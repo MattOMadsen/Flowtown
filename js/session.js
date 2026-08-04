@@ -104,7 +104,8 @@ export function serializeSession(game) {
     camera: {
       x: game.camera?.x || 0,
       y: game.camera?.y || 0,
-      zoom: game.camera?.zoom || 1
+      zoom: game.camera?.zoom || 1,
+      rotation: game.camera?.rotation || 0
     },
     roads,
     jobs,

@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="style.css?v=17" />
+  <link rel="stylesheet" href="style.css?v=18" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 </head>
 <body class="bg-stone-100 overflow-hidden select-none">
@@ -138,12 +138,14 @@
     <button type="button" id="pan-down" class="pan-edge pan-edge-down pointer-events-auto touch-manipulation" aria-label="Flyt ned">›</button>
   </div>
 
-  <!-- Zoom 2×2: + Fit / − %  (− står hvor Fit før var) -->
+  <!-- Zoom + drej: + Fit / − % / ↺ ↻ -->
   <div id="zoom-controls" class="fixed right-2 sm:right-3 bottom-6 sm:bottom-8 z-40 pointer-events-auto">
     <button id="btn-zoom-in" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ind" aria-label="Zoom ind">+</button>
     <button id="btn-zoom-fit" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[10px] font-bold text-stone-700 active:scale-95 transition" title="Se hele byen" aria-label="Se hele byen">Fit</button>
     <button id="btn-zoom-out" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ud" aria-label="Zoom ud">−</button>
-    <button id="btn-zoom-reset" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[11px] font-semibold text-stone-700 active:scale-95 transition" title="Nulstil zoom" aria-label="Nulstil zoom"><span id="zoom-label">100%</span></button>
+    <button id="btn-zoom-reset" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[11px] font-semibold text-stone-700 active:scale-95 transition" title="Nulstil zoom/drej" aria-label="Nulstil zoom"><span id="zoom-label">100%</span></button>
+    <button id="btn-rotate-ccw" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-lg font-bold text-stone-800 active:scale-95 transition" title="Drej venstre" aria-label="Drej venstre">↺</button>
+    <button id="btn-rotate-cw" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-lg font-bold text-stone-800 active:scale-95 transition" title="Drej højre" aria-label="Drej højre">↻</button>
   </div>
 
   <!-- Leaderboard (P3-3 lokal topscore) -->
@@ -279,7 +281,8 @@
         <p class="font-semibold text-stone-800">Byg & kør</p>
         <p>✏️ <b>Træk fra by-kant</b> → tegn vej · <b>tryk midt i by</b> → køb bil</p>
         <p>🌉🚦 <b>Vej over vej</b> → vælg bro eller kryds med lys (forskellig pris; flere kryds kan vælges enkeltvis)</p>
-        <p>🖐️ <b>Hold</b> finger / pile / 2 fingre → flyt eller zoom</p>
+        <p>🖐️ <b>Hold</b> finger / pile / 2 fingre → flyt, zoom eller <b>drej</b> (to fingre)</p>
+        <p>↺↻ Drej-kamera · tastatur <b>Q/E</b> · Fit/nulstil sætter drej tilbage</p>
         <p>🗑️ <b>Slet</b> fjerner et stykke vej · ↩️ <b>Undo</b> giver fuld refund</p>
         <p>🏭 Fabrikker sender gods til havn/by · ⚡ ekspres · 🧳 turister</p>
         <p>💾 Spillet gemmes automatisk – du kan fortsætte senere</p>
@@ -380,6 +383,6 @@
 
   <canvas id="game" class="block w-full h-full touch-none"></canvas>
 
-  <script type="module" src="js/main.js?v=17"></script>
+  <script type="module" src="js/main.js?v=18"></script>
 </body>
 </html>

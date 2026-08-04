@@ -148,8 +148,8 @@ export class Game {
     this.activeSnap = null;
     this._snapPulse = 0;
 
-    // Camera (canvas-pixel space)
-    this.camera = { x: 0, y: 0, zoom: 1 };
+    // Camera (canvas-pixel space). rotation = yaw i radianer (kun dreje, ikke tip)
+    this.camera = { x: 0, y: 0, zoom: 1, rotation: 0 };
     // Playable map is a finite board (not endless empty land)
     this.minZoom = 0.55;
     this.maxZoom = 2.6;
@@ -529,6 +529,7 @@ export class Game {
       this.camera.x = data.camera.x || 0;
       this.camera.y = data.camera.y || 0;
       this.camera.zoom = this.clampZoom(data.camera.zoom);
+      this.camera.rotation = data.camera.rotation || 0;
     } else {
       this.startCamera();
     }
@@ -797,11 +798,7 @@ export class Game {
       ? this.clampZoom(Math.max(this.camera.zoom || 1, 1.15))
       : (this.camera.zoom || 1);
     this.camera.zoom = z;
-    const cw = this.canvas.width || 1;
-    const ch = this.canvas.height || 1;
-    this.camera.x = cw / 2 - district.x * z;
-    this.camera.y = ch / 2 - district.y * z;
-    this.requestDraw();
+    this.centerOnWorld(district.x, district.y);
     return true;
   }
 
@@ -1417,14 +1414,54 @@ export class Game {
     this.updateDistrictPositions();
   }
 
-  /** CSS screen coords → world (canvas) coords */
+  /** CSS screen coords → world (canvas) coords – med rotation */
   screenToWorld(x, y) {
     const sx = x * this.dpr;
     const sy = y * this.dpr;
+    const z = this.camera.zoom || 1;
+    const r = this.camera.rotation || 0;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    const dx = sx - this.camera.x;
+    const dy = sy - this.camera.y;
+    // inverse of R(r)*S(z)
     return {
-      x: (sx - this.camera.x) / this.camera.zoom,
-      y: (sy - this.camera.y) / this.camera.zoom
+      x: (cos * dx + sin * dy) / z,
+      y: (-sin * dx + cos * dy) / z
     };
+  }
+
+  /** World → canvas-pixel screen (efter camera transform) */
+  worldToScreen(wx, wy) {
+    const z = this.camera.zoom || 1;
+    const r = this.camera.rotation || 0;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    return {
+      x: z * cos * wx - z * sin * wy + this.camera.x,
+      y: z * sin * wx + z * cos * wy + this.camera.y
+    };
+  }
+
+  /** Centrer world-punkt på skærmmidte (bevarer zoom + rotation) */
+  centerOnWorld(wx, wy) {
+    const z = this.camera.zoom || 1;
+    const r = this.camera.rotation || 0;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    const cw = this.canvas.width || 1;
+    const ch = this.canvas.height || 1;
+    this.camera.x = cw / 2 - (z * cos * wx - z * sin * wy);
+    this.camera.y = ch / 2 - (z * sin * wx + z * cos * wy);
+    this.requestDraw();
+  }
+
+  applyCameraTransform(ctx) {
+    const z = this.camera.zoom || 1;
+    const r = this.camera.rotation || 0;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    ctx.setTransform(z * cos, z * sin, -z * sin, z * cos, this.camera.x, this.camera.y);
   }
 
   clampZoom(z) {
@@ -1438,18 +1475,49 @@ export class Game {
     if (Math.abs(z1 - z0) < 1e-6) return;
     const cw = this.canvas.clientWidth || window.innerWidth || 1;
     const ch = this.canvas.clientHeight || window.innerHeight || 1;
-    const cx = (sx != null ? sx : cw / 2) * this.dpr;
-    const cy = (sy != null ? sy : ch / 2) * this.dpr;
-    const wx = (cx - this.camera.x) / z0;
-    const wy = (cy - this.camera.y) / z0;
+    const cx = (sx != null ? sx : cw / 2);
+    const cy = (sy != null ? sy : ch / 2);
+    const world = this.screenToWorld(cx, cy);
     this.camera.zoom = z1;
-    this.camera.x = cx - wx * z1;
-    this.camera.y = cy - wy * z1;
+    const r = this.camera.rotation || 0;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    const scx = cx * this.dpr;
+    const scy = cy * this.dpr;
+    this.camera.x = scx - (z1 * cos * world.x - z1 * sin * world.y);
+    this.camera.y = scy - (z1 * sin * world.x + z1 * cos * world.y);
     this.requestDraw();
   }
 
   zoomBy(factor, sx, sy) {
     this.setZoomAt(this.camera.zoom * factor, sx, sy);
+    this.requestDraw();
+  }
+
+  /**
+   * Drej kamera (kun yaw). Pivot: CSS-skærmpunkt (sx,sy) – default midt.
+   * @param {number} deltaRad positiv = med uret i skærmen
+   */
+  rotateBy(deltaRad, sx, sy) {
+    if (!deltaRad) return;
+    const cw = this.canvas.clientWidth || window.innerWidth || 1;
+    const ch = this.canvas.clientHeight || window.innerHeight || 1;
+    const px = sx != null ? sx : cw / 2;
+    const py = sy != null ? sy : ch / 2;
+    const world = this.screenToWorld(px, py);
+    this.camera.rotation = (this.camera.rotation || 0) + deltaRad;
+    // normaliser til [-π, π]
+    let r = this.camera.rotation;
+    while (r > Math.PI) r -= Math.PI * 2;
+    while (r < -Math.PI) r += Math.PI * 2;
+    this.camera.rotation = r;
+    const z = this.camera.zoom || 1;
+    const cos = Math.cos(r);
+    const sin = Math.sin(r);
+    const scx = px * this.dpr;
+    const scy = py * this.dpr;
+    this.camera.x = scx - (z * cos * world.x - z * sin * world.y);
+    this.camera.y = scy - (z * sin * world.x + z * cos * world.y);
     this.requestDraw();
   }
 
@@ -1476,6 +1544,7 @@ export class Game {
     this.camera.x = 0;
     this.camera.y = 0;
     this.camera.zoom = 1;
+    this.camera.rotation = 0;
     this.requestDraw();
   }
 
@@ -1489,15 +1558,16 @@ export class Game {
     const bw = Math.max(40, this.worldW || 1);
     const bh = Math.max(40, this.worldH || 1);
     const pad = paddingCss * this.dpr;
-    const zx = (w - pad * 2) / bw;
-    const zy = (h - pad * 2) / bh;
-    const z = this.clampZoom(Math.min(zx, zy));
-    const cx = bw / 2;
-    const cy = bh / 2;
+    // med rotation: brug bounding square af brættet
+    const diag = Math.hypot(bw, bh);
+    const zx = (w - pad * 2) / diag;
+    const zy = (h - pad * 2) / diag;
+    // uden rotation er bræt-aligned tættere – brug den strammere
+    const zAxis = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
+    const z = this.clampZoom(Math.min(zAxis, Math.max(zx, zy) * 1.05));
     this.camera.zoom = z;
-    this.camera.x = w / 2 - cx * z;
-    this.camera.y = h / 2 - cy * z;
-    this.requestDraw();
+    this.camera.rotation = 0;
+    this.centerOnWorld(bw / 2, bh / 2);
   }
 
   /**
@@ -1506,19 +1576,16 @@ export class Game {
    */
   startCamera() {
     const w = this.canvas.width || 1;
-    const h = this.canvas.height || 1;
     const focus =
       this.districts.find(d => d.type === 'capital') ||
       this.districts[Math.floor(this.districts.length / 2)] ||
       { x: this.worldW / 2, y: this.worldH / 2 };
 
-    // Want to see roughly half the map width
     const viewWorldW = Math.max(200, this.worldW * 0.52);
     const z = this.clampZoom(w / viewWorldW);
     this.camera.zoom = z;
-    this.camera.x = w / 2 - focus.x * z;
-    this.camera.y = h / 2 - focus.y * z;
-    this.requestDraw();
+    this.camera.rotation = 0;
+    this.centerOnWorld(focus.x, focus.y);
   }
 
   getZoomPercent() {
@@ -2103,8 +2170,7 @@ export class Game {
           const dist = Math.hypot(to.x - from.x, to.y - from.y);
           const z = Math.max(0.45, Math.min(1.35, (Math.min(this.canvas.width, this.canvas.height) * 0.55) / Math.max(220, dist + 180)));
           this.camera.zoom = z;
-          this.camera.x = this.canvas.width / 2 - midX * z;
-          this.camera.y = this.canvas.height / 2 - midY * z;
+          this.centerOnWorld(midX, midY);
           this.showToast(`Vejviser: ${from.name} → ${to.name}`);
         }
       }
@@ -3441,10 +3507,7 @@ export class Game {
     }
     const z = this.clampZoom(Math.max(this.camera.zoom || 1, 1.2));
     this.camera.zoom = z;
-    const cw = this.canvas.width || 1;
-    const ch = this.canvas.height || 1;
-    this.camera.x = cw / 2 - bn.mid.x * z;
-    this.camera.y = ch / 2 - bn.mid.y * z;
+    this.centerOnWorld(bn.mid.x, bn.mid.y);
     const h = this.getBottleneckHint(bn);
     if (h) this.showToast(h.text, 2.8);
     this.requestDraw();
@@ -4176,8 +4239,8 @@ export class Game {
     ctx.fillStyle = voidG;
     ctx.fillRect(0, 0, w, h);
 
-    // World transform
-    ctx.setTransform(cam.zoom, 0, 0, cam.zoom, cam.x, cam.y);
+    // World transform (zoom + yaw-rotation)
+    this.applyCameraTransform(ctx);
 
     this.drawBackground(ctx, this.worldW || w * 1.95, this.worldH || h * 1.95);
 
@@ -4585,34 +4648,26 @@ export class Game {
     }
     this._minimapPlaceHits = placeHits;
 
-    // Viewport = det der vises på skærmen (matcher setTransform(zoom,0,0,zoom,cam.x,cam.y))
-    const cam = this.camera;
-    const z = Math.max(1e-6, cam.zoom || 1);
-    const invZ = 1 / z;
-    // Canvas-pixels (0..w, 0..h) → world
-    const left = (0 - cam.x) * invZ;
-    const top = (0 - cam.y) * invZ;
-    const right = (w - cam.x) * invZ;
-    const bottom = (h - cam.y) * invZ;
-
-    // Clip viewport til bræt – firkant ligger altid på kortet
-    const vx0 = Math.max(0, Math.min(worldW, left));
-    const vy0 = Math.max(0, Math.min(worldH, top));
-    const vx1 = Math.max(0, Math.min(worldW, right));
-    const vy1 = Math.max(0, Math.min(worldH, bottom));
-    const rw = vx1 - vx0;
-    const rh = vy1 - vy0;
-    if (rw > 1 && rh > 1) {
-      const rx = ox + vx0 * scale;
-      const ry = oy + vy0 * scale;
-      const rww = rw * scale;
-      const rhh = rh * scale;
-      ctx.fillStyle = 'rgba(20, 184, 166, 0.16)';
-      ctx.fillRect(rx, ry, rww, rhh);
-      ctx.strokeStyle = '#14b8a6';
-      ctx.lineWidth = 2.25 * dpr;
-      ctx.strokeRect(rx, ry, rww, rhh);
-    }
+    // Viewport (4 hjørner i world – understøtter rotation)
+    const corners = [
+      this.screenToWorld(0, 0),
+      this.screenToWorld(w / this.dpr, 0),
+      this.screenToWorld(w / this.dpr, h / this.dpr),
+      this.screenToWorld(0, h / this.dpr)
+    ];
+    const pts = corners.map((c) => ({
+      x: ox + Math.max(0, Math.min(worldW, c.x)) * scale,
+      y: oy + Math.max(0, Math.min(worldH, c.y)) * scale
+    }));
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(20, 184, 166, 0.16)';
+    ctx.fill();
+    ctx.strokeStyle = '#14b8a6';
+    ctx.lineWidth = 2.25 * dpr;
+    ctx.stroke();
 
     ctx.restore(); // clip
 
@@ -4677,12 +4732,7 @@ export class Game {
     const by = Math.max(r.oy, Math.min(r.oy + r.worldH * r.scale, y));
     const wx = (bx - r.ox) / r.scale;
     const wy = (by - r.oy) / r.scale;
-    const z = this.camera.zoom || 1;
-    const cw = this.canvas.width;
-    const ch = this.canvas.height;
-    this.camera.x = cw / 2 - wx * z;
-    this.camera.y = ch / 2 - wy * z;
-    this.requestDraw();
+    this.centerOnWorld(wx, wy);
     return true;
   }
 

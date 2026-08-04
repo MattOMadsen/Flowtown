@@ -708,6 +708,8 @@ bindZoomBtn('btn-zoom-in', () => game.zoomBy(1.2));
 bindZoomBtn('btn-zoom-out', () => game.zoomBy(1 / 1.2));
 bindZoomBtn('btn-zoom-fit', () => game.fitCamera());
 bindZoomBtn('btn-zoom-reset', () => game.resetCamera());
+bindZoomBtn('btn-rotate-ccw', () => game.rotateBy(-Math.PI / 12));
+bindZoomBtn('btn-rotate-cw', () => game.rotateBy(Math.PI / 12));
 
 // Foldbare opgaver/mål – altid lukket som standard (mindre kort-dække)
 let jobsExpanded = false;
