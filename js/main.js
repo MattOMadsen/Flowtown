@@ -49,7 +49,7 @@ if (btnUpgrade) btnUpgrade.addEventListener('click', () => setMode('upgrade'));
 if (btnBridge) btnBridge.addEventListener('click', () => setMode('bridge'));
 setMode('draw');
 
-// Mini-HUD: compact when zoomed in; expand via ☰ or status tap
+// HUD offset for pan arrows / bot panel (menu forsvinder IKKE automatisk)
 function setHudCompact(on) {
   if (!hudEl) return;
   hudEl.classList.toggle('hud-compact', !!on);
@@ -62,10 +62,16 @@ function updateHudOffset() {
     `${Math.ceil(hudEl.getBoundingClientRect().height) + 8}px`
   );
 }
+// Manuel mini/udvid – aldrig auto ved pan/zoom
 document.getElementById('btn-hud-expand')?.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
   setHudCompact(false);
+});
+document.getElementById('btn-hud-mini')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setHudCompact(true);
 });
 hudEl?.querySelector('.hud-status')?.addEventListener('click', () => {
   if (hudEl.classList.contains('hud-compact')) setHudCompact(false);
@@ -553,24 +559,7 @@ setInterval(() => {
   refreshGoalsUi();
   refreshZoomLabel();
   updateHudOffset();
-  // Auto mini-HUD when zoomed in (more map visible)
-  if (hudEl && game.running) {
-    const z = game.camera?.zoom || 1;
-    // Compact if clearly zoomed past "see half board"
-    const halfZ = (game.canvas?.width || 1) / Math.max(200, (game.worldW || 1000) * 0.55);
-    if (z > halfZ * 1.12) {
-      if (!hudEl.dataset.userExpanded) setHudCompact(true);
-    }
-  }
 }, 280);
-
-// When user expands, don't auto-collapse for a while
-document.getElementById('btn-hud-expand')?.addEventListener('click', () => {
-  if (hudEl) {
-    hudEl.dataset.userExpanded = '1';
-    setTimeout(() => { if (hudEl) delete hudEl.dataset.userExpanded; }, 12000);
-  }
-});
 
 // Resize
 function resize() {

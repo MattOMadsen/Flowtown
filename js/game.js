@@ -2001,21 +2001,30 @@ export class Game {
   }
 
   /**
-   * Compact minimap – bottom-center above stats (not bottom-left/right:
-   * those cover Vest / Syd / zoom stack).
+   * Minimap over hele spilbrættet (worldW/H) – bottom-center over stats.
    */
   drawMinimap(ctx, w, h) {
-    const mapW = 88 * this.dpr;
-    const mapH = 66 * this.dpr;
+    const dpr = this.dpr || 1;
+    const mapW = 120 * dpr;
+    const mapH = 90 * dpr;
     const mx = (w - mapW) / 2;
-    const my = h - mapH - 48 * this.dpr;
+    const my = h - mapH - 52 * dpr;
+
+    const worldW = Math.max(1, this.worldW || w);
+    const worldH = Math.max(1, this.worldH || h);
+    const scale = Math.min(mapW / worldW, mapH / worldH);
+    const drawW = worldW * scale;
+    const drawH = worldH * scale;
+    const ox = mx + (mapW - drawW) / 2;
+    const oy = my + (mapH - drawH) / 2;
 
     ctx.save();
-    ctx.globalAlpha = 0.92;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.strokeStyle = 'rgba(68,64,60,0.25)';
-    ctx.lineWidth = 1.5 * this.dpr;
-    const rr = 8 * this.dpr;
+    // Panel
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = 'rgba(28, 25, 23, 0.55)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1.5 * dpr;
+    const rr = 10 * dpr;
     ctx.beginPath();
     ctx.moveTo(mx + rr, my);
     ctx.arcTo(mx + mapW, my, mx + mapW, my + mapH, rr);
@@ -2026,52 +2035,106 @@ export class Game {
     ctx.fill();
     ctx.stroke();
 
-    // World is full canvas coords
-    const worldW = this.canvas.width || w;
-    const worldH = this.canvas.height || h;
-    const sx = mapW / worldW;
-    const sy = mapH / worldH;
+    // Board background
+    ctx.fillStyle = 'rgba(197, 217, 160, 0.95)';
+    ctx.fillRect(ox, oy, drawW, drawH);
+    ctx.strokeStyle = 'rgba(68,64,60,0.35)';
+    ctx.lineWidth = 1 * dpr;
+    ctx.strokeRect(ox, oy, drawW, drawH);
+
+    // Water blobs (tiny)
+    if (this.waterBodies?.length) {
+      for (const b of this.waterBodies) {
+        ctx.beginPath();
+        ctx.ellipse(
+          ox + b.cx * scale,
+          oy + b.cy * scale,
+          Math.max(2 * dpr, b.rx * scale),
+          Math.max(1.5 * dpr, b.ry * scale),
+          b.rot || 0,
+          0,
+          Math.PI * 2
+        );
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.75)';
+        ctx.fill();
+      }
+    }
 
     // Roads
-    ctx.lineWidth = Math.max(1, 1.2 * this.dpr);
+    ctx.lineWidth = Math.max(1.2 * dpr, 1.5 * dpr);
     ctx.lineCap = 'round';
     for (const road of this.roads) {
       if (road.points.length < 2) continue;
       ctx.beginPath();
-      ctx.strokeStyle = road.owner === 'player' ? '#57534e' : (road.ownerColor || '#78716c');
-      ctx.moveTo(mx + road.points[0].x * sx, my + road.points[0].y * sy);
+      ctx.strokeStyle = road.isBridge
+        ? '#38bdf8'
+        : road.owner === 'player'
+          ? '#44403c'
+          : (road.ownerColor || '#78716c');
+      ctx.moveTo(ox + road.points[0].x * scale, oy + road.points[0].y * scale);
       for (let i = 1; i < road.points.length; i++) {
-        ctx.lineTo(mx + road.points[i].x * sx, my + road.points[i].y * sy);
+        ctx.lineTo(ox + road.points[i].x * scale, oy + road.points[i].y * scale);
       }
       ctx.stroke();
     }
 
-    // Districts
+    // Places
     for (const d of this.districts) {
+      const px = ox + d.x * scale;
+      const py = oy + d.y * scale;
+      const pr = Math.max(3 * dpr, d.r * scale * 0.7);
       ctx.beginPath();
-      ctx.fillStyle = d.color;
-      ctx.arc(mx + d.x * sx, my + d.y * sy, Math.max(2.5 * this.dpr, d.r * sx * 0.55), 0, Math.PI * 2);
+      ctx.fillStyle = d.color || '#a8a29e';
+      ctx.arc(px, py, pr, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 0.8 * dpr;
+      ctx.stroke();
     }
 
-    // Viewport rectangle
+    // Viewport on board
     const cam = this.camera;
     const z = cam.zoom || 1;
     const viewX0 = -cam.x / z;
     const viewY0 = -cam.y / z;
     const viewW = w / z;
     const viewH = h / z;
-    ctx.strokeStyle = '#0f766e';
-    ctx.lineWidth = 1.5 * this.dpr;
+    ctx.strokeStyle = '#14b8a6';
+    ctx.lineWidth = 2 * dpr;
     ctx.strokeRect(
-      mx + viewX0 * sx,
-      my + viewY0 * sy,
-      viewW * sx,
-      viewH * sy
+      ox + viewX0 * scale,
+      oy + viewY0 * scale,
+      viewW * scale,
+      viewH * scale
+    );
+    ctx.fillStyle = 'rgba(20, 184, 166, 0.12)';
+    ctx.fillRect(
+      ox + viewX0 * scale,
+      oy + viewY0 * scale,
+      viewW * scale,
+      viewH * scale
     );
 
+    // Label
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.font = `${Math.max(9, 10 * dpr)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Kort', mx + mapW / 2, my - 2 * dpr);
+
     ctx.restore();
-    this._minimapRect = { x: mx, y: my, w: mapW, h: mapH, sx, sy, worldW, worldH };
+    // sx/sy for tap: map panel coords → world (with letterbox offset)
+    this._minimapRect = {
+      x: mx,
+      y: my,
+      w: mapW,
+      h: mapH,
+      ox,
+      oy,
+      scale,
+      worldW,
+      worldH
+    };
   }
 
   /** Click on minimap → pan camera so that world point is centered */
@@ -2081,8 +2144,11 @@ export class Game {
     const x = screenCssX * this.dpr;
     const y = screenCssY * this.dpr;
     if (x < r.x || y < r.y || x > r.x + r.w || y > r.y + r.h) return false;
-    const wx = (x - r.x) / r.sx;
-    const wy = (y - r.y) / r.sy;
+    // Prefer board area inside letterbox
+    const bx = Math.max(r.ox, Math.min(r.ox + r.worldW * r.scale, x));
+    const by = Math.max(r.oy, Math.min(r.oy + r.worldH * r.scale, y));
+    const wx = (bx - r.ox) / r.scale;
+    const wy = (by - r.oy) / r.scale;
     const z = this.camera.zoom || 1;
     const cw = this.canvas.width;
     const ch = this.canvas.height;

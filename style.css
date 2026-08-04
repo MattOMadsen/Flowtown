@@ -218,7 +218,20 @@ body {
 }
 
 .hud.hud-compact .hud-expand-btn {
-  display: inline-flex;
+  display: inline-flex !important;
+}
+
+.hud.hud-compact .hud-tools {
+  display: flex !important;
+  /* only show expand when compact – tools row hidden except expand injected */
+}
+
+.hud:not(.hud-compact) .hud-expand-btn {
+  display: none;
+}
+
+.hud.hud-compact .hud-tools .hud-tool:not(.hud-expand-btn) {
+  display: none;
 }
 
 .hud.hud-compact .hud-inner {
