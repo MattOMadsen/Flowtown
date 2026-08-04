@@ -275,9 +275,7 @@ function renderScenarioList() {
 function startGame() {
   const help = document.getElementById('help');
   if (help) help.style.display = 'none';
-  let withBots = !!document.getElementById('start-with-bots')?.checked;
-  // Nat-rush: foreslå bots hvis spilleren ikke har slået fra
-  const scPreview = game.listScenariosForUi?.()?.find(s => s.id === selectedScenarioId);
+  const withBots = !!document.getElementById('start-with-bots')?.checked;
   clearSession(); // nyt spil overskriver gammelt save
   game.loadScenario(selectedScenarioId, { bots: withBots });
   if (game.scenario?.forceBotsHint && !withBots) {
