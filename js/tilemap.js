@@ -1,10 +1,10 @@
 /**
- * Procedural tile-map – græs, skov, stier (dirt) med bløde kanter.
+ * Hex tile-map – græs, skov, diskrete stier (ikke firkant-grid).
+ * Pointy-top hex, axial-ish offset rows.
  */
 
 import { pointInWater } from './water.js';
 
-/** Indices into TILE_KEYS */
 export const TILE_KEYS = [
   'grass', 'grass2', 'grass3',
   'dirt', 'dirt2', 'dirt3',
@@ -38,7 +38,6 @@ function familyOf(v) {
   return 'g';
 }
 
-/** Billig value-noise 0–1 */
 function noise2(x, y, seed) {
   let n = Math.imul(x + seed * 374761393, 668265263)
     ^ Math.imul(y + seed * 668265263, 374761393);
@@ -46,19 +45,54 @@ function noise2(x, y, seed) {
   return ((n >>> 0) % 10000) / 10000;
 }
 
-function setCell(grid, cols, rows, x, y, v) {
-  if (x < 0 || y < 0 || x >= cols || y >= rows) return;
-  const i = y * cols + x;
+/** Pointy-top hex layout */
+export function hexMetrics(hexSize) {
+  const r = hexSize;
+  const w = Math.sqrt(3) * r;
+  const h = 2 * r;
+  const vert = h * 0.75;
+  return { r, w, h, vert };
+}
+
+export function hexCenter(col, row, hexSize) {
+  const { w, vert } = hexMetrics(hexSize);
+  const x = col * w + (row % 2 ? w * 0.5 : 0);
+  const y = row * vert;
+  return { x, y };
+}
+
+/** Approximate world → hex col/row */
+export function worldToHex(x, y, hexSize) {
+  const { w, vert } = hexMetrics(hexSize);
+  const row = Math.round(y / vert);
+  const col = Math.round((x - (row % 2 ? w * 0.5 : 0)) / w);
+  return { col, row };
+}
+
+function hexPath(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 180) * (60 * i - 30);
+    const px = cx + r * Math.cos(a);
+    const py = cy + r * Math.sin(a);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function setCell(grid, cols, rows, col, row, v) {
+  if (col < 0 || row < 0 || col >= cols || row >= rows) return;
+  const i = row * cols + col;
   if (grid[i] === WATER) return;
   grid[i] = v;
 }
 
 /**
- * Tegn dirt-sti langs polyline i grid (med bredde + wobble).
- * @returns {Array<{x:number,y:number}>} world points til dekor-tegning
+ * Diskret dirt-sti langs nabo-hexes (lidt wobble, ingen tykke bånd).
  */
-function carvePath(grid, cols, rows, tileSize, ax, ay, bx, by, rng, width = 1) {
-  const steps = Math.max(8, Math.ceil(Math.hypot(bx - ax, by - ay) / (tileSize * 0.45)));
+function carveHexPath(grid, cols, rows, hexSize, ax, ay, bx, by, rng) {
+  const steps = Math.max(6, Math.ceil(Math.hypot(bx - ax, by - ay) / (hexSize * 0.9)));
   const worldPts = [];
   const dx = bx - ax;
   const dy = by - ay;
@@ -68,156 +102,142 @@ function carvePath(grid, cols, rows, tileSize, ax, ay, bx, by, rng, width = 1) {
 
   for (let s = 0; s <= steps; s++) {
     const t = s / steps;
-    // blød S-kurve + støj
-    const wob = Math.sin(t * Math.PI * 2.2 + rng() * 0.5) * tileSize * 0.55
-      + (rng() - 0.5) * tileSize * 0.35;
+    // Meget mild kurve – undgår “rodet spagetti”
+    const wob = Math.sin(t * Math.PI * 1.4) * hexSize * 0.22;
     const wx = ax + dx * t + px * wob;
     const wy = ay + dy * t + py * wob;
     worldPts.push({ x: wx, y: wy });
-    const gx = Math.floor(wx / tileSize);
-    const gy = Math.floor(wy / tileSize);
-    for (let oy = -width; oy <= width; oy++) {
-      for (let ox = -width; ox <= width; ox++) {
-        if (ox * ox + oy * oy > (width + 0.2) * (width + 0.2)) continue;
-        // kanter mere sporadiske
-        if (Math.abs(ox) === width || Math.abs(oy) === width) {
-          if (rng() > 0.55) continue;
-        }
-        setCell(grid, cols, rows, gx + ox, gy + oy, pick(DIRT, rng));
-      }
+    const { col, row } = worldToHex(wx, wy, hexSize);
+    setCell(grid, cols, rows, col, row, pick(DIRT, rng));
+    // sjældent nabocell (tynd sti)
+    if (rng() < 0.22) {
+      const n = [[1, 0], [-1, 0], [0, 1], [0, -1]][Math.floor(rng() * 4)];
+      setCell(grid, cols, rows, col + n[0], row + n[1], pick(DIRT, rng));
     }
   }
   return worldPts;
 }
 
-/**
- * Placer skov-klumper (seed + expand).
- */
-function plantForestClusters(grid, cols, rows, tileSize, districts, waterBodies, rng, seed) {
-  const nClusters = Math.max(3, Math.min(8, 2 + Math.floor(districts.length * 0.9)));
+function plantForestClusters(grid, cols, rows, hexSize, districts, waterBodies, rng, seed) {
+  const nClusters = Math.max(2, Math.min(6, 1 + Math.floor(districts.length * 0.7)));
   const seeds = [];
 
-  // Prefer gaps between places
-  for (let attempt = 0; attempt < nClusters * 8 && seeds.length < nClusters; attempt++) {
-    const x = Math.floor(rng() * cols);
-    const y = Math.floor(rng() * rows);
-    const cx = (x + 0.5) * tileSize;
-    const cy = (y + 0.5) * tileSize;
-    if (pointInWater(cx, cy, waterBodies, districts)) continue;
-    let tooClose = false;
+  for (let attempt = 0; attempt < nClusters * 10 && seeds.length < nClusters; attempt++) {
+    const col = Math.floor(rng() * cols);
+    const row = Math.floor(rng() * rows);
+    const c = hexCenter(col, row, hexSize);
+    if (pointInWater(c.x, c.y, waterBodies, districts)) continue;
+    let ok = true;
     for (const d of districts) {
-      if (Math.hypot(d.x - cx, d.y - cy) < (d.r || 40) * 2.4) {
-        tooClose = true;
+      if (Math.hypot(d.x - c.x, d.y - c.y) < (d.r || 40) * 2.6) {
+        ok = false;
         break;
       }
     }
-    if (tooClose) continue;
+    if (!ok) continue;
     for (const s of seeds) {
-      if (Math.hypot(s.x - x, s.y - y) < 4) {
-        tooClose = true;
+      if (Math.hypot(s.col - col, s.row - row) < 3.5) {
+        ok = false;
         break;
       }
     }
-    if (tooClose) continue;
-    seeds.push({ x, y, r: 2.2 + rng() * 3.5 });
+    if (!ok) continue;
+    seeds.push({ col, row, r: 1.6 + rng() * 2.4 });
   }
 
-  // ring-skov mellem byer
   for (const d of districts) {
-    if (rng() > 0.55) continue;
+    if (rng() > 0.5) continue;
     const ang = rng() * Math.PI * 2;
-    const dist = (d.r || 40) * (3.2 + rng() * 1.4);
-    const cx = d.x + Math.cos(ang) * dist;
-    const cy = d.y + Math.sin(ang) * dist;
-    const x = Math.floor(cx / tileSize);
-    const y = Math.floor(cy / tileSize);
-    if (x > 1 && y > 1 && x < cols - 2 && y < rows - 2) {
-      seeds.push({ x, y, r: 1.8 + rng() * 2.2 });
+    const dist = (d.r || 40) * (3.4 + rng() * 1.2);
+    const c = worldToHex(
+      d.x + Math.cos(ang) * dist,
+      d.y + Math.sin(ang) * dist,
+      hexSize
+    );
+    if (c.col > 1 && c.row > 1 && c.col < cols - 2 && c.row < rows - 2) {
+      seeds.push({ col: c.col, row: c.row, r: 1.4 + rng() * 1.8 });
     }
   }
 
   for (const seedCell of seeds) {
     const R = seedCell.r;
-    const rMax = Math.ceil(R + 2);
-    for (let oy = -rMax; oy <= rMax; oy++) {
-      for (let ox = -rMax; ox <= rMax; ox++) {
-        const d = Math.hypot(ox, oy);
+    const rMax = Math.ceil(R + 1.5);
+    for (let orow = -rMax; orow <= rMax; orow++) {
+      for (let ocol = -rMax; ocol <= rMax; ocol++) {
+        const d = Math.hypot(ocol, orow);
         if (d > R) continue;
         const fall = 1 - d / R;
-        const n = noise2(seedCell.x + ox, seedCell.y + oy, seed + 3);
-        if (n > fall * 0.95 + 0.08) continue;
-        const gx = seedCell.x + ox;
-        const gy = seedCell.y + oy;
-        if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
-        const i = gy * cols + gx;
+        const n = noise2(seedCell.col + ocol, seedCell.row + orow, seed + 3);
+        if (n > fall * 0.92 + 0.1) continue;
+        const col = seedCell.col + ocol;
+        const row = seedCell.row + orow;
+        if (col < 0 || row < 0 || col >= cols || row >= rows) continue;
+        const i = row * cols + col;
         if (grid[i] === WATER) continue;
-        // stier (dirt) bevares
-        if (DIRT.includes(grid[i]) && n > 0.35) continue;
-        if (rng() < 0.12 + fall * 0.75) grid[i] = FOREST;
+        if (DIRT.includes(grid[i]) && n > 0.4) continue;
+        if (rng() < 0.15 + fall * 0.7) grid[i] = FOREST;
       }
     }
   }
 }
 
 /**
- * @returns {{ cols:number, rows:number, tileSize:number, grid:Uint8Array, paths:Array<Array<{x:number,y:number}>>, forestCells:Array<{x:number,y:number}> }}
+ * @returns {{ cols, rows, hexSize, tileSize, grid, paths, forestCells, kind:'hex' }}
  */
 export function buildTileMap(worldW, worldH, dpr, districts = [], waterBodies = [], seed = 42) {
-  const tileSize = Math.max(36, Math.round(42 * (dpr || 1)));
-  const cols = Math.max(4, Math.ceil(worldW / tileSize) + 1);
-  const rows = Math.max(4, Math.ceil(worldH / tileSize) + 1);
+  // hexSize ≈ center-to-vertex (lidt større end gamle square-tiles for ro)
+  const hexSize = Math.max(28, Math.round(34 * (dpr || 1)));
+  const { w, vert } = hexMetrics(hexSize);
+  const cols = Math.max(4, Math.ceil(worldW / w) + 2);
+  const rows = Math.max(4, Math.ceil(worldH / vert) + 2);
   const grid = new Uint8Array(cols * rows);
   const rng = mulberry32((seed | 0) + 777);
   const s = (seed | 0) + 19;
   const paths = [];
 
   // 1) Base græs
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const n1 = noise2(x, y, s);
-      const n3 = noise2(Math.floor(x / 3), Math.floor(y / 3), s + 11);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const c = hexCenter(col, row, hexSize);
+      const n1 = noise2(col, row, s);
+      const n3 = noise2(Math.floor(col / 3), Math.floor(row / 3), s + 11);
       let t = GRASS[Math.floor((n1 * 2.7 + n3 * 1.3) * GRASS.length) % GRASS.length];
-      const cx = (x + 0.5) * tileSize;
-      const cy = (y + 0.5) * tileSize;
-      if (pointInWater(cx, cy, waterBodies, districts)) t = WATER;
-      grid[y * cols + x] = t;
+      if (pointInWater(c.x, c.y, waterBodies, districts)) t = WATER;
+      grid[row * cols + col] = t;
     }
   }
 
-  // 2) Mark/dirt tæt på farm/factory (blød)
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      if (grid[y * cols + x] === WATER) continue;
-      const cx = (x + 0.5) * tileSize;
-      const cy = (y + 0.5) * tileSize;
+  // 2) Dirt ved farm/factory (blød)
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (grid[row * cols + col] === WATER) continue;
+      const c = hexCenter(col, row, hexSize);
       let dirtBias = 0;
       for (const d of districts) {
-        const dist = Math.hypot(d.x - cx, d.y - cy);
+        const dist = Math.hypot(d.x - c.x, d.y - c.y);
         const rr = Math.max(28, d.r || 40);
-        const u = dist / (rr * 3.6);
+        const u = dist / (rr * 3.4);
         if (u > 1) continue;
         const fall2 = (1 - u) * (1 - u);
-        if (d.type === 'farm') dirtBias += fall2 * 0.9;
-        else if (d.type === 'factory') dirtBias += fall2 * 0.65;
-        else if (d.type === 'harbor') dirtBias += fall2 * 0.4;
-        else if (d.type === 'town' || d.type === 'capital') dirtBias += fall2 * 0.22;
+        if (d.type === 'farm') dirtBias += fall2 * 0.88;
+        else if (d.type === 'factory') dirtBias += fall2 * 0.6;
+        else if (d.type === 'harbor') dirtBias += fall2 * 0.35;
+        else if (d.type === 'town' || d.type === 'capital') dirtBias += fall2 * 0.18;
       }
-      const n2 = noise2(x * 2 + 3, y * 2 - 1, s + 7);
-      if (dirtBias > 0.15 && rng() < dirtBias * 0.7 + n2 * 0.1) {
-        grid[y * cols + x] = pick(DIRT, rng);
+      const n2 = noise2(col * 2 + 3, row * 2 - 1, s + 7);
+      if (dirtBias > 0.18 && rng() < dirtBias * 0.68 + n2 * 0.08) {
+        grid[row * cols + col] = pick(DIRT, rng);
       }
     }
   }
 
-  // 3) Skov-klumper
-  plantForestClusters(grid, cols, rows, tileSize, districts, waterBodies, rng, s);
+  // 3) Skov
+  plantForestClusters(grid, cols, rows, hexSize, districts, waterBodies, rng, s);
 
-  // 4) Stier mellem byer (dirt-korridorer) – ikke veje, bare landskab
-  const places = districts.slice().sort((a, b) => a.x - b.x);
+  // 4) Få, rene stier mellem nærmeste byer (MST) – ingen ekstra “vandresti”
+  const places = districts.slice();
   if (places.length >= 2) {
-    // forbind nærmeste naboer (simpelt MST-agtigt)
     const linked = new Set([0]);
-    const order = [0];
     while (linked.size < places.length) {
       let bestI = -1;
       let bestJ = -1;
@@ -235,71 +255,65 @@ export function buildTileMap(worldW, worldH, dpr, districts = [], waterBodies = 
       }
       if (bestJ < 0) break;
       linked.add(bestJ);
-      order.push(bestJ);
+      // Skip meget korte links (rodet ved tætte byer)
+      if (bestD < hexSize * 4) continue;
       const a = places[bestI];
       const b = places[bestJ];
-      // start/slut lidt uden for hub
       const ang = Math.atan2(b.y - a.y, b.x - a.x);
-      const aR = (a.r || 40) * 1.05;
-      const bR = (b.r || 40) * 1.05;
-      const pts = carvePath(
-        grid, cols, rows, tileSize,
+      const aR = (a.r || 40) * 1.15;
+      const bR = (b.r || 40) * 1.15;
+      const pts = carveHexPath(
+        grid, cols, rows, hexSize,
         a.x + Math.cos(ang) * aR,
         a.y + Math.sin(ang) * aR,
         b.x - Math.cos(ang) * bR,
         b.y - Math.sin(ang) * bR,
-        rng,
-        rng() > 0.65 ? 1 : 0
+        rng
       );
-      if (pts.length > 2) paths.push(pts);
-    }
-
-    // 1–2 ekstra “vandresti” der ikke er mellem byer
-    for (let k = 0; k < 2; k++) {
-      if (rng() > 0.7) continue;
-      const ax = worldW * (0.15 + rng() * 0.3);
-      const ay = worldH * (0.2 + rng() * 0.6);
-      const bx = worldW * (0.55 + rng() * 0.3);
-      const by = worldH * (0.2 + rng() * 0.6);
-      const pts = carvePath(grid, cols, rows, tileSize, ax, ay, bx, by, rng, 0);
       if (pts.length > 2) paths.push(pts);
     }
   }
 
-  // 5) Smooth isolerede dirt (behold stier der hænger sammen)
+  // 5) Smooth
   const next = new Uint8Array(grid);
-  for (let y = 1; y < rows - 1; y++) {
-    for (let x = 1; x < cols - 1; x++) {
-      const i = y * cols + x;
+  for (let row = 1; row < rows - 1; row++) {
+    for (let col = 1; col < cols - 1; col++) {
+      const i = row * cols + col;
       const v = grid[i];
       if (v === WATER) continue;
       let same = 0;
       let grassN = 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
-        const n = grid[(y + dy) * cols + (x + dx)];
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]]) {
+        const n = grid[(row + dr) * cols + (col + dc)];
         if (familyOf(n) === familyOf(v)) same++;
         if (GRASS.includes(n)) grassN++;
       }
       if (same === 0 && DIRT.includes(v)) next[i] = pick(GRASS, rng);
-      else if (same === 0 && v === FOREST && grassN >= 6) next[i] = pick(GRASS, rng);
-      else if (DIRT.includes(v) && same >= 4 && rng() < 0.12) next[i] = pick(DIRT, rng);
+      else if (same === 0 && v === FOREST && grassN >= 4) next[i] = pick(GRASS, rng);
     }
   }
 
-  // Forest cell centres til canopy-draw
   const forestCells = [];
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      if (next[y * cols + x] === FOREST) {
-        forestCells.push({
-          x: (x + 0.5) * tileSize,
-          y: (y + 0.5) * tileSize
-        });
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (next[row * cols + col] === FOREST) {
+        const c = hexCenter(col, row, hexSize);
+        forestCells.push(c);
       }
     }
   }
 
-  return { cols, rows, tileSize, grid: next, paths, forestCells };
+  return {
+    kind: 'hex',
+    cols,
+    rows,
+    hexSize,
+    /** alias for ældre kode der forventer tileSize */
+    tileSize: hexSize,
+    grid: next,
+    paths,
+    forestCells
+  };
 }
 
 const SOLIDS = {
@@ -314,171 +328,118 @@ const SOLIDS = {
 };
 
 /**
- * Tegn tiles + bløde stier + skov-canopy hints.
+ * Tegn hex-tiles + diskrete stier + skov-canopy.
  */
 export function drawTileMap(ctx, tileMap, tileImgs) {
   if (!tileMap) return;
-  const { cols, rows, tileSize, grid, paths = [], forestCells = [] } = tileMap;
-  const ts = tileSize;
-  const bleed = Math.max(1.5, ts * 0.04);
+  const { cols, rows, hexSize, grid, paths = [], forestCells = [] } = tileMap;
+  const R = hexSize || tileMap.tileSize || 34;
+  const drawR = R * 1.02; // lille overlap skjuler sømme
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // 1) Base tiles
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      let key = TILE_KEYS[grid[y * cols + x]] || 'grass';
+  // 1) Hex-fliser
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      let key = TILE_KEYS[grid[row * cols + col]] || 'grass';
       if (key === 'water') {
-        key = TILE_KEYS[GRASS[(x + y * 2) % GRASS.length]] || 'grass';
+        key = TILE_KEYS[GRASS[(col + row * 2) % GRASS.length]] || 'grass';
       }
-      const px = x * ts;
-      const py = y * ts;
+      const c = hexCenter(col, row, R);
       const img = tileImgs?.[key];
+
+      ctx.save();
+      hexPath(ctx, c.x, c.y, drawR);
+      ctx.clip();
       if (img && img.complete && img.naturalWidth > 0) {
-        ctx.drawImage(img, px - bleed * 0.35, py - bleed * 0.35, ts + bleed, ts + bleed);
+        const side = drawR * 2.05;
+        ctx.drawImage(img, c.x - side / 2, c.y - side / 2, side, side);
       } else {
         ctx.fillStyle = SOLIDS[key] || SOLIDS.grass;
-        ctx.fillRect(px, py, ts + 1, ts + 1);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Meget diskret hex-kant (kun når det er dirt/forest for dybde)
+      const fam = familyOf(grid[row * cols + col]);
+      if (fam === 'd' || fam === 'f') {
+        hexPath(ctx, c.x, c.y, drawR * 0.98);
+        ctx.strokeStyle = fam === 'd'
+          ? 'rgba(90, 70, 40, 0.08)'
+          : 'rgba(30, 60, 25, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
     }
   }
 
-  // 2) Blød overgang dirt/forest
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const v = grid[y * cols + x];
-      if (v === WATER || GRASS.includes(v)) continue;
-      const fam = familyOf(v);
-      let edge = false;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-        if (familyOf(grid[ny * cols + nx]) !== fam) {
-          edge = true;
-          break;
-        }
-      }
-      if (!edge) continue;
-      const cx = (x + 0.5) * ts;
-      const cy = (y + 0.5) * ts;
-      const g = ctx.createRadialGradient(cx, cy, ts * 0.15, cx, cy, ts * 0.72);
-      if (fam === 'd') {
-        g.addColorStop(0, 'rgba(198, 180, 140, 0)');
-        g.addColorStop(0.55, 'rgba(168, 190, 120, 0.08)');
-        g.addColorStop(1, 'rgba(155, 185, 110, 0.2)');
-      } else {
-        g.addColorStop(0, 'rgba(70, 120, 60, 0)');
-        g.addColorStop(1, 'rgba(100, 150, 80, 0.16)');
-      }
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(cx, cy, ts * 0.75, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  // 3) Stier – bløde sandede bånd oven på dirt (læsbar “sti”)
+  // 2) Stier – tynde, bløde (ikke tykke sand-bånd)
   for (const pts of paths) {
     if (!pts || pts.length < 2) continue;
-    // skygge
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(70, 55, 35, 0.14)';
-    ctx.lineWidth = ts * 0.72;
+    ctx.strokeStyle = 'rgba(160, 130, 90, 0.22)';
+    ctx.lineWidth = R * 0.55;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
-    // hovedsti
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(196, 168, 118, 0.42)';
-    ctx.lineWidth = ts * 0.48;
-    ctx.stroke();
-    // lys midterstribe
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(230, 210, 165, 0.28)';
-    ctx.lineWidth = ts * 0.18;
+    ctx.strokeStyle = 'rgba(210, 185, 140, 0.2)';
+    ctx.lineWidth = R * 0.28;
     ctx.stroke();
   }
 
-  // 4) Skov-canopy – træ-klumper på forest-tiles
-  drawForestCanopy(ctx, forestCells, ts);
+  // 3) Skov-canopy
+  drawForestCanopy(ctx, forestCells, R);
 
-  // 5) Mikro-prikker
-  ctx.globalAlpha = 0.06;
-  for (let y = 0; y < rows; y += 2) {
-    for (let x = 0; x < cols; x += 2) {
-      const v = grid[y * cols + x];
-      if (v === WATER) continue;
-      const n = noise2(x, y, 99);
-      if (n < 0.55) continue;
-      const px = x * ts + n * ts * 0.6;
-      const py = y * ts + (1 - n) * ts * 0.5;
-      ctx.fillStyle = GRASS.includes(v) ? '#6a9a48' : DIRT.includes(v) ? '#9a8860' : '#2f5a28';
-      ctx.beginPath();
-      ctx.arc(px, py, ts * 0.08 * n, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  ctx.globalAlpha = 1;
-
-  // 6) Wash
-  const g = ctx.createLinearGradient(0, 0, 0, rows * ts);
-  g.addColorStop(0, 'rgba(255, 252, 240, 0.06)');
-  g.addColorStop(0.45, 'rgba(255,255,255,0.015)');
-  g.addColorStop(1, 'rgba(55, 42, 28, 0.06)');
+  // 4) Let samlende wash
+  const g = ctx.createLinearGradient(0, 0, 0, rows * R * 1.5);
+  g.addColorStop(0, 'rgba(255, 252, 240, 0.05)');
+  g.addColorStop(1, 'rgba(55, 42, 28, 0.05)');
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, cols * ts, rows * ts);
+  ctx.fillRect(0, 0, cols * R * 2, rows * R * 1.6);
 
   ctx.restore();
 }
 
-/** Simple tree blobs – cozy top-down canopy */
-function drawForestCanopy(ctx, forestCells, ts) {
+function drawForestCanopy(ctx, forestCells, R) {
   if (!forestCells?.length) return;
   ctx.save();
-  // subsample for performance
-  const step = forestCells.length > 220 ? 2 : 1;
+  const step = forestCells.length > 180 ? 2 : 1;
   for (let i = 0; i < forestCells.length; i += step) {
     const c = forestCells[i];
-    const n = noise2((c.x / ts) | 0, (c.y / ts) | 0, 44);
-    const n2 = noise2((c.x / ts) | 0 + 3, (c.y / ts) | 0 - 2, 51);
-    const r = ts * (0.22 + n * 0.28);
-    const ox = (n - 0.5) * ts * 0.25;
-    const oy = (n2 - 0.5) * ts * 0.22;
+    const n = noise2((c.x / R) | 0, (c.y / R) | 0, 44);
+    const n2 = noise2(((c.x / R) | 0) + 3, ((c.y / R) | 0) - 2, 51);
+    const r = R * (0.28 + n * 0.32);
+    const ox = (n - 0.5) * R * 0.2;
+    const oy = (n2 - 0.5) * R * 0.18;
 
-    // soft shadow
     ctx.beginPath();
-    ctx.ellipse(c.x + ox + 1.5, c.y + oy + 2, r * 1.05, r * 0.72, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(25, 40, 18, 0.16)';
+    ctx.ellipse(c.x + ox + 1, c.y + oy + 1.5, r * 1.0, r * 0.7, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(25, 40, 18, 0.14)';
     ctx.fill();
 
-    // outer canopy
     const g = ctx.createRadialGradient(
-      c.x + ox - r * 0.25, c.y + oy - r * 0.3, r * 0.1,
+      c.x + ox - r * 0.2, c.y + oy - r * 0.25, r * 0.08,
       c.x + ox, c.y + oy, r
     );
-    g.addColorStop(0, 'rgba(110, 160, 75, 0.55)');
-    g.addColorStop(0.55, 'rgba(70, 120, 55, 0.5)');
-    g.addColorStop(1, 'rgba(45, 90, 40, 0.12)');
+    g.addColorStop(0, 'rgba(105, 155, 72, 0.52)');
+    g.addColorStop(0.55, 'rgba(65, 115, 52, 0.48)');
+    g.addColorStop(1, 'rgba(40, 85, 38, 0.1)');
     ctx.beginPath();
     ctx.arc(c.x + ox, c.y + oy, r, 0, Math.PI * 2);
     ctx.fillStyle = g;
     ctx.fill();
 
-    // second blob for density
-    if (n > 0.4) {
-      const r2 = r * (0.55 + n2 * 0.25);
+    if (n > 0.42) {
       ctx.beginPath();
-      ctx.arc(c.x + ox + r * 0.35, c.y + oy - r * 0.15, r2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(55, 105, 48, 0.35)';
+      ctx.arc(c.x + ox + r * 0.32, c.y + oy - r * 0.12, r * (0.5 + n2 * 0.2), 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(50, 100, 45, 0.32)';
       ctx.fill();
     }
   }

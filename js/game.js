@@ -2979,6 +2979,8 @@ export class Game {
 
   /** Hex grid size for snap helpers */
   get hexSize() {
+    // Match tilemap hex når muligt
+    if (this.tileMap?.hexSize) return this.tileMap.hexSize;
     return 34 * (this.dpr || 1);
   }
 
@@ -3987,7 +3989,7 @@ export class Game {
   }
 
   /**
-   * Find fletninger: endpoint tæt på anden vej (endpoint eller midt-segment = T-kryds).
+   * Find fletninger: endpoint-T + midt-midt X-kryds mellem veje.
    * @returns {Map<Road, { joinStart:boolean, joinEnd:boolean, joins:Array }>}
    */
   _computeRoadJoins() {
@@ -3998,14 +4000,22 @@ export class Game {
     for (const road of roads) {
       map.set(road, { joinStart: false, joinEnd: false, joins: [] });
     }
-    const mark = (road, which, point) => {
+    const markEnd = (road, which, point) => {
       const m = map.get(road);
       if (!m) return;
       if (which === 'start') m.joinStart = true;
       else m.joinEnd = true;
       m.joins.push(point);
     };
+    const markMid = (point) => {
+      // X-kryds: begge veje får pad (ingen end-cap-ændring nødvendig)
+      for (const road of roads) {
+        const m = map.get(road);
+        if (m) m.joins.push(point);
+      }
+    };
 
+    // Endpoint joins (T + end-end)
     for (let i = 0; i < roads.length; i++) {
       const r1 = roads[i];
       const ends1 = [
@@ -4017,32 +4027,68 @@ export class Game {
         for (let j = 0; j < roads.length; j++) {
           if (i === j) continue;
           const r2 = roads[j];
-          // Endpoint-endpoint
           for (const p2 of [r2.points[0], r2.points[r2.points.length - 1]]) {
             if (!p2) continue;
             if (Math.hypot(e1.p.x - p2.x, e1.p.y - p2.y) < thresh) {
-              mark(r1, e1.which, { x: (e1.p.x + p2.x) / 2, y: (e1.p.y + p2.y) / 2 });
+              markEnd(r1, e1.which, { x: (e1.p.x + p2.x) / 2, y: (e1.p.y + p2.y) / 2 });
             }
           }
-          // Endpoint midt på anden vej (T-kryds)
           const c = r2.closestPoint(e1.p.x, e1.p.y);
           if (c && c.dist < thresh * 0.95 && c.t > 0.06 && c.t < 0.94) {
-            mark(r1, e1.which, { x: c.point.x, y: c.point.y });
+            markEnd(r1, e1.which, { x: c.point.x, y: c.point.y });
           }
         }
-        // Snap til by-hub tæller som “fri” ende (rund kasket) – ikke join
+      }
+    }
+
+    // Midt–midt X-kryds (to veje krydser midt på segmenter)
+    for (let i = 0; i < roads.length; i++) {
+      const r1 = roads[i];
+      const p1 = r1.points;
+      if (!p1 || p1.length < 2) continue;
+      for (let j = i + 1; j < roads.length; j++) {
+        const r2 = roads[j];
+        const p2 = r2.points;
+        if (!p2 || p2.length < 2) continue;
+        for (let a = 1; a < p1.length; a++) {
+          const A = p1[a - 1];
+          const B = p1[a];
+          for (let b = 1; b < p2.length; b++) {
+            const C = p2[b - 1];
+            const D = p2[b];
+            if (!this._segmentsCrossProper(A.x, A.y, B.x, B.y, C.x, C.y, D.x, D.y)) continue;
+            const den = (A.x - B.x) * (C.y - D.y) - (A.y - B.y) * (C.x - D.x);
+            if (Math.abs(den) < 1e-9) continue;
+            const t = ((A.x - C.x) * (C.y - D.y) - (A.y - C.y) * (C.x - D.x)) / den;
+            const u = -((A.x - B.x) * (A.y - C.y) - (A.y - B.y) * (A.x - C.x)) / den;
+            if (t < 0.05 || t > 0.95 || u < 0.05 || u > 0.95) continue;
+            const ix = A.x + t * (B.x - A.x);
+            const iy = A.y + t * (B.y - A.y);
+            // undgå vej-ender (allerede dækket)
+            const nearTip = (road, p) => {
+              const s = road.points[0];
+              const e = road.points[road.points.length - 1];
+              return Math.hypot(p.x - s.x, p.y - s.y) < thresh
+                || Math.hypot(p.x - e.x, p.y - e.y) < thresh;
+            };
+            if (nearTip(r1, { x: ix, y: iy }) || nearTip(r2, { x: ix, y: iy })) continue;
+            const pt = { x: ix, y: iy, cross: true };
+            map.get(r1)?.joins.push(pt);
+            map.get(r2)?.joins.push(pt);
+          }
+        }
       }
     }
     return map;
   }
 
   /**
-   * Tegn rene asfalt-pads i kryds (dækker butt-ender, undgår pølse-overlap).
+   * Tegn rene asfalt-pads i T/X-kryds (dækker pølse-overlap).
    */
   drawRoadJunctions(ctx, joinMeta) {
     const dpr = this.dpr || 1;
     const pads = [];
-    const mergeDist = 12 * dpr;
+    const mergeDist = 14 * dpr;
 
     for (const road of this.roads) {
       const m = joinMeta?.get(road);
@@ -4052,15 +4098,15 @@ export class Game {
         pads.push({
           x: j.x,
           y: j.y,
-          r: st.wBody * 0.58,
+          r: st.wBody * (j.cross ? 0.72 : 0.58),
           asphalt: st.asphalt,
           edge: st.edge,
-          hi: st.asphaltHi || '#7a7882'
+          hi: st.asphaltHi || '#7a7882',
+          cross: !!j.cross
         });
       }
     }
 
-    // Merge nærliggende pads
     const used = new Array(pads.length).fill(false);
     const merged = [];
     for (let i = 0; i < pads.length; i++) {
@@ -4072,26 +4118,36 @@ export class Game {
       let asphalt = pads[i].asphalt;
       let edge = pads[i].edge;
       let hi = pads[i].hi;
+      let cross = pads[i].cross;
       used[i] = true;
       for (let j = i + 1; j < pads.length; j++) {
         if (used[j]) continue;
-        if (Math.hypot(pads[j].x - x / n, pads[j].y - y / n) < mergeDist + r * 0.3) {
+        if (Math.hypot(pads[j].x - x / n, pads[j].y - y / n) < mergeDist + r * 0.35) {
           used[j] = true;
           x += pads[j].x;
           y += pads[j].y;
           r = Math.max(r, pads[j].r);
           n++;
+          if (pads[j].cross) cross = true;
         }
       }
-      merged.push({ x: x / n, y: y / n, r: r * (n > 1 ? 1.08 : 1), asphalt, edge, hi });
+      merged.push({
+        x: x / n,
+        y: y / n,
+        r: r * (n > 1 || cross ? 1.12 : 1),
+        asphalt,
+        edge,
+        hi,
+        cross
+      });
     }
 
     for (const p of merged) {
       // ydre curb
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * 1.22, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, p.r * 1.2, 0, Math.PI * 2);
       ctx.fillStyle = p.edge;
-      ctx.globalAlpha = 0.95;
+      ctx.globalAlpha = 0.96;
       ctx.fill();
       // asfalt
       ctx.beginPath();
@@ -4100,16 +4156,29 @@ export class Game {
       ctx.fill();
       // highlight
       ctx.beginPath();
-      ctx.arc(p.x - p.r * 0.15, p.y - p.r * 0.18, p.r * 0.42, 0, Math.PI * 2);
+      ctx.arc(p.x - p.r * 0.15, p.y - p.r * 0.18, p.r * 0.4, 0, Math.PI * 2);
       ctx.fillStyle = p.hi;
-      ctx.globalAlpha = 0.22;
+      ctx.globalAlpha = 0.2;
       ctx.fill();
       ctx.globalAlpha = 1;
-      // diskret midterprik
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(2, p.r * 0.12), 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fill();
+      // X-kryds: lille hvid “+” markering
+      if (p.cross) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+        ctx.lineWidth = 1.4 * dpr;
+        ctx.lineCap = 'round';
+        const s = p.r * 0.28;
+        ctx.beginPath();
+        ctx.moveTo(p.x - s, p.y);
+        ctx.lineTo(p.x + s, p.y);
+        ctx.moveTo(p.x, p.y - s);
+        ctx.lineTo(p.x, p.y + s);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(2, p.r * 0.1), 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fill();
+      }
     }
   }
 

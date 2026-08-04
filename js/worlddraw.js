@@ -68,7 +68,8 @@ export function drawWorldTerrain(
   // Ambient foliage (ekstra buske uden for skov-tiles)
   drawAmbientDecor(ctx, w, h, dpr, districts, seed, tileMap);
 
-  if (opts.showHex && opts.hexSize) {
+  // Hex-guide kun hvis ikke allerede hex-tiles (ellers for rod)
+  if (opts.showHex && opts.hexSize && tileMap?.kind !== 'hex') {
     drawHexGuide(ctx, w, h, opts.hexSize, dpr);
   }
 
