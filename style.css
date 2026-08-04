@@ -58,15 +58,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 250, 249, 0.94) 55%, rgba(245, 245, 244, 0.9) 100%);
-  border: 1px solid rgba(68, 64, 60, 0.1);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.97) 0%, rgba(250, 248, 245, 0.94) 50%, rgba(243, 241, 236, 0.92) 100%);
+  border: 1px solid rgba(68, 64, 60, 0.12);
   border-top: none;
-  border-radius: 0 0 1.15rem 1.15rem;
+  border-radius: 0 0 1.2rem 1.2rem;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.9) inset,
-    0 10px 28px rgba(28, 25, 23, 0.12);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+    0 1px 0 rgba(255, 255, 255, 0.95) inset,
+    0 12px 32px rgba(28, 25, 23, 0.14),
+    0 2px 0 rgba(16, 185, 129, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   padding: 0.45rem 0.5rem 0.5rem;
   max-width: 100%;
 }
@@ -335,9 +336,9 @@ body {
   padding: 0.45rem 0.7rem;
   min-height: 2.15rem;
   min-width: 2.15rem;
-  border-radius: 0.75rem;
+  border-radius: 0.8rem;
   border: 1px solid #e7e5e4;
-  background: linear-gradient(180deg, #ffffff, #f5f5f4);
+  background: linear-gradient(180deg, #ffffff 0%, #f7f6f3 100%);
   color: #44403c;
   font-size: 0.85rem;
   font-weight: 600;
@@ -346,7 +347,7 @@ body {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05);
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.07), 0 1px 0 rgba(255,255,255,0.8) inset;
   transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.08s ease;
 }
 

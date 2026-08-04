@@ -2853,6 +2853,8 @@ export class Game {
   }
 
   drawDistrict(ctx, d) {
+    // Soft “online” ring when a road touches the hub
+    d._connected = !!this.findNearestRoadPoint(d.x, d.y, d.r + 95);
     drawPlaceHub(ctx, d, this.dpr, {
       lightenHex: (c, a) => this.lightenHex(c, a),
       darkenHex: (c, f) => this.darkenHex(c, f),
@@ -2997,9 +2999,12 @@ export class Game {
     const h = this.canvas.height;
     const cam = this.camera;
 
-    // Outside playable board = void (not fake buildable land)
+    // Outside playable board = deep warm void
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#2c2925';
+    const voidG = ctx.createRadialGradient(w * 0.5, h * 0.4, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.7);
+    voidG.addColorStop(0, '#3a342e');
+    voidG.addColorStop(1, '#1c1917');
+    ctx.fillStyle = voidG;
     ctx.fillRect(0, 0, w, h);
 
     // World transform

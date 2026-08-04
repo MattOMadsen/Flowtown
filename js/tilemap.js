@@ -93,32 +93,44 @@ export function drawTileMap(ctx, tileMap, tileImgs) {
   if (!tileMap) return;
   const { cols, rows, tileSize, grid } = tileMap;
   const solids = {
-    grass: '#b7d18a',
-    grass2: '#a8c97c',
-    grass3: '#c2db96',
+    grass: '#a8c97a',
+    grass2: '#9bc06e',
+    grass3: '#b5d488',
     dirt: '#c4b48a',
     dirt2: '#d0bc94',
     dirt3: '#b8a67c',
-    forest: '#6f9b5a',
-    water: '#b7d18a' // never paint square water – organic lakes draw on top
+    forest: '#5f8f4e',
+    water: '#a8c97a'
   };
+
+  // Slight overdraw hides seams between tiles
+  const bleed = 1.15;
 
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       let key = TILE_KEYS[grid[y * cols + x]] || 'grass';
-      // Square water tiles look like Minecraft cubes under lakes → use grass base
-      if (key === 'water') key = GRASS[(x + y) % GRASS.length] !== undefined
-        ? TILE_KEYS[GRASS[(x + y) % GRASS.length]]
-        : 'grass';
+      if (key === 'water') {
+        key = TILE_KEYS[GRASS[(x + y) % GRASS.length]] || 'grass';
+      }
       const px = x * tileSize;
       const py = y * tileSize;
       const img = tileImgs?.[key];
       if (img && img.complete && img.naturalWidth > 0) {
-        ctx.drawImage(img, px, py, tileSize + 0.75, tileSize + 0.75);
+        ctx.drawImage(img, px, py, tileSize + bleed, tileSize + bleed);
       } else {
         ctx.fillStyle = solids[key] || solids.grass;
-        ctx.fillRect(px, py, tileSize + 0.75, tileSize + 0.75);
+        ctx.fillRect(px, py, tileSize + bleed, tileSize + bleed);
       }
     }
   }
+
+  // Soft light wash over tiles (unifies palette)
+  ctx.save();
+  const g = ctx.createLinearGradient(0, 0, 0, rows * tileSize);
+  g.addColorStop(0, 'rgba(255,255,255,0.06)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(40, 30, 15, 0.06)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, cols * tileSize, rows * tileSize);
+  ctx.restore();
 }

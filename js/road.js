@@ -165,45 +165,62 @@ export class Road {
     const dual = !this.oneWay;
     const motor = this.lanes >= 3;
     const bridge = this.isBridge;
-    let edge = bridge ? '#1e3a5f' : motor ? '#1c1917' : '#292524';
-    let asphalt = bridge ? '#64748b' : motor ? '#3f3f46' : '#52525b';
-    let asphaltHi = bridge ? '#94a3b8' : motor ? '#a1a1aa' : '#71717a';
-    let lane = bridge ? '#e0f2fe' : motor ? '#fafafa' : '#e4e4e7';
-    let alpha = this.owner === 'player' ? 1 : 0.9;
+    // Cozy palette: warm asphalt, soft edges
+    let edge = bridge ? '#1e3a5f' : motor ? '#1c1917' : '#2a2623';
+    let asphalt = bridge ? '#6b7c93' : motor ? '#3f3f46' : '#5c5a62';
+    let asphaltHi = bridge ? '#a8b8cc' : motor ? '#a1a1aa' : '#7a7882';
+    let shoulder = 'rgba(156, 142, 110, 0.42)';
+    let lane = bridge ? '#e0f2fe' : motor ? '#fafafa' : '#eceae6';
+    let alpha = this.owner === 'player' ? 1 : 0.88;
 
     const dens = this.effectiveDensity;
     if (!bridge && dens >= 6) {
-      asphalt = '#991b1b';
-      asphaltHi = '#b91c1c';
-      edge = '#450a0a';
-      lane = '#fecaca';
+      asphalt = '#9f1239';
+      asphaltHi = '#e11d48';
+      edge = '#4c0519';
+      lane = '#fecdd3';
+      shoulder = 'rgba(127, 29, 29, 0.35)';
     } else if (!bridge && dens >= 3) {
       asphalt = '#9a3412';
-      asphaltHi = '#c2410c';
+      asphaltHi = '#ea580c';
       edge = '#431407';
-      lane = '#fed7aa';
+      lane = '#ffedd5';
+      shoulder = 'rgba(154, 52, 18, 0.28)';
     } else if (this.owner !== 'player' && this.ownerColor) {
-      asphalt = this.mixHex(this.ownerColor, '#52525b', 0.35);
-      asphaltHi = this.mixHex(this.ownerColor, '#a8a29e', 0.45);
-      edge = this.mixHex(this.ownerColor, '#1c1917', 0.2);
+      asphalt = this.mixHex(this.ownerColor, '#5c5a62', 0.38);
+      asphaltHi = this.mixHex(this.ownerColor, '#a8a29e', 0.48);
+      edge = this.mixHex(this.ownerColor, '#1c1917', 0.22);
       lane = '#fef3c7';
     }
 
-    const wEdge = (motor ? 32 : bridge ? 24 : 26) * dpr;
-    const wBody = (motor ? 24 : bridge ? 16 : 20) * dpr;
-    const wInner = (motor ? 17 : 14) * dpr;
+    const wEdge = (motor ? 34 : bridge ? 26 : 28) * dpr;
+    const wBody = (motor ? 25 : bridge ? 17 : 21) * dpr;
+    const wInner = (motor ? 16 : 13) * dpr;
 
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = alpha;
 
-    // VIS2: soft gravel shoulder
+    // Drop shadow (offset “floor”)
+    ctx.beginPath();
+    this.path(ctx);
+    ctx.strokeStyle = bridge ? 'rgba(14, 116, 144, 0.18)' : 'rgba(20, 16, 12, 0.28)';
+    ctx.lineWidth = wEdge + 8 * dpr;
+    ctx.stroke();
+
+    // Soft gravel / grass shoulder
     if (!bridge) {
       ctx.beginPath();
       this.path(ctx);
-      ctx.strokeStyle = 'rgba(168, 152, 120, 0.35)';
-      ctx.lineWidth = wEdge + 7 * dpr;
+      ctx.strokeStyle = shoulder;
+      ctx.lineWidth = wEdge + 10 * dpr;
+      ctx.stroke();
+      // outer curb ring
+      ctx.beginPath();
+      this.path(ctx);
+      ctx.strokeStyle = 'rgba(68, 64, 60, 0.22)';
+      ctx.lineWidth = wEdge + 2 * dpr;
       ctx.stroke();
     }
 
@@ -214,57 +231,60 @@ export class Road {
       for (let i = 1; i <= count; i++) {
         const t = i / (count + 1);
         const p = this.getPointAt(t);
-        const ang = this.getAngleAt(t) + Math.PI / 2;
-        const hw = 5 * dpr;
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.75)';
-        ctx.fillRect(p.x - hw * 0.45, p.y, hw * 0.9, 14 * dpr);
-        // water reflection stub
-        ctx.fillStyle = 'rgba(14, 165, 233, 0.15)';
-        ctx.fillRect(p.x - hw * 0.35, p.y + 12 * dpr, hw * 0.7, 6 * dpr);
+        const hw = 5.5 * dpr;
+        // pillar body + water reflection
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.85)';
+        ctx.fillRect(p.x - hw * 0.45, p.y, hw * 0.9, 16 * dpr);
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.fillRect(p.x - hw * 0.35, p.y, hw * 0.7, 3 * dpr);
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.2)';
+        ctx.fillRect(p.x - hw * 0.4, p.y + 14 * dpr, hw * 0.8, 7 * dpr);
       }
     }
 
-    // Soft ground shadow
-    ctx.beginPath();
-    this.path(ctx);
-    ctx.strokeStyle = bridge ? 'rgba(14, 116, 144, 0.22)' : 'rgba(28, 25, 23, 0.2)';
-    ctx.lineWidth = wEdge + 4 * dpr;
-    ctx.stroke();
-
-    // Edge
+    // Edge curb
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = edge;
     ctx.lineWidth = wEdge;
     ctx.stroke();
 
-    // Asphalt / deck (base color)
+    // Asphalt body
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = asphalt;
     ctx.lineWidth = wBody;
     ctx.stroke();
 
-    // Asphalt texture overlay (grain) – not on heavy congestion red
-    if (!bridge && dens < 3) {
+    // Asphalt texture (Kenney-derived)
+    if (!bridge && dens < 4) {
       const pat = asphaltPattern(ctx, dpr);
       if (pat) {
         ctx.beginPath();
         this.path(ctx);
         ctx.strokeStyle = pat;
-        ctx.lineWidth = wBody * 0.92;
-        ctx.globalAlpha = alpha * 0.42;
+        ctx.lineWidth = wBody * 0.9;
+        ctx.globalAlpha = alpha * (dens >= 3 ? 0.22 : 0.48);
         ctx.stroke();
         ctx.globalAlpha = alpha;
       }
     }
 
-    // Highlight
+    // Specular highlight strip
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = asphaltHi;
     ctx.lineWidth = wInner;
-    ctx.globalAlpha = alpha * 0.32;
+    ctx.globalAlpha = alpha * 0.38;
+    ctx.stroke();
+    ctx.globalAlpha = alpha;
+
+    // Edge highlight (left-ish rim)
+    ctx.beginPath();
+    this.path(ctx);
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = wBody * 0.35;
+    ctx.globalAlpha = alpha * 0.55;
     ctx.stroke();
     ctx.globalAlpha = alpha;
 
@@ -272,34 +292,44 @@ export class Road {
     if (bridge) {
       ctx.beginPath();
       this.path(ctx);
-      ctx.strokeStyle = 'rgba(224, 242, 254, 0.7)';
-      ctx.lineWidth = 1.4 * dpr;
-      ctx.setLineDash([4 * dpr, 6 * dpr]);
+      ctx.strokeStyle = 'rgba(224, 242, 254, 0.75)';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.setLineDash([5 * dpr, 6 * dpr]);
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
     // Center marking
     if (dual) {
+      // double line for motorway
+      if (motor) {
+        ctx.beginPath();
+        this.path(ctx);
+        ctx.strokeStyle = 'rgba(250, 250, 249, 0.55)';
+        ctx.lineWidth = 5.5 * dpr;
+        ctx.setLineDash([]);
+        ctx.lineCap = 'butt';
+        ctx.stroke();
+      }
       ctx.beginPath();
       this.path(ctx);
       ctx.strokeStyle = lane;
-      ctx.lineWidth = 3.2 * dpr;
-      ctx.setLineDash([10 * dpr, 8 * dpr]);
+      ctx.lineWidth = motor ? 2.2 * dpr : 3 * dpr;
+      ctx.setLineDash(motor ? [4 * dpr, 10 * dpr] : [11 * dpr, 9 * dpr]);
       ctx.lineCap = 'butt';
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.beginPath();
       this.path(ctx);
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-      ctx.lineWidth = 1.2 * dpr;
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+      ctx.lineWidth = 1.1 * dpr;
       ctx.stroke();
     } else {
-      // Envejs: solid midterstribe + farvet kant-tint
+      // Envejs: colored dashed center
       ctx.beginPath();
       this.path(ctx);
-      ctx.strokeStyle = this.oneWay === -1 ? 'rgba(251, 146, 60, 0.85)' : 'rgba(96, 165, 250, 0.9)';
-      ctx.lineWidth = 2.4 * dpr;
+      ctx.strokeStyle = this.oneWay === -1 ? 'rgba(251, 146, 60, 0.9)' : 'rgba(96, 165, 250, 0.92)';
+      ctx.lineWidth = 2.6 * dpr;
       ctx.setLineDash([14 * dpr, 8 * dpr]);
       ctx.lineCap = 'butt';
       ctx.stroke();
@@ -307,9 +337,9 @@ export class Road {
     }
     ctx.lineCap = 'round';
 
-    // Chevrons
+    // Chevrons / direction arrows
     const len = this.length;
-    const arrowCount = Math.max(1, Math.floor(len / (110 * dpr)));
+    const arrowCount = Math.max(1, Math.floor(len / (100 * dpr)));
     for (let i = 1; i <= arrowCount; i++) {
       const t = i / (arrowCount + 1);
       const p = this.getPointAt(t);
@@ -319,18 +349,26 @@ export class Road {
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(rot);
+        // soft shadow under arrow
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.moveTo(7 * dpr, 1 * dpr);
+        ctx.lineTo(-4.2 * dpr, -3.2 * dpr);
+        ctx.lineTo(-4.2 * dpr, 4.2 * dpr);
+        ctx.closePath();
+        ctx.fill();
         ctx.fillStyle = fill;
         ctx.beginPath();
-        ctx.moveTo(6.5 * dpr, 0);
-        ctx.lineTo(-4.5 * dpr, -3.8 * dpr);
-        ctx.lineTo(-4.5 * dpr, 3.8 * dpr);
+        ctx.moveTo(6.8 * dpr, 0);
+        ctx.lineTo(-4.5 * dpr, -3.9 * dpr);
+        ctx.lineTo(-4.5 * dpr, 3.9 * dpr);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
       };
 
       const fill = dens >= 3 && !bridge
-        ? 'rgba(254, 226, 226, 0.9)'
+        ? 'rgba(254, 226, 226, 0.95)'
         : bridge
           ? 'rgba(224, 242, 254, 0.95)'
           : this.oneWay
@@ -338,7 +376,7 @@ export class Road {
             : 'rgba(254, 243, 199, 0.95)';
       if (dual) {
         const ang = angle + Math.PI / 2;
-        const off = 4.5 * dpr;
+        const off = 4.8 * dpr;
         ctx.save();
         ctx.translate(Math.cos(ang) * off, Math.sin(ang) * off);
         drawArrow(angle, fill);
@@ -348,7 +386,6 @@ export class Road {
         drawArrow(angle + Math.PI, fill);
         ctx.restore();
       } else {
-        // oneWay 1 = along angle; -1 = reverse
         drawArrow(this.oneWay === -1 ? angle + Math.PI : angle, fill);
       }
     }

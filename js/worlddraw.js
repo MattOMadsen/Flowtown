@@ -1,6 +1,6 @@
 /**
- * World: richer tile board + optional hex guide + place hubs.
- * Visual target: cozy stylized city-builder (not full 3D).
+ * World: richer tile board + place hubs (ART lift 2026-08).
+ * Cozy stylized city-builder look.
  */
 
 import { drawWaterBodies } from './water.js';
@@ -18,10 +18,14 @@ export function drawWorldTerrain(
   const w = worldW;
   const h = worldH;
 
-  // Drop shadow under board
-  ctx.fillStyle = 'rgba(20, 18, 16, 0.22)';
+  // Soft drop shadow under board
+  ctx.fillStyle = 'rgba(15, 12, 10, 0.32)';
   ctx.beginPath();
-  roundRectPath(ctx, -4 * dpr, 4 * dpr, w + 12 * dpr, h + 10 * dpr, 18 * dpr);
+  roundRectPath(ctx, -3 * dpr, 6 * dpr, w + 14 * dpr, h + 12 * dpr, 20 * dpr);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(20, 18, 16, 0.12)';
+  ctx.beginPath();
+  roundRectPath(ctx, 2 * dpr, 3 * dpr, w + 6 * dpr, h + 6 * dpr, 16 * dpr);
   ctx.fill();
 
   ctx.save();
@@ -29,11 +33,12 @@ export function drawWorldTerrain(
   roundRectPath(ctx, 0, 0, w, h, 14 * dpr);
   ctx.clip();
 
-  // Soft sky-to-meadow wash under tiles
+  // Sky-to-meadow wash (warmer, more depth)
   const base = ctx.createLinearGradient(0, 0, 0, h);
-  base.addColorStop(0, '#d5e8c4');
-  base.addColorStop(0.55, '#e4ecc8');
-  base.addColorStop(1, '#d8cdb4');
+  base.addColorStop(0, '#cfe8b8');
+  base.addColorStop(0.35, '#dcecc4');
+  base.addColorStop(0.7, '#e4e0c0');
+  base.addColorStop(1, '#d4c8a8');
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, w, h);
 
@@ -41,11 +46,14 @@ export function drawWorldTerrain(
     drawTileMap(ctx, tileMap, getTileImages());
   }
 
-  // Soft light from top-left (stylized “studio” light)
-  const light = ctx.createRadialGradient(w * 0.2, h * 0.15, 0, w * 0.35, h * 0.4, Math.max(w, h) * 0.75);
-  light.addColorStop(0, 'rgba(255,255,255,0.14)');
-  light.addColorStop(0.5, 'rgba(255,255,255,0.04)');
-  light.addColorStop(1, 'rgba(40, 35, 28, 0.06)');
+  // Studio light from top-left
+  const light = ctx.createRadialGradient(
+    w * 0.18, h * 0.12, 0,
+    w * 0.32, h * 0.38, Math.max(w, h) * 0.78
+  );
+  light.addColorStop(0, 'rgba(255,255,255,0.16)');
+  light.addColorStop(0.45, 'rgba(255,255,255,0.04)');
+  light.addColorStop(1, 'rgba(40, 32, 24, 0.1)');
   ctx.fillStyle = light;
   ctx.fillRect(0, 0, w, h);
 
@@ -57,36 +65,74 @@ export function drawWorldTerrain(
     if (d.type === 'farm') drawFarmFields(ctx, d, dpr);
   }
 
-  // Hex guide (helps building) – only while drawing/bridge
+  // Ambient foliage dots (cheap “life” without extra sprites)
+  drawAmbientDecor(ctx, w, h, dpr, districts, seed);
+
   if (opts.showHex && opts.hexSize) {
     drawHexGuide(ctx, w, h, opts.hexSize, dpr);
   }
 
-  // Soft inner vignette for depth
-  const vig = ctx.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.25, w * 0.5, h * 0.5, Math.max(w, h) * 0.7);
+  // Soft vignette
+  const vig = ctx.createRadialGradient(
+    w * 0.5, h * 0.48, Math.min(w, h) * 0.22,
+    w * 0.5, h * 0.5, Math.max(w, h) * 0.72
+  );
   vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(30, 25, 20, 0.1)');
+  vig.addColorStop(0.7, 'rgba(30, 25, 18, 0.04)');
+  vig.addColorStop(1, 'rgba(25, 20, 14, 0.16)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
 
   ctx.restore();
 
-  // Beveled board frame
-  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  // Beveled frame
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
   ctx.lineWidth = 2.5 * dpr;
   ctx.beginPath();
-  roundRectPath(ctx, 2 * dpr, 2 * dpr, w - 4 * dpr, h - 4 * dpr, 13 * dpr);
+  roundRectPath(ctx, 2.5 * dpr, 2.5 * dpr, w - 5 * dpr, h - 5 * dpr, 13 * dpr);
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(40, 35, 30, 0.45)';
-  ctx.lineWidth = 3 * dpr;
+  ctx.strokeStyle = 'rgba(40, 32, 26, 0.5)';
+  ctx.lineWidth = 3.2 * dpr;
   ctx.beginPath();
   roundRectPath(ctx, 0, 0, w, h, 14 * dpr);
   ctx.stroke();
+  // Inner warm rim
+  ctx.strokeStyle = 'rgba(180, 150, 100, 0.18)';
+  ctx.lineWidth = 1.2 * dpr;
+  ctx.beginPath();
+  roundRectPath(ctx, 5 * dpr, 5 * dpr, w - 10 * dpr, h - 10 * dpr, 11 * dpr);
+  ctx.stroke();
+}
+
+function drawAmbientDecor(ctx, w, h, dpr, districts, seed) {
+  let s = (seed | 0) + 991;
+  const rng = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  ctx.save();
+  for (let i = 0; i < 48; i++) {
+    const x = rng() * w;
+    const y = rng() * h;
+    // skip near districts
+    let near = false;
+    for (const d of districts) {
+      if (Math.hypot(d.x - x, d.y - y) < d.r * 2.2) { near = true; break; }
+    }
+    if (near) continue;
+    const r = (1.2 + rng() * 2.4) * dpr;
+    ctx.globalAlpha = 0.12 + rng() * 0.14;
+    ctx.fillStyle = rng() > 0.55 ? '#5a8f3c' : '#6b9e48';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawHexGuide(ctx, w, h, size, dpr) {
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
   ctx.lineWidth = 1 * dpr;
   const hexH = size * 2;
   const hexW = Math.sqrt(3) * size;
@@ -112,10 +158,10 @@ function drawHexGuide(ctx, w, h, size, dpr) {
 
 function drawFarmFields(ctx, d, dpr) {
   const rows = 5;
-  const fw = d.r * 2.5;
-  const fh = d.r * 1.9;
+  const fw = d.r * 2.6;
+  const fh = d.r * 2.0;
   ctx.save();
-  ctx.globalAlpha = 0.28;
+  ctx.globalAlpha = 0.32;
   ctx.translate(d.x + d.r * 0.85, d.y + d.r * 0.45);
   ctx.rotate(-0.1);
   for (let i = 0; i < rows; i++) {
@@ -126,35 +172,47 @@ function drawFarmFields(ctx, d, dpr) {
 }
 
 /**
- * Place hub with stronger depth (closer to stylized diorama look).
+ * Place hub with stronger depth (stylized diorama).
  */
 export function drawPlaceHub(ctx, d, dpr, helpers) {
   const { lightenHex, drawSilhouette } = helpers;
   const type = d.type || 'town';
   const sprite = getPlaceSprite(type, d.spriteKey || null);
-  const size = d.r * 2.45; // slightly larger sprites – clearer art
+  const size = d.r * 2.55;
+  const connected = d._connected; // optional flag from game
+
+  // Soft selection / life ring under place
+  ctx.beginPath();
+  ctx.ellipse(d.x, d.y + size * 0.22, size * 0.42, size * 0.15, 0, 0, Math.PI * 2);
+  const glow = ctx.createRadialGradient(d.x, d.y + size * 0.18, 0, d.x, d.y + size * 0.22, size * 0.42);
+  const gc = d.color || '#a8a29e';
+  glow.addColorStop(0, hexAlpha(gc, 0.22));
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fill();
 
   // Multi-layer contact shadow
   ctx.beginPath();
-  ctx.ellipse(d.x + 3 * dpr, d.y + size * 0.3, size * 0.48, size * 0.16, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(20, 16, 12, 0.28)';
+  ctx.ellipse(d.x + 4 * dpr, d.y + size * 0.32, size * 0.5, size * 0.17, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(15, 12, 10, 0.32)';
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y + size * 0.26, size * 0.36, size * 0.11, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(20, 16, 12, 0.12)';
+  ctx.ellipse(d.x, d.y + size * 0.28, size * 0.38, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(20, 16, 12, 0.14)';
   ctx.fill();
 
-  // Ground plate (subtle, not a glow bubble)
+  // Ground plate
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y + size * 0.18, size * 0.34, size * 0.12, 0, 0, Math.PI * 2);
-  const plate = ctx.createRadialGradient(d.x, d.y + size * 0.1, 0, d.x, d.y + size * 0.18, size * 0.34);
-  plate.addColorStop(0, 'rgba(90, 85, 80, 0.35)');
-  plate.addColorStop(1, 'rgba(90, 85, 80, 0.05)');
+  ctx.ellipse(d.x, d.y + size * 0.2, size * 0.36, size * 0.13, 0, 0, Math.PI * 2);
+  const plate = ctx.createRadialGradient(d.x, d.y + size * 0.12, 0, d.x, d.y + size * 0.2, size * 0.36);
+  plate.addColorStop(0, 'rgba(70, 65, 58, 0.4)');
+  plate.addColorStop(1, 'rgba(70, 65, 58, 0.04)');
   ctx.fillStyle = plate;
   ctx.fill();
 
   if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-    ctx.drawImage(sprite, d.x - size / 2, d.y - size * 0.64, size, size);
+    // slight lift shadow under sprite
+    ctx.drawImage(sprite, d.x - size / 2, d.y - size * 0.66, size, size);
   } else {
     ctx.beginPath();
     ctx.arc(d.x, d.y - size * 0.05, size * 0.3, 0, Math.PI * 2);
@@ -163,47 +221,72 @@ export function drawPlaceHub(ctx, d, dpr, helpers) {
     drawSilhouette(ctx, d, type);
   }
 
-  // Hub pin
+  // Hub pin (gold)
   ctx.beginPath();
-  ctx.arc(d.x, d.y + size * 0.18, 4.5 * dpr, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(251, 191, 36, 0.95)';
+  ctx.arc(d.x, d.y + size * 0.2, 5 * dpr, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(251, 191, 36, 0.98)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(28,25,23,0.4)';
-  ctx.lineWidth = 1.1 * dpr;
+  ctx.strokeStyle = 'rgba(28,25,23,0.45)';
+  ctx.lineWidth = 1.2 * dpr;
   ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(d.x - 1 * dpr, d.y + size * 0.18, 1.6 * dpr, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fill();
 
-  // Label card
+  // Connected ring
+  if (connected) {
+    ctx.beginPath();
+    ctx.arc(d.x, d.y + size * 0.2, 8 * dpr, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.55)';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.stroke();
+  }
+
+  // Label card (glass)
   const icon = d.icon || '';
   const typeLabel = d.typeLabel || '';
-  ctx.font = `bold ${Math.max(10, 11 * dpr)}px system-ui, sans-serif`;
+  ctx.font = `bold ${Math.max(10, 11.5 * dpr)}px system-ui, sans-serif`;
   const label = d.name;
   const tw = ctx.measureText(label).width;
   ctx.font = `${Math.max(8, 8.5 * dpr)}px system-ui, sans-serif`;
   const tw2 = ctx.measureText(`${icon} ${typeLabel}`.trim()).width;
-  const padX = 8 * dpr;
+  const padX = 9 * dpr;
   const bw = Math.max(tw, tw2) + padX * 2 + 4 * dpr;
-  const bh = 28 * dpr;
+  const bh = 30 * dpr;
   const bx = d.x - bw / 2;
-  const by = d.y + size * 0.34;
+  const by = d.y + size * 0.36;
 
-  ctx.fillStyle = 'rgba(20,16,12,0.16)';
-  roundRect(ctx, bx + 1.5 * dpr, by + 2.5 * dpr, bw, bh, 8 * dpr);
+  ctx.fillStyle = 'rgba(15,12,10,0.2)';
+  roundRect(ctx, bx + 2 * dpr, by + 3 * dpr, bw, bh, 9 * dpr);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.97)';
-  roundRect(ctx, bx, by, bw, bh, 8 * dpr);
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
+  roundRect(ctx, bx, by, bw, bh, 9 * dpr);
   ctx.fill();
+  // accent bar
   ctx.fillStyle = d.color || '#a8a29e';
-  roundRect(ctx, bx, by, 3.5 * dpr, bh, 2 * dpr);
+  roundRect(ctx, bx, by, 3.8 * dpr, bh, 2 * dpr);
   ctx.fill();
+  // top rim
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 1 * dpr;
+  roundRect(ctx, bx + 0.5 * dpr, by + 0.5 * dpr, bw - dpr, bh * 0.45, 8 * dpr);
+  ctx.stroke();
 
   ctx.fillStyle = '#1c1917';
-  ctx.font = `bold ${Math.max(10, 11 * dpr)}px system-ui, sans-serif`;
+  ctx.font = `bold ${Math.max(10, 11.5 * dpr)}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, d.x + 1 * dpr, by + 10 * dpr);
+  ctx.fillText(label, d.x + 1.5 * dpr, by + 11 * dpr);
   ctx.font = `${Math.max(8, 8.5 * dpr)}px system-ui, sans-serif`;
   ctx.fillStyle = '#57534e';
-  ctx.fillText(`${icon} ${typeLabel}`.trim(), d.x + 1 * dpr, by + 20 * dpr);
+  ctx.fillText(`${icon} ${typeLabel}`.trim(), d.x + 1.5 * dpr, by + 21.5 * dpr);
+}
+
+function hexAlpha(hex, a) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return `rgba(160,160,160,${a})`;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})`;
 }
 
 function roundRect(ctx, x, y, w, h, r) {
