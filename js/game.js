@@ -97,6 +97,10 @@ export class Game {
     this.assignTimer = 0;
     this.jobTimer = 0;
     this.stuckPenaltyTimer = 0;
+    this.bottleneckTimer = 0;
+    this.bottleneckToastCooldown = 0;
+    /** Worst player road congestion { road, dens, mid } | null */
+    this.bottleneck = null;
     this.growthTimer = 0;
     /** Session clock (seconds) for rush hour */
     this.sessionTime = 0;
@@ -2376,6 +2380,130 @@ export class Game {
     }
   }
 
+  /**
+   * IMP-A2: find worst player-road congestion for UI + glow.
+   * dens threshold: ≥3 orange, ≥5 critical (after lanes).
+   */
+  refreshBottleneck() {
+    let best = null;
+    let bestDens = 2.4;
+    for (const road of this.roads) {
+      if (road.owner && road.owner !== 'player') continue;
+      const dens = road.effectiveDensity != null
+        ? road.effectiveDensity
+        : (road.density || 0) / Math.max(1, road.lanes || 1);
+      if (dens > bestDens) {
+        bestDens = dens;
+        const mid = road.getPointAt?.(0.5) || road.points?.[Math.floor((road.points?.length || 1) / 2)];
+        best = { road, dens, mid, critical: dens >= 5 };
+      }
+    }
+    this.bottleneck = best;
+    return best;
+  }
+
+  /** Hint copy for tools that fix traffic */
+  getBottleneckHint(bn = this.bottleneck) {
+    if (!bn) return null;
+    const r = bn.road;
+    const parts = [];
+    if ((r.lanes | 0) < 3) parts.push('🛣️ motorvej');
+    if (!r.oneWay) parts.push('➡️ envejs');
+    if (!r.hasLight) parts.push('🚦 lys');
+    const tools = parts.length ? parts.join(' / ') : 'flere veje eller færre biler';
+    return {
+      dens: bn.dens,
+      critical: bn.critical,
+      short: bn.critical ? 'Trafikprop!' : 'Kø opbygges',
+      text: bn.critical
+        ? `Trafikprop – prøv ${tools}`
+        : `Kø på vej – overvej ${tools}`,
+      mid: bn.mid
+    };
+  }
+
+  /** Camera + toast when user taps “Vis” on bottleneck strip */
+  focusBottleneck() {
+    const bn = this.bottleneck || this.refreshBottleneck();
+    if (!bn?.mid) {
+      this.showToast('Ingen kø lige nu');
+      return false;
+    }
+    const z = this.clampZoom(Math.max(this.camera.zoom || 1, 1.2));
+    this.camera.zoom = z;
+    const cw = this.canvas.width || 1;
+    const ch = this.canvas.height || 1;
+    this.camera.x = cw / 2 - bn.mid.x * z;
+    this.camera.y = ch / 2 - bn.mid.y * z;
+    const h = this.getBottleneckHint(bn);
+    if (h) this.showToast(h.text, 2.8);
+    this.requestDraw();
+    return true;
+  }
+
+  tickBottleneck(dt) {
+    this.bottleneckTimer += dt;
+    this.bottleneckToastCooldown = Math.max(0, this.bottleneckToastCd - dt);
+    if (this.bottleneckTimer < 1.1) return;
+    this.bottleneckTimer = 0;
+    this.refreshBottleneck();
+    const h = this.getBottleneckHint();
+    if (h?.critical && this.bottleneckToastCd <= 0) {
+      this.showToast(h.text, 2.6);
+      this.bottleneckToastCd = 14;
+      if (h.mid) {
+        this.addFloatText(h.mid.x, h.mid.y - 16, 'KØ!', '#e11d48');
+      }
+    }
+  }
+
+  getBottleneckUi() {
+    const h = this.getBottleneckHint();
+    if (!h) return { active: false };
+    return {
+      active: true,
+      critical: h.critical,
+      text: h.short,
+      detail: h.text,
+      dens: Math.round(h.dens * 10) / 10
+    };
+  }
+
+  drawBottleneckGlow(ctx) {
+    const bn = this.bottleneck;
+    if (!bn?.road || !bn.mid) return;
+    const dpr = this.dpr || 1;
+    const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 220);
+    const r = bn.road;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.22 + 0.18 * pulse;
+    ctx.strokeStyle = bn.critical ? '#ef4444' : '#f97316';
+    ctx.lineWidth = (bn.critical ? 28 : 22) * dpr;
+    ctx.beginPath();
+    r.path(ctx);
+    ctx.stroke();
+    ctx.globalAlpha = 0.55 + 0.25 * pulse;
+    ctx.fillStyle = bn.critical ? '#f43f5e' : '#fb923c';
+    ctx.beginPath();
+    ctx.arc(bn.mid.x, bn.mid.y, (10 + pulse * 4) * dpr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.stroke();
+    ctx.font = `bold ${Math.max(11, 12 * dpr)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3 * dpr;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    const label = bn.critical ? '⚠ Kø' : 'Kø';
+    ctx.strokeText(label, bn.mid.x, bn.mid.y - 14 * dpr);
+    ctx.fillStyle = bn.critical ? '#9f1239' : '#c2410c';
+    ctx.fillText(label, bn.mid.x, bn.mid.y - 14 * dpr);
+    ctx.restore();
+  }
+
   update(dt) {
     if (this.paused || !this.running) return;
 
@@ -2384,11 +2512,12 @@ export class Game {
       if (this.toastTimer <= 0) this.toast = null;
     }
 
-    // P1-3 rush + P1-4 growth + P2-1 lights + P3-1 vejr/tid
+    // P1-3 rush + P1-4 growth + P2-1 lights + P3-1 vejr/tid + flaskehals
     this.tickRushHour(dt);
     this.tickDistrictGrowth(dt);
     this.tickTrafficLights();
     this.tickAtmosphere(dt);
+    this.tickBottleneck(dt);
 
     // Jobs (faster spawn during rush)
     this.jobTimer += dt;
@@ -2714,6 +2843,8 @@ export class Game {
 
     // Roads under districts so hubs sit on top of asphalt
     for (const road of this.roads) road.draw(ctx, this.dpr);
+    // IMP-A2: highlight worst congestion after road draw
+    this.drawBottleneckGlow(ctx);
 
     // Junction hubs
     const connR = 8 * this.dpr;

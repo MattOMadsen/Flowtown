@@ -44,24 +44,35 @@
         </div>
       </div>
 
-      <!-- Række 2: værktøjer -->
+      <!-- Række 2: primære værktøjer + mere-menu (mobil) -->
       <div id="tool-bar" class="hud-tools" role="toolbar" aria-label="Værktøjer">
         <button id="btn-draw" type="button" class="hud-tool" title="Tegn vej">✏️</button>
         <button id="btn-erase" type="button" class="hud-tool" title="Slet vej">🗑️</button>
         <button id="btn-upgrade" type="button" class="hud-tool" title="Motorvej">🛣️</button>
         <button id="btn-bridge" type="button" class="hud-tool" title="Bro">🌉</button>
-        <button id="btn-oneway" type="button" class="hud-tool" title="Envejs vej">➡️</button>
-        <button id="btn-light" type="button" class="hud-tool" title="Trafiklys">🚦</button>
-        <button id="btn-shop" type="button" class="hud-tool" title="Butik">🛒</button>
-        <button id="btn-achieve" type="button" class="hud-tool" title="Achievements">🏆</button>
-        <button id="btn-leaderboard" type="button" class="hud-tool" title="Topscore">🏅</button>
         <button id="btn-undo" type="button" class="hud-tool" title="Fortryd">↩️</button>
-        <button id="btn-clear" type="button" class="hud-tool" title="Ryd veje">✨</button>
-        <button id="btn-bots" type="button" class="hud-tool" title="Bots">🤖</button>
+        <div class="hud-more-wrap">
+          <button id="btn-more" type="button" class="hud-tool" title="Flere værktøjer" aria-expanded="false" aria-controls="more-panel">⋯</button>
+          <div id="more-panel" class="hud-more-panel hidden" role="menu">
+            <button id="btn-oneway" type="button" class="hud-more-item" role="menuitem" title="Envejs vej">➡️ Envejs</button>
+            <button id="btn-light" type="button" class="hud-more-item" role="menuitem" title="Trafiklys">🚦 Trafiklys</button>
+            <button id="btn-shop" type="button" class="hud-more-item" role="menuitem" title="Butik">🛒 Butik</button>
+            <button id="btn-achieve" type="button" class="hud-more-item" role="menuitem" title="Achievements">🏆 Achievements</button>
+            <button id="btn-leaderboard" type="button" class="hud-more-item" role="menuitem" title="Topscore">🏅 Topscore</button>
+            <button id="btn-clear" type="button" class="hud-more-item" role="menuitem" title="Ryd veje">✨ Ryd veje</button>
+            <button id="btn-bots" type="button" class="hud-more-item" role="menuitem" title="Bots">🤖 Bots</button>
+          </div>
+        </div>
         <button id="btn-toggle" type="button" class="hud-tool hud-tool-accent" title="Pause">⏸️</button>
         <button id="btn-mute" type="button" class="hud-tool" title="Lyd til/fra" aria-pressed="false">🔊</button>
         <button id="btn-hud-mini" type="button" class="hud-tool" title="Skjul menu">▴</button>
         <button id="btn-hud-expand" type="button" class="hud-tool hud-expand-btn" title="Vis menu">☰</button>
+      </div>
+      <!-- Flaskehals-strip (kompakt, under tools) -->
+      <div id="bottleneck-strip" class="hud-bottleneck hidden" role="status" aria-live="polite">
+        <span id="bottleneck-icon">🚦</span>
+        <span id="bottleneck-text">Kø på vej</span>
+        <button type="button" id="bottleneck-go" class="hud-bottleneck-btn touch-manipulation">Vis</button>
       </div>
 
       <!-- Række 3: tynd mission-strip; lister som dropdown (dækker ikke HUD-højde) -->

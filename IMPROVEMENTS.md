@@ -81,19 +81,73 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 
 ---
 
+## Forslag (levende backlog – 2026-08-04)
+
+Prioritet: **A** (hurtig spil-værdi) → **F** (senere deluxe).  
+Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** PWA + dagligt mål + end-run.
+
+### A – Høj værdi
+| ID | Forslag | Anbefaling | Status |
+|----|---------|------------|--------|
+| IMP-A1 | Daglige/ugentlige mini-mål | Ja | Mangler |
+| IMP-A2 | Flaskehals-feedback (glød, toast, hint) | Ja | ~~Done~~ Batch 1 |
+| IMP-A3 | Flere baner med personlighed | Ja | Mangler |
+| IMP-A4 | Flow-score som stjerne/mål | Hybrid | Mangler |
+| IMP-A5 | Synligere by-bygninger (effekt i UI) | Ja polish | Mangler |
+
+### B – Retention
+| ID | Forslag | Anbefaling | Status |
+|----|---------|------------|--------|
+| IMP-B1 | Daglig login-bonus (blød) | Ja | Mangler |
+| IMP-B2 | Flere unlock-milestones | Ja | Mangler |
+| IMP-B3 | Freeplay + valgfri challenges | Ja (efter baner) | Mangler |
+| IMP-B4 | End-of-run: XP, unlock, del-score | Ja | Delvist |
+
+### C – Trafik / TT
+| ID | Forslag | Anbefaling | Status |
+|----|---------|------------|--------|
+| IMP-C1 | Connected-status (online-ring) | Ja | Delvist |
+| IMP-C2 | Rute-preview ved job-assign | Hybrid | Mangler |
+| IMP-C3 | Vej-slid | Nej (nu) | Parkeret |
+| IMP-C4 | Depot-spawn kun fra hub | Ja hvis spawn mærkelig | Delvist |
+
+### D – UI / mobil
+| ID | Forslag | Anbefaling | Status |
+|----|---------|------------|--------|
+| IMP-D1 | Tool-overflow / mere-menu | Ja | ~~Done~~ Batch 1 |
+| IMP-D2 | By-tap: info vs shop | Hybrid | Mangler |
+| IMP-D3 | Minimap-hint første gang | Ja | Delvist (by-tap findes) |
+| IMP-D4 | Mere cozy ambient-lyd | Ja lille batch | Delvist mute |
+
+### E – Teknik
+| ID | Forslag | Anbefaling | Status |
+|----|---------|------------|--------|
+| T-1–T-5 | Tests, cull, graph-cache, a11y | Ja før store refactors | Mangler |
+| PWA | Install + offline | Ja før multiplayer | Mangler |
+
+### F – Deluxe (senere)
+| ID | Forslag | Anbefaling |
+|----|---------|------------|
+| MP | Live multiplayer | Senere (cloud-kode dækker deling nu) |
+| RAIL | Tog/sporvogn | Hybrid – ét high-level unlock |
+| WXJOB | Vejr påvirker jobmix | Ja lille |
+| ACH2 | Flere achievements | Ja |
+
+### Batch-rækkefølge (anbefalet)
+1. ~~**IMP-A2 + IMP-D1**~~ flaskehals + mere-menu **DONE 2026-08-04**  
+2. **IMP-A3 + A4 + A5** – baner, flow-stjerne, bygning-UI  
+3. **PWA + IMP-A1 + IMP-B4** – app-følelse + habit + end-run  
+
+---
+
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
-| 2 | **Ægte multiplayer** | Live session / server | Backend |
-| 3 | **PWA offline** | manifest + service worker | Polish |
-
-### Hurtige polish der stadig kan give værdi
-- [ ] Tydelig “tryk by for at købe”-hint første minut
-- [ ] End-of-run screen mere celebratory (stjerner + XP)
-- [ ] Minimap: valgfri “gå til by” ved tryk på prik
-- [ ] Flere bil-/sted-varianter (bus, depot-sprite)
+| 1 | **IMP-A3/A4/A5** | Baner + flow-mål + bygning-UI | Batch 2 |
+| 2 | **PWA + IMP-A1 + B4** | Install, dagligt mål, end-run | Batch 3 |
+| 3 | **T-1–T-5** | Tests, cull, a11y | Kvalitet |
+| 4 | **Ægte multiplayer** | Live session / server | Backend |
 
 ---
 

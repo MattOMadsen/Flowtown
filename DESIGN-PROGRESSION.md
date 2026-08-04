@@ -1,7 +1,7 @@
 # Flowtown – vanedannende progression (designplan)
 
 **Status:** Levende plan – ideer lander her; implementering i batches af **1–3 ting** efter værdi  
-**Sidst opdateret:** 2026-08-03 (bruger: XP+penge, baner, job-trafik, større map, vand/broer)  
+**Sidst opdateret:** 2026-08-04 – se også IMPROVEMENTS.md “Forslag (levende backlog)”  
 **Mål:** Cozy mini Transport Tycoon med *to valutaer*, levels/baner, meningsfuld trafik, større verdener – uden at miste frihånds-identitet.
 
 ### Arbejdsgang (aftalt med dig)
@@ -447,14 +447,11 @@ Længere spilletid via **valg** (fart vs last vs specialisering), ikke kun “k�
 
 ---
 
-## 12. Næste skridt (klar til dig)
+## 12. Næste skridt (2026-08-04)
 
-**Anbefalet første batch (max 3):**
+**Batch 1 (nu):** IMP-A2 flaskehals-feedback + IMP-D1 mere-menu.  
 
-1. **A1** – Job-styret bil-spawn (kun meningsfuld trafik).  
-2. **A2** – Mindre hakning / bedre reverse ved vejender.  
-3. *(valgfrit i samme batch hvis A1+A2 er let)* **B1-lite** – XP tæller + bar, uden fuld shop endnu.
+**Batch 2:** Nye baner (A3) + flow-stjerne (A4) + synligere bygninger (A5).  
+**Batch 3:** PWA + dagligt mini-mål + end-run polish.
 
-Derefter: B1/B2 (shop + level-unlocks) → C (baner) → D (vand/broer).
-
-Sig bare **“kør A1”**, **“kør A1+A2”** eller justér rækkefølgen – så implementerer vi det næste.
+Fuld ID-liste: [IMPROVEMENTS.md](./IMPROVEMENTS.md) § Forslag.

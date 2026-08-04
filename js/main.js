@@ -100,13 +100,63 @@ function setMode(mode) {
     (mode === 'draw' || mode === 'bridge') ? 'crosshair' : 'pointer';
 }
 
-btnDraw.addEventListener('click', () => setMode('draw'));
-btnErase.addEventListener('click', () => setMode('erase'));
-if (btnUpgrade) btnUpgrade.addEventListener('click', () => setMode('upgrade'));
-if (btnBridge) btnBridge.addEventListener('click', () => setMode('bridge'));
-if (btnOneway) btnOneway.addEventListener('click', () => setMode('oneway'));
-if (btnLight) btnLight.addEventListener('click', () => setMode('light'));
+const morePanel = document.getElementById('more-panel');
+const btnMore = document.getElementById('btn-more');
+let moreOpen = false;
+
+function setMoreOpen(on) {
+  moreOpen = !!on;
+  if (morePanel) morePanel.classList.toggle('hidden', !moreOpen);
+  if (btnMore) {
+    btnMore.setAttribute('aria-expanded', moreOpen ? 'true' : 'false');
+    btnMore.classList.toggle('is-active', moreOpen);
+  }
+}
+
+function closeMore() {
+  setMoreOpen(false);
+}
+
+btnMore?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  playUi();
+  setMoreOpen(!moreOpen);
+});
+
+// Luk mere-menu ved tryk udenfor
+document.addEventListener('pointerdown', (e) => {
+  if (!moreOpen) return;
+  const wrap = document.querySelector('.hud-more-wrap');
+  if (wrap && !wrap.contains(e.target)) closeMore();
+}, true);
+
+btnDraw.addEventListener('click', () => { closeMore(); setMode('draw'); });
+btnErase.addEventListener('click', () => { closeMore(); setMode('erase'); });
+if (btnUpgrade) btnUpgrade.addEventListener('click', () => { closeMore(); setMode('upgrade'); });
+if (btnBridge) btnBridge.addEventListener('click', () => { closeMore(); setMode('bridge'); });
+if (btnOneway) btnOneway.addEventListener('click', () => { setMode('oneway'); closeMore(); });
+if (btnLight) btnLight.addEventListener('click', () => { setMode('light'); closeMore(); });
 setMode('draw');
+
+// Flaskehals-strip
+function refreshBottleneckUi() {
+  const strip = document.getElementById('bottleneck-strip');
+  const text = document.getElementById('bottleneck-text');
+  if (!strip) return;
+  const ui = game.getBottleneckUi?.() || { active: false };
+  strip.classList.toggle('hidden', !ui.active);
+  if (ui.active && text) {
+    text.textContent = `${ui.text}${ui.dens != null ? ` · ${ui.dens}` : ''}`;
+    strip.classList.toggle('is-critical', !!ui.critical);
+  }
+}
+document.getElementById('bottleneck-go')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  playUi();
+  game.focusBottleneck?.();
+});
 
 // HUD offset for pan arrows / bot panel (menu forsvinder IKKE automatisk)
 function setHudCompact(on) {
@@ -622,6 +672,7 @@ function setLbOpen(on) {
   if (!lbSheet) return;
   lbSheet.classList.toggle('hidden', !lbOpen);
   if (lbOpen) {
+    closeMore();
     setAchieveOpen(false);
     setShopOpen(false);
     if (districtSheet) districtSheet.classList.add('hidden');
@@ -783,6 +834,7 @@ function setAchieveOpen(on) {
   if (!achieveSheet) return;
   achieveSheet.classList.toggle('hidden', !achieveOpen);
   if (achieveOpen) {
+    closeMore();
     setShopOpen(false);
     setLbOpen(false);
     if (districtSheet) districtSheet.classList.add('hidden');
@@ -826,6 +878,7 @@ function setShopOpen(on) {
   if (!shopSheet) return;
   shopSheet.classList.toggle('hidden', !shopOpen);
   if (shopOpen) {
+    closeMore();
     // Skjul by-sheet visuelt, men behold valgt by (til station/lager/depot)
     if (districtSheet) districtSheet.classList.add('hidden');
     if (achieveOpen) setAchieveOpen(false);
@@ -1205,6 +1258,7 @@ setInterval(() => {
   if (achieveOpen) refreshAchieveSheet();
   if (lbOpen) refreshLbSheet();
   refreshGoalsUi();
+  refreshBottleneckUi();
   refreshZoomLabel();
   updateHudOffset();
 }, 280);
