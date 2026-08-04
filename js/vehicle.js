@@ -541,6 +541,7 @@ export class Vehicle {
   draw(ctx, dpr) {
     ctx.save();
     ctx.translate(this.x, this.y);
+    // this.angle: 0 = kører til højre (+x). Procedural art er tegnet med front mod +x.
     ctx.rotate(this.angle);
 
     const s = this.size * dpr;
@@ -550,17 +551,27 @@ export class Vehicle {
     const isVan = this.classId === 'van';
     const rank = this.upgradeRank || 0;
 
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    // Soft ground shadow (under bilen, ikke en firkant)
+    ctx.fillStyle = 'rgba(20, 16, 12, 0.22)';
     ctx.beginPath();
-    ctx.ellipse(1.5 * dpr, 2.5 * dpr, s * (isBus || isHeavy ? 1.7 : 1.45), s * (isHeavy || isBus ? 0.95 : 0.8), 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      1.2 * dpr,
+      2.2 * dpr,
+      s * (isBus || isHeavy ? 1.55 : 1.35),
+      s * (isHeavy || isBus ? 0.72 : 0.58),
+      0, 0, Math.PI * 2
+    );
     ctx.fill();
 
     const sprite = getVehicleSprite(this.classId, this.kind);
     if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-      // Ens scale-familie (top-down packs) – længere køretøjer lidt større
-      const sc = (isBus ? 2.95 : isHeavy ? 2.8 : isVan ? 2.55 : isFast ? 2.35 : 2.5) * s;
+      // Top-down sprites er tegnet med næse OPAD (−y).
+      // Vej-vinkel 0 er +x, så +90° matcher sprite → køreretning.
+      const sc = (isBus ? 2.75 : isHeavy ? 2.6 : isVan ? 2.4 : isFast ? 2.2 : 2.35) * s;
+      ctx.save();
+      ctx.rotate(Math.PI / 2);
       ctx.drawImage(sprite, -sc / 2, -sc / 2, sc, sc);
+      ctx.restore();
     } else if (this.kind === 'truck') {
       this.drawTruck(ctx, s, dpr, isHeavy);
     } else {
