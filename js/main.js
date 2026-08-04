@@ -205,7 +205,10 @@ function refreshDistrictSheet() {
   const stats = game.getFleetStats?.() || { owned: 0, cap: 3, idle: 0, busy: 0 };
   const homeCount = game.getPlayerFleet?.().filter(v => v.homeName === d.name).length || 0;
   const sub = document.getElementById('ds-sub');
-  if (sub) sub.textContent = `${homeCount} stationeret her`;
+  if (sub) {
+    const typePart = d.typeLabel ? `${d.icon || ''} ${d.typeLabel} · ` : '';
+    sub.textContent = `${typePart}${homeCount} stationeret her`.trim();
+  }
   const fl = document.getElementById('ds-fleet');
   if (fl) fl.textContent = `Flåde ${stats.owned}/${stats.cap} · ${stats.idle} ledige · ${stats.busy} på job`;
 

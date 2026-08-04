@@ -19,11 +19,11 @@ import {
   canUpgrade,
   resolveUnlockedClasses,
   applyUpgradeUnlocks,
-  FLEET,
   VEHICLE_CLASSES,
   cargoCapacity
 } from './fleet.js';
 import { saveMeta } from './meta.js';
+import { buildPlaceDefs, placeTypeMeta } from './places.js';
 
 const START_MONEY = 500;
 const MAX_JOBS = 5;
@@ -81,8 +81,12 @@ export class Game {
 
     // Camera (canvas-pixel space)
     this.camera = { x: 0, y: 0, zoom: 1 };
-    this.minZoom = 0.45;
+    // Larger world than viewport – pan/zoom to explore (mobile: Fit)
+    this.minZoom = 0.22;
     this.maxZoom = 2.8;
+    this.worldW = 2400;
+    this.worldH = 1800;
+    this.mapSeed = 42;
 
     // Bots
     this.botsEnabled = false;
@@ -111,33 +115,40 @@ export class Game {
   }
 
   initDistricts() {
-    this.districtDefs = [
-      { rx: 0.14, ry: 0.17, rr: 0.052, color: '#fbbf24', name: 'Nord' },
-      { rx: 0.84, ry: 0.18, rr: 0.048, color: '#34d399', name: 'Øst' },
-      { rx: 0.15, ry: 0.80, rr: 0.055, color: '#60a5fa', name: 'Vest' },
-      { rx: 0.80, ry: 0.78, rr: 0.050, color: '#f472b6', name: 'Syd' },
-      { rx: 0.48, ry: 0.47, rr: 0.046, color: '#a78bfa', name: 'Centrum' }
-    ];
+    this.districtDefs = buildPlaceDefs(this.mapSeed);
     this.updateDistrictPositions();
   }
 
   updateDistrictPositions() {
-    const w = this.canvas.width || 1200;
-    const h = this.canvas.height || 800;
+    const cw = this.canvas.width || 1200;
+    const ch = this.canvas.height || 800;
+    // World larger than screen → længere mellem steder (TTD-følelse)
+    const scale = 1.95;
+    this.worldW = Math.max(cw * scale, 2200 * (this.dpr || 1));
+    this.worldH = Math.max(ch * scale, 1650 * (this.dpr || 1));
+    const w = this.worldW;
+    const h = this.worldH;
+    const minSide = Math.min(w, h);
     const prev = this.districts;
     this.districts = this.districtDefs.map((d, i) => {
-      const base = {
+      const typeMeta = placeTypeMeta(d.type);
+      const prevMatch = prev.find(p => p.name === d.name) || prev[i];
+      return {
+        id: d.id,
         x: d.rx * w,
         y: d.ry * h,
-        r: d.rr * Math.min(w, h),
-        color: d.color,
+        r: d.rr * minSide,
+        color: d.color || typeMeta.color,
         name: d.name,
-        demandPeople: prev[i]?.demandPeople ?? 0,
-        demandCargo: prev[i]?.demandCargo ?? 0
+        type: d.type || 'town',
+        typeLabel: d.typeLabel || typeMeta.label,
+        icon: d.icon || typeMeta.icon,
+        passengers: d.passengers ?? typeMeta.passengers,
+        cargo: d.cargo ?? typeMeta.cargo,
+        demandPeople: prevMatch?.demandPeople ?? 0,
+        demandCargo: prevMatch?.demandCargo ?? 0
       };
-      return base;
     });
-    // Re-bind job district refs after resize
     for (const job of this.jobs) {
       job.from = this.districts.find(d => d.name === job.from.name) || job.from;
       job.to = this.districts.find(d => d.name === job.to.name) || job.to;
@@ -148,11 +159,12 @@ export class Game {
     this.running = true;
     this.paused = false;
     this.lastTime = performance.now();
-    // Seed a couple of starter jobs
+    this.fitCamera(48);
+    this.addJob();
     this.addJob();
     this.addJob();
     if (this.getPlayerFleet().length === 0) {
-      this.showToast('Tryk på en by for at købe din første bil', 3.5);
+      this.showToast('Stort kort – tryk et sted for at købe bil · Fit viser det hele', 3.8);
     }
     if (!this._loopStarted) {
       this._loopStarted = true;
@@ -1232,7 +1244,7 @@ export class Game {
   }
 
   drawBackground(ctx, w, h) {
-    // Soft meadow gradient
+    // Soft meadow over full world bounds
     const sky = ctx.createLinearGradient(0, 0, 0, h);
     sky.addColorStop(0, '#e8f0e4');
     sky.addColorStop(0.45, '#efe8da');
@@ -1240,10 +1252,11 @@ export class Game {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
 
-    // Soft grass patches (world-space blobs, cheap)
+    // Soft grass patches
     const patches = [
-      [0.2, 0.3, 0.22], [0.7, 0.25, 0.18], [0.5, 0.7, 0.25],
-      [0.15, 0.65, 0.16], [0.85, 0.55, 0.2], [0.4, 0.15, 0.14]
+      [0.2, 0.3, 0.18], [0.7, 0.25, 0.15], [0.5, 0.7, 0.2],
+      [0.15, 0.65, 0.14], [0.85, 0.55, 0.16], [0.4, 0.15, 0.12],
+      [0.3, 0.85, 0.14], [0.75, 0.75, 0.13]
     ];
     for (const [rx, ry, rr] of patches) {
       const x = rx * w, y = ry * h, r = rr * Math.min(w, h);
@@ -1256,10 +1269,10 @@ export class Game {
       ctx.fill();
     }
 
-    // Subtle grid
+    // Subtle grid over world
     ctx.strokeStyle = 'rgba(60, 50, 40, 0.035)';
     ctx.lineWidth = 1;
-    const step = 48 * this.dpr;
+    const step = 56 * this.dpr;
     for (let x = 0; x < w; x += step) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
     }
@@ -1269,6 +1282,7 @@ export class Game {
   }
 
   drawDistrict(ctx, d) {
+    const type = d.type || 'town';
     // Outer glow
     const glow = ctx.createRadialGradient(d.x, d.y, d.r * 0.2, d.x, d.y, d.r * 2.1);
     glow.addColorStop(0, d.color + '55');
@@ -1302,23 +1316,21 @@ export class Game {
     ctx.lineWidth = 2.5 * this.dpr;
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, d.r * 0.92, 0, Math.PI * 2);
-    ctx.strokeStyle = this.darkenHex(d.color, 0.7);
-    ctx.lineWidth = 2 * this.dpr;
-    ctx.stroke();
+    // Simple type silhouette (cozy, not detailed sprites)
+    this.drawPlaceSilhouette(ctx, d, type);
 
-    // Label plate
-    ctx.font = `bold ${Math.max(11, 12.5 * this.dpr)}px system-ui`;
+    // Label under place (ikke midt i hub – bedre mobil-læsbarhed)
+    const icon = d.icon || '🏠';
+    const typeLabel = d.typeLabel || '';
+    ctx.font = `bold ${Math.max(10, 11.5 * this.dpr)}px system-ui`;
     const label = d.name;
     const tw = ctx.measureText(label).width;
-    const padX = 8 * this.dpr;
-    const padY = 5 * this.dpr;
-    const bw = tw + padX * 2;
-    const bh = 16 * this.dpr + padY;
+    const padX = 7 * this.dpr;
+    const bh = 28 * this.dpr;
+    const bw = Math.max(tw + padX * 2, 52 * this.dpr);
     const bx = d.x - bw / 2;
-    const by = d.y - bh / 2;
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    const by = d.y + d.r * 0.75;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
     ctx.beginPath();
     const rr = 7 * this.dpr;
     ctx.moveTo(bx + rr, by);
@@ -1335,7 +1347,80 @@ export class Game {
     ctx.fillStyle = '#292524';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, d.x, d.y + 0.5 * this.dpr);
+    ctx.fillText(label, d.x, by + 10 * this.dpr);
+    ctx.font = `${Math.max(8, 9 * this.dpr)}px system-ui`;
+    ctx.fillStyle = '#57534e';
+    ctx.fillText(`${icon} ${typeLabel}`, d.x, by + 20 * this.dpr);
+  }
+
+  drawPlaceSilhouette(ctx, d, type) {
+    const s = d.r * 0.55;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.strokeStyle = 'rgba(28,25,23,0.2)';
+    ctx.lineWidth = 1.2 * this.dpr;
+
+    if (type === 'farm') {
+      // barn
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(-s * 0.7, -s * 0.15, s * 1.4, s * 0.7);
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.85, -s * 0.15);
+      ctx.lineTo(0, -s * 0.75);
+      ctx.lineTo(s * 0.85, -s * 0.15);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(180, 83, 9, 0.55)';
+      ctx.fill();
+    } else if (type === 'factory') {
+      ctx.fillStyle = 'rgba(68, 64, 60, 0.45)';
+      ctx.fillRect(-s * 0.75, -s * 0.2, s * 1.5, s * 0.75);
+      ctx.fillRect(-s * 0.55, -s * 0.85, s * 0.28, s * 0.65);
+      ctx.fillRect(s * 0.15, -s * 0.95, s * 0.28, s * 0.75);
+      ctx.fillStyle = 'rgba(120, 113, 108, 0.5)';
+      ctx.fillRect(-s * 0.5, -s * 1.05, s * 0.18, s * 0.22);
+      ctx.fillRect(s * 0.2, -s * 1.15, s * 0.18, s * 0.22);
+    } else if (type === 'harbor') {
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.35)';
+      ctx.fillRect(-s * 0.9, s * 0.15, s * 1.8, s * 0.35);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(-s * 0.2, -s * 0.5, s * 0.2, s * 0.7);
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.1, -s * 0.5);
+      ctx.lineTo(s * 0.55, -s * 0.15);
+      ctx.lineTo(-s * 0.1, s * 0.05);
+      ctx.closePath();
+      ctx.fill();
+    } else if (type === 'capital') {
+      // small skyline
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(-s * 0.7, -s * 0.1, s * 0.4, s * 0.65);
+      ctx.fillRect(-s * 0.2, -s * 0.55, s * 0.45, s * 1.1);
+      ctx.fillRect(s * 0.35, -s * 0.25, s * 0.35, s * 0.8);
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.7)';
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.05, -s * 0.55);
+      ctx.lineTo(s * 0.02, -s * 0.95);
+      ctx.lineTo(s * 0.12, -s * 0.55);
+      ctx.fill();
+    } else {
+      // town houses
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillRect(-s * 0.65, -s * 0.05, s * 0.5, s * 0.55);
+      ctx.fillRect(s * 0.05, -s * 0.2, s * 0.55, s * 0.7);
+      ctx.fillStyle = 'rgba(180, 83, 9, 0.45)';
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.75, -s * 0.05);
+      ctx.lineTo(-s * 0.4, -s * 0.55);
+      ctx.lineTo(-s * 0.05, -s * 0.05);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.05, -s * 0.2);
+      ctx.lineTo(s * 0.32, -s * 0.65);
+      ctx.lineTo(s * 0.7, -s * 0.2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   lightenHex(hex, amount) {
@@ -1366,7 +1451,7 @@ export class Game {
     // World transform
     ctx.setTransform(cam.zoom, 0, 0, cam.zoom, cam.x, cam.y);
 
-    this.drawBackground(ctx, w, h);
+    this.drawBackground(ctx, this.worldW || w * 1.95, this.worldH || h * 1.95);
 
     // Roads under districts so hubs sit on top of asphalt
     for (const road of this.roads) road.draw(ctx, this.dpr);

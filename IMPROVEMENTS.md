@@ -21,6 +21,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-U1** Opgrader bil +last (rank 0–3) i by-sheet
 - [x] **PROG-U2** Unlock hurtig bil (5) / tung lastbil (10) via totalUpgrades
 - [x] **PROG-U3** Visuel klasse-forskel + job-match i assign
+- [x] **PROG-M1** Større map, stedtyper (by/landbrug/fabrik/havn), realistiske navne, typed jobs
 
 ---
 
@@ -46,7 +47,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-B3 | 2-spor vej-opgradering for $ | capacity loop |
 | PROG-C1 | Baner/scenarios + 3-stjerne mål | scenarios.js |
 | PROG-C2 | Map-select + end-of-run | campaign |
-| PROG-C3 | Større world bounds + flere byer på senere baner | camera/map |
+| PROG-C3 | Større world bounds + flere byer på senere baner | Delvist → M1 |
+| PROG-M1 | ~~Større map + TTD-steder + navne~~ | Done 2026-08-04 |
 | PROG-D1 | Vand (sø/kyst) blokerer normal vej | terrain |
 | PROG-D2 | Broer (dyrere segment, krydser vand) | tool/cost |
 | PROG-D3 | Flere jobtyper (ekspres, turist, …) | jobs.js |

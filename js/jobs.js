@@ -1,4 +1,6 @@
-/** Job / demand system – passengers & cargo between districts */
+/** Job / demand system – passengers & cargo between places */
+
+import { jobRouteScore } from './places.js';
 
 export const JOB_TYPES = {
   passengers: {
@@ -25,7 +27,10 @@ let nextJobId = 1;
 
 export function createJob(from, to, typeKey, amount) {
   const type = JOB_TYPES[typeKey] || JOB_TYPES.passengers;
-  const reward = type.baseReward + amount * type.rewardPerUnit;
+  // Longer hauls pay a bit more (TTD-ish)
+  const dist = Math.hypot((to.x || 0) - (from.x || 0), (to.y || 0) - (from.y || 0));
+  const distBonus = Math.round(dist * 0.012);
+  const reward = type.baseReward + amount * type.rewardPerUnit + distBonus;
   return {
     id: nextJobId++,
     type: type.id,
@@ -37,7 +42,7 @@ export function createJob(from, to, typeKey, amount) {
     reward,
     active: true,
     createdAt: performance.now(),
-    claimedBy: null // null = open, 'player' | bot id
+    claimedBy: null
   };
 }
 
@@ -54,27 +59,31 @@ export function jobLabel(job) {
   return `${job.typeMeta.icon} ${left} ${job.typeMeta.unit}: ${job.from.name} → ${job.to.name}`;
 }
 
-/**
- * Pick a sensible amount based on type.
- */
-export function randomJobAmount(typeKey) {
-  if (typeKey === 'cargo') return 3 + Math.floor(Math.random() * 5); // 3–7
-  return 4 + Math.floor(Math.random() * 7); // 4–10
+export function randomJobAmount(typeKey, from, to) {
+  let base;
+  if (typeKey === 'cargo') base = 3 + Math.floor(Math.random() * 5);
+  else base = 4 + Math.floor(Math.random() * 7);
+  // Heavy producers ship more
+  if (typeKey === 'cargo' && (from?.type === 'farm' || from?.type === 'factory' || from?.type === 'harbor')) {
+    base += 1 + Math.floor(Math.random() * 2);
+  }
+  if (typeKey === 'passengers' && (from?.type === 'capital' || from?.type === 'town')) {
+    base += Math.floor(Math.random() * 2);
+  }
+  return base;
 }
 
 /**
- * Generate a new job between two different districts.
- * Prefer pairs that aren't already overloaded with open jobs.
+ * Generate a job preferring TTD-style chains (farm→factory, town↔town, …).
  */
 export function generateJob(districts, existingJobs = []) {
   if (!districts || districts.length < 2) return null;
 
-  const typeKey = Math.random() < 0.55 ? 'passengers' : 'cargo';
   let best = null;
   let bestScore = -Infinity;
 
-  // Sample several random pairs, prefer less-served routes
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let attempt = 0; attempt < 28; attempt++) {
+    const typeKey = Math.random() < 0.48 ? 'passengers' : 'cargo';
     const from = districts[Math.floor(Math.random() * districts.length)];
     let to = districts[Math.floor(Math.random() * districts.length)];
     while (to === from) to = districts[Math.floor(Math.random() * districts.length)];
@@ -84,14 +93,28 @@ export function generateJob(districts, existingJobs = []) {
     ).length;
 
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
-    const score = dist * 0.01 - routeJobs * 40 + Math.random() * 15;
+    const typeScore = jobRouteScore(from, to, typeKey);
+    const score =
+      typeScore +
+      dist * 0.018 -
+      routeJobs * 45 +
+      Math.random() * 12;
+
     if (score > bestScore) {
       bestScore = score;
       best = { from, to, typeKey };
     }
   }
 
-  if (!best) return null;
-  const amount = randomJobAmount(best.typeKey);
+  if (!best || bestScore < 10) {
+    // Fallback: any pair
+    const from = districts[Math.floor(Math.random() * districts.length)];
+    let to = districts[Math.floor(Math.random() * districts.length)];
+    while (to === from) to = districts[Math.floor(Math.random() * districts.length)];
+    const typeKey = Math.random() < 0.5 ? 'passengers' : 'cargo';
+    best = { from, to, typeKey };
+  }
+
+  const amount = randomJobAmount(best.typeKey, best.from, best.to);
   return createJob(best.from, best.to, best.typeKey, amount);
 }

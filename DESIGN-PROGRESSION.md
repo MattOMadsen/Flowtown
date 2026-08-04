@@ -322,8 +322,22 @@ Hver **batch** = 1–3 konkrete leverancer. Rækkefølge kan finjusteres, men af
 | 2026-08-03 | Større map, flere opgaver/typer | I plan | C3, D3 |
 | 2026-08-03 | Vand + broer | I plan | D1–D2 |
 | 2026-08-03 | Køb biler i stedet for auto-spawn; tryk på by → køb 1 bil | **F1+F2 done** | F1–F2 |
-| 2026-08-03 | Opgrader biler (læs/fart); unlock bedre biltyper efter X opgraderinger; variation | I plan | **U1–U3** |
+| 2026-08-03 | Opgrader biler (læs/fart); unlock bedre biltyper efter X opgraderinger; variation | U1–U3 done | U1–U3 |
+| 2026-08-04 | Større map, længere mellem byer; fabrik/landbrug/havn; realistiske navne | **M1 done** (batch) | **M1** |
 | — | *(næste forslag fra dig)* | — | — |
+
+---
+
+## 15. Større map & TTD-steder (M1)
+
+### Anbefaling
+- **Ja** til større world + flere stedtyper (by, landbrug, fabrik, havn, hovedby).
+- **Navne:** danske/skandinaviske pools, seed-faste (genkendelse).
+- **Jobs:** kæder farm→fabrik→havn/by, passagerer by↔hovedby (ikke random Nord→Syd).
+- **Mobil:** Fit/pan/zoom (findes); lavere minZoom; labels under hub; undgå flere permanente HUD-hjørner.
+
+### Batch M1 (denne leverance)
+- World ~1.95× viewport, 8 steder, silhuetter, typed jobs, realistiske navne.
 
 ---
 
