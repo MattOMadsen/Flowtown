@@ -28,7 +28,9 @@ export function defaultMeta() {
     /** Best stars per scenario id: { intro: 2, ... } */
     scenarioStars: {},
     /** Extra fleet slots bought with $ (F3) */
-    extraFleetSlots: 0
+    extraFleetSlots: 0,
+    /** PROG-B2: one-time shop buffs { roads_cheap: true, ... } */
+    shopOwned: {}
   };
 }
 
@@ -53,7 +55,8 @@ export function loadMeta() {
       scenarioStars: data.scenarioStars && typeof data.scenarioStars === 'object'
         ? data.scenarioStars
         : {},
-      extraFleetSlots: Math.max(0, Math.min(4, parseInt(data.extraFleetSlots, 10) || 0))
+      extraFleetSlots: Math.max(0, Math.min(4, parseInt(data.extraFleetSlots, 10) || 0)),
+      shopOwned: data.shopOwned && typeof data.shopOwned === 'object' ? data.shopOwned : {}
     };
   } catch {
     return defaultMeta();
@@ -72,7 +75,8 @@ export function saveMeta(meta) {
       totalUpgrades: meta.totalUpgrades || 0,
       unlockedClasses: meta.unlockedClasses || ['car_std', 'truck_std'],
       scenarioStars: meta.scenarioStars || {},
-      extraFleetSlots: meta.extraFleetSlots || 0
+      extraFleetSlots: meta.extraFleetSlots || 0,
+      shopOwned: meta.shopOwned || {}
     }));
   } catch {
     /* private mode / quota */

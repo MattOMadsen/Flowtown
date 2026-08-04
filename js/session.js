@@ -75,7 +75,14 @@ export function serializeSession(game) {
   const growth = (game.districts || []).map(d => ({
     name: d.name,
     growth: d.growth | 0,
-    deliveriesHere: d.deliveriesHere | 0
+    deliveriesHere: d.deliveriesHere | 0,
+    buildings: d.buildings
+      ? {
+          station: !!d.buildings.station,
+          warehouse: !!d.buildings.warehouse,
+          depot: !!d.buildings.depot
+        }
+      : null
   }));
 
   return {

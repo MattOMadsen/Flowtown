@@ -516,12 +516,22 @@ body {
   transform: translateX(-50%) rotate(90deg);
 }
 .pan-edge-up:active { transform: translateX(-50%) rotate(90deg) scale(0.94); }
+/* Venstre for minimap (bottom-center) – dækker ikke kort-panelet */
 .pan-edge-down {
-  bottom: max(3.5rem, calc(env(safe-area-inset-bottom) + 3rem));
-  left: 50%;
-  transform: translateX(-50%) rotate(90deg);
+  bottom: max(1.1rem, calc(env(safe-area-inset-bottom) + 0.85rem));
+  left: max(0.5rem, env(safe-area-inset-left));
+  right: auto;
+  transform: rotate(90deg);
 }
-.pan-edge-down:active { transform: translateX(-50%) rotate(90deg) scale(0.94); }
+.pan-edge-down:active { transform: rotate(90deg) scale(0.94); }
+
+@media (min-width: 640px) {
+  .pan-edge-down {
+    /* Lidt ind fra hjørne, stadig fri for minimap midt og zoom højre */
+    left: max(1rem, env(safe-area-inset-left));
+    bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + 1rem));
+  }
+}
 
 @media (min-width: 640px) {
   .pan-edge {

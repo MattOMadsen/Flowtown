@@ -38,6 +38,12 @@ import {
   evaluateGoals,
   goalLabel
 } from './scenarios.js';
+import {
+  getShopItem,
+  getShopCatalog,
+  hasShopBuff,
+  BUILDING_META
+} from './shop.js';
 
 const START_MONEY = 1400;
 const MAX_JOBS = 5;
@@ -106,6 +112,9 @@ export class Game {
     saveMeta(this.meta);
 
     this.snapDistance = 85;
+    /** Live snap preview while drawing (P0-4) */
+    this.activeSnap = null;
+    this._snapPulse = 0;
 
     // Camera (canvas-pixel space)
     this.camera = { x: 0, y: 0, zoom: 1 };
@@ -196,7 +205,10 @@ export class Game {
         cargo: (d.cargo ?? typeMeta.cargo) * (1 + growth * 0.06),
         demandPeople: prevMatch?.demandPeople ?? 0,
         demandCargo: prevMatch?.demandCargo ?? 0,
-        deliveriesHere: prevMatch?.deliveriesHere ?? 0
+        deliveriesHere: prevMatch?.deliveriesHere ?? 0,
+        buildings: prevMatch?.buildings
+          ? { ...prevMatch.buildings }
+          : { station: false, warehouse: false, depot: false }
       };
     });
     for (const job of this.jobs) {
@@ -297,12 +309,17 @@ export class Game {
         if (!d) continue;
         d.growth = Math.max(0, Math.min(GROWTH_MAX, g.growth | 0));
         d.deliveriesHere = g.deliveriesHere | 0;
+        if (g.buildings) {
+          d.buildings = {
+            station: !!g.buildings.station,
+            warehouse: !!g.buildings.warehouse,
+            depot: !!g.buildings.depot
+          };
+        }
         const baseR = d.baseR || d.r;
         d.baseR = baseR;
         d.r = baseR * (1 + d.growth * 0.045);
-        const typeMeta = placeTypeMeta(d.type);
-        d.passengers = (typeMeta.passengers || 1) * (1 + d.growth * 0.06);
-        d.cargo = (typeMeta.cargo || 1) * (1 + d.growth * 0.06);
+        this.applyBuildingBuffs(d);
       }
     }
 
@@ -922,10 +939,21 @@ export class Game {
     });
   }
 
+  getSnapDistance() {
+    let base = this.snapDistance;
+    if (hasShopBuff(this.meta, 'snap_boost')) base *= 1.45;
+    return base;
+  }
+
+  roadCostMul() {
+    return hasShopBuff(this.meta, 'roads_cheap') ? 0.85 : 1;
+  }
+
   roadCostForLength(lenCssPx) {
     // len may be in canvas (dpr) units — normalize roughly
     const len = lenCssPx / Math.max(1, this.dpr);
-    return Math.max(12, Math.round(ROAD_BASE_COST + len * ROAD_COST_PER_PX * 20));
+    const raw = Math.max(12, Math.round(ROAD_BASE_COST + len * ROAD_COST_PER_PX * 20));
+    return Math.max(10, Math.round(raw * this.roadCostMul()));
   }
 
   estimateStrokeCost(points, { bridge = false } = {}) {
@@ -938,10 +966,97 @@ export class Game {
     const waterFrac = strokeWaterFraction(points, this.waterBodies);
     if (bridge || waterFrac > 0.05) {
       // Broer er dyre – især over meget vand (lidt mildere end før)
-      cost = Math.round(cost * (1.85 + waterFrac * 2.0));
-      cost = Math.max(cost, 42);
+      cost = Math.round(cost * (1.85 + waterFrac * 2.0) * this.roadCostMul());
+      cost = Math.max(cost, Math.round(42 * this.roadCostMul()));
     }
     return cost;
+  }
+
+  /** PROG-B2 shop catalog for UI */
+  getShopUi() {
+    const d = this.getSelectedDistrict();
+    return getShopCatalog(
+      { level: this.meta?.level || 1, money: this.money, shopOwned: this.meta?.shopOwned || {} },
+      {
+        hasDistrict: !!d,
+        districtBuildings: d?.buildings || null
+      }
+    );
+  }
+
+  /**
+   * Buy shop item. Buildings need an open/selected district (or pass district).
+   * @param {string} itemId
+   * @param {object|null} [district]
+   */
+  buyShopItem(itemId, district = null) {
+    if (!this.running) return { ok: false, reason: 'not_running' };
+    const item = getShopItem(itemId);
+    if (!item) return { ok: false, reason: 'unknown' };
+    const level = this.meta?.level || 1;
+    if (level < (item.unlockLevel || 1)) {
+      this.showToast(`Kræver level ${item.unlockLevel}`);
+      playError();
+      return { ok: false, reason: 'level' };
+    }
+    if (!this.meta.shopOwned) this.meta.shopOwned = {};
+    if (item.once && this.meta.shopOwned[item.id]) {
+      this.showToast('Allerede købt');
+      return { ok: false, reason: 'owned' };
+    }
+    if (this.money < item.price) {
+      this.showToast(`Ikke råd (mangler $${item.price - Math.floor(this.money)})`);
+      playError();
+      return { ok: false, reason: 'money' };
+    }
+
+    if (item.kind === 'building') {
+      const d = district || this.getSelectedDistrict();
+      if (!d) {
+        this.showToast('Tryk en by først – så køb bygning');
+        playError();
+        return { ok: false, reason: 'no_district' };
+      }
+      if (!d.buildings) d.buildings = { station: false, warehouse: false, depot: false };
+      if (d.buildings[item.building]) {
+        this.showToast(`${BUILDING_META[item.building]?.label || 'Bygning'} findes allerede i ${d.name}`);
+        return { ok: false, reason: 'has_building' };
+      }
+      this.money -= item.price;
+      d.buildings[item.building] = true;
+      this.applyBuildingBuffs(d);
+      this.addFloatText(d.x, d.y - d.r, `${item.icon} ${item.label}`, BUILDING_META[item.building]?.color || '#0f766e');
+      this.showToast(`${item.icon} ${item.label} i ${d.name} (−$${item.price})`);
+      playBuy();
+      this._sessionDirty = true;
+      this.requestDraw();
+      return { ok: true, building: item.building, district: d };
+    }
+
+    // Buff
+    this.money -= item.price;
+    this.meta.shopOwned[item.id] = true;
+    saveMeta(this.meta);
+    this.showToast(`${item.icon} ${item.label} aktiv (−$${item.price})`);
+    playBuy();
+    this._sessionDirty = true;
+    return { ok: true, buff: item.id };
+  }
+
+  applyBuildingBuffs(d) {
+    if (!d) return;
+    const typeMeta = placeTypeMeta(d.type);
+    const g = d.growth | 0;
+    let pMul = 1 + g * 0.06;
+    let cMul = 1 + g * 0.06;
+    if (d.buildings?.station) pMul += 0.28;
+    if (d.buildings?.warehouse) cMul += 0.28;
+    if (d.buildings?.depot) {
+      pMul += 0.08;
+      cMul += 0.08;
+    }
+    d.passengers = (typeMeta.passengers || 1) * pMul;
+    d.cargo = (typeMeta.cargo || 1) * cMul;
   }
 
   showToast(msg, ms = 2.2) {
@@ -962,12 +1077,14 @@ export class Game {
     const p = this.clampToWorld(this.screenToWorld(x, y));
     if (!this.isOnBoard(p)) {
       this.currentStroke = null;
+      this.clearActiveSnap();
       return;
     }
     const snapped = this.findSnapPoint(p.x, p.y);
     const start = this.clampToWorld(snapped);
     this.currentStroke = [{ x: start.x, y: start.y }];
     this.pendingRoadCost = 0;
+    this.updateActiveSnap(p.x, p.y);
   }
 
   /**
@@ -992,6 +1109,15 @@ export class Game {
     this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke, {
       bridge: this.mode === 'bridge'
     });
+    this.activeSnap = {
+      x: start.x,
+      y: start.y,
+      kind: 'city',
+      label: district.name,
+      fromX: mid.x,
+      fromY: mid.y,
+      strength: 1
+    };
   }
 
   continueStroke(x, y) {
@@ -1015,12 +1141,14 @@ export class Game {
       const isBridge = this.mode === 'bridge';
       this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke, { bridge: isBridge });
     }
+    this.updateActiveSnap(p.x, p.y);
   }
 
   endStroke() {
     if (this.mode === 'erase' || this.mode === 'upgrade' || !this.currentStroke || this.currentStroke.length < 2) {
       this.currentStroke = null;
       this.pendingRoadCost = 0;
+      this.clearActiveSnap();
       return;
     }
 
@@ -1029,6 +1157,7 @@ export class Game {
     if (points.length < 2) {
       this.currentStroke = null;
       this.pendingRoadCost = 0;
+      this.clearActiveSnap();
       return;
     }
 
@@ -1038,6 +1167,7 @@ export class Game {
       this.showToast('Kun på land – tegn inden for kortet');
       this.currentStroke = null;
       this.pendingRoadCost = 0;
+      this.clearActiveSnap();
       return;
     }
 
@@ -1051,6 +1181,7 @@ export class Game {
       this.showToast('Over vand: brug Bro-værktøjet');
       this.currentStroke = null;
       this.pendingRoadCost = 0;
+      this.clearActiveSnap();
       const mid = points[Math.floor(points.length / 2)];
       this.addArrivalParticles(mid.x, mid.y, '#0ea5e9');
       return;
@@ -1064,6 +1195,7 @@ export class Game {
       this.showToast(`Ikke råd (mangler $${cost - this.money})`);
       this.currentStroke = null;
       this.pendingRoadCost = 0;
+      this.clearActiveSnap();
       const end = points[points.length - 1];
       this.addArrivalParticles(end.x, end.y, '#ef4444');
       return;
@@ -1075,6 +1207,7 @@ export class Game {
     this._sessionDirty = true;
     this.currentStroke = null;
     this.pendingRoadCost = 0;
+    this.clearActiveSnap();
   }
 
   /**
@@ -1217,9 +1350,13 @@ export class Game {
     return levelProgress(this.meta);
   }
 
+  /**
+   * Find snap target. Returns { x, y, kind, label, strength }.
+   * kind: 'free' | 'road' | 'endpoint' | 'city'
+   */
   findSnapPoint(x, y) {
-    const snap = this.snapDistance * this.dpr;
-    let best = { x, y };
+    const snap = this.getSnapDistance() * this.dpr;
+    let best = { x, y, kind: 'free', label: null, strength: 0 };
     let bestD = snap * snap;
 
     // Snap to any point along existing roads (segment-accurate)
@@ -1228,14 +1365,20 @@ export class Game {
       const d = c.dist * c.dist;
       if (d < bestD) {
         bestD = d;
-        best = { x: c.point.x, y: c.point.y };
+        best = { x: c.point.x, y: c.point.y, kind: 'road', label: 'Vej', strength: 1 - Math.sqrt(d) / snap };
       }
       // Prefer endpoints slightly for clean junctions
       for (const p of [road.points[0], road.points[road.points.length - 1]]) {
         const de = (p.x - x) ** 2 + (p.y - y) ** 2;
         if (de < bestD * 0.85) {
           bestD = de;
-          best = { x: p.x, y: p.y };
+          best = {
+            x: p.x,
+            y: p.y,
+            kind: 'endpoint',
+            label: 'Kryds',
+            strength: 1 - Math.sqrt(de) / snap
+          };
         }
       }
     }
@@ -1253,11 +1396,41 @@ export class Game {
         const dd = (edge.x - x) ** 2 + (edge.y - y) ** 2 * 0.55;
         if (dd < bestD) {
           bestD = dd;
-          best = edge;
+          best = {
+            x: edge.x,
+            y: edge.y,
+            kind: 'city',
+            label: d.name,
+            district: d,
+            strength: 1 - Math.sqrt(dd) / magnet
+          };
         }
       }
     }
     return best;
+  }
+
+  /** Update activeSnap preview from world point (while drawing) */
+  updateActiveSnap(worldX, worldY) {
+    const snap = this.findSnapPoint(worldX, worldY);
+    if (snap.kind === 'free') {
+      this.activeSnap = null;
+      return null;
+    }
+    this.activeSnap = {
+      x: snap.x,
+      y: snap.y,
+      kind: snap.kind,
+      label: snap.label,
+      fromX: worldX,
+      fromY: worldY,
+      strength: Math.max(0.2, Math.min(1, snap.strength || 0.6))
+    };
+    return this.activeSnap;
+  }
+
+  clearActiveSnap() {
+    this.activeSnap = null;
   }
 
   /**
@@ -1373,7 +1546,7 @@ export class Game {
   }
 
   snapEndpoints(points) {
-    const snap = this.snapDistance * this.dpr;
+    const snap = this.getSnapDistance() * this.dpr;
     const start = points[0];
     const end = points[points.length - 1];
 
@@ -1539,7 +1712,11 @@ export class Game {
   addJob() {
     const max = this.rushActive ? MAX_JOBS_RUSH : MAX_JOBS;
     if (this.jobs.filter(j => j.active).length >= max) return;
-    const job = generateJob(this.districts, this.jobs, { rush: this.rushActive });
+    const job = generateJob(this.districts, this.jobs, {
+      rush: this.rushActive,
+      preferPassengers: hasShopBuff(this.meta, 'tourist_office'),
+      preferCargo: hasShopBuff(this.meta, 'cargo_hub')
+    });
     if (job) {
       this.jobs.push(job);
       if (this.rushActive) {
@@ -1562,9 +1739,7 @@ export class Game {
     const baseR = district.baseR || district.r;
     district.baseR = baseR;
     district.r = baseR * (1 + g * 0.045);
-    const typeMeta = placeTypeMeta(district.type);
-    district.passengers = (typeMeta.passengers || 1) * (1 + g * 0.06);
-    district.cargo = (typeMeta.cargo || 1) * (1 + g * 0.06);
+    this.applyBuildingBuffs(district);
     if (g > before && (g === 1 || g === 3 || g === 5 || g === GROWTH_MAX)) {
       this.addFloatText(district.x, district.y - district.r, `By vokser ${g}`, '#0d9488');
       if (g >= 3) this.showToast(`${district.name} vokser (størrelse ${g})`, 2.0);
@@ -1727,6 +1902,11 @@ export class Game {
 
         const park = vehicle.parkName || vehicle.homeName;
         const homeBonus = park === from.name ? 80 : 0;
+        // P2-3 depot: biler stationeret her får hurtigere/prioriteret assign
+        const homeDist = this.districts.find(d => d.name === park);
+        const depotBonus = homeDist?.buildings?.depot && park === from.name ? 55 : 0;
+        const stationBonus = from.buildings?.station && job.type !== 'cargo' ? 22 : 0;
+        const warehouseBonus = from.buildings?.warehouse && job.type === 'cargo' ? 22 : 0;
         const dist = Math.hypot(
           (vehicle.x || from.x) - from.x,
           (vehicle.y || from.y) - from.y
@@ -1752,7 +1932,8 @@ export class Game {
         if (cap > remaining + 1) classFit -= (cap - remaining) * 8;
         const speedHint = (vehicle.baseSpeed || 60) * 0.1;
         const score =
-          homeBonus + remaining * 5 + cargoFit + classFit + speedHint
+          homeBonus + depotBonus + stationBonus + warehouseBonus
+          + remaining * 5 + cargoFit + classFit + speedHint
           - onRoute * 25 - dist * 0.02 + Math.random();
         if (score > bestScore) {
           bestScore = score;
@@ -2219,7 +2400,7 @@ export class Game {
 
     // Junction hubs
     const connR = 8 * this.dpr;
-    const joinThresh = (this.snapDistance * this.dpr * 0.55) ** 2;
+    const joinThresh = (this.getSnapDistance() * this.dpr * 0.55) ** 2;
     for (let i = 0; i < this.roads.length; i++) {
       const r1 = this.roads[i];
       const ends1 = [r1.points[0], r1.points[r1.points.length - 1]];
@@ -2279,19 +2460,15 @@ export class Game {
       ctx.strokeText(`$${this.pendingRoadCost}`, last.x, last.y - 18 * this.dpr);
       ctx.fillText(`$${this.pendingRoadCost}`, last.x, last.y - 18 * this.dpr);
 
-      // Snap glow near pointer
-      for (const road of this.roads) {
-        const c = road.closestPoint(last.x, last.y);
-        if (c.dist < this.snapDistance * this.dpr) {
-          ctx.beginPath();
-          ctx.arc(c.point.x, c.point.y, 11 * this.dpr, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(15, 118, 110, 0.35)';
-          ctx.fill();
-          ctx.strokeStyle = '#0f766e';
-          ctx.lineWidth = 2.5 * this.dpr;
-          ctx.stroke();
-        }
-      }
+      // P0-4: tydelig snap-feedback (mål + guide-linje + label)
+      this.drawSnapFeedback(ctx, last);
+    } else if (this.activeSnap) {
+      this.drawSnapFeedback(ctx, null);
+    }
+
+    // Building badges on places
+    for (const d of this.districts) {
+      this.drawBuildingBadges(ctx, d);
     }
 
     for (const v of this.vehicles) v.draw(ctx, this.dpr);
@@ -2343,6 +2520,104 @@ export class Game {
       ctx.textBaseline = 'middle';
       ctx.fillText(this.toast, w / 2, by + bh / 2);
     }
+  }
+
+  /**
+   * P0-4: snap magnet preview while drawing.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {{x:number,y:number}|null} tip stroke tip (optional)
+   */
+  drawSnapFeedback(ctx, tip) {
+    const snap = this.activeSnap;
+    if (!snap) return;
+    const dpr = this.dpr || 1;
+    const pulse = 0.85 + 0.15 * Math.sin((performance.now() / 180));
+    const colors = {
+      city: { fill: 'rgba(245, 158, 11, 0.4)', stroke: '#d97706', ring: 'rgba(251, 191, 36, 0.35)' },
+      endpoint: { fill: 'rgba(14, 165, 233, 0.4)', stroke: '#0284c7', ring: 'rgba(56, 189, 248, 0.35)' },
+      road: { fill: 'rgba(16, 185, 129, 0.38)', stroke: '#059669', ring: 'rgba(52, 211, 153, 0.3)' }
+    };
+    const c = colors[snap.kind] || colors.road;
+    const r = (12 + (snap.strength || 0.5) * 8) * dpr * pulse;
+
+    // Guide line tip → snap
+    const fromX = tip?.x ?? snap.fromX;
+    const fromY = tip?.y ?? snap.fromY;
+    if (fromX != null && Math.hypot(snap.x - fromX, snap.y - fromY) > 4 * dpr) {
+      ctx.save();
+      ctx.setLineDash([6 * dpr, 5 * dpr]);
+      ctx.strokeStyle = c.stroke;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 2.2 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(snap.x, snap.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Outer soft ring
+    ctx.beginPath();
+    ctx.arc(snap.x, snap.y, r * 1.55, 0, Math.PI * 2);
+    ctx.fillStyle = c.ring;
+    ctx.fill();
+    // Core magnet
+    ctx.beginPath();
+    ctx.arc(snap.x, snap.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = c.fill;
+    ctx.fill();
+    ctx.strokeStyle = c.stroke;
+    ctx.lineWidth = 2.8 * dpr;
+    ctx.stroke();
+    // Crosshair
+    ctx.beginPath();
+    ctx.moveTo(snap.x - r * 0.55, snap.y);
+    ctx.lineTo(snap.x + r * 0.55, snap.y);
+    ctx.moveTo(snap.x, snap.y - r * 0.55);
+    ctx.lineTo(snap.x, snap.y + r * 0.55);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 1.6 * dpr;
+    ctx.stroke();
+
+    if (snap.label) {
+      const label = snap.kind === 'city' ? `◎ ${snap.label}` : snap.kind === 'endpoint' ? '⊕ Kryds' : '⊞ Vej';
+      ctx.font = `bold ${Math.max(11, 12 * dpr)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3.5 * dpr;
+      ctx.strokeText(label, snap.x, snap.y - r - 6 * dpr);
+      ctx.fillStyle = c.stroke;
+      ctx.fillText(label, snap.x, snap.y - r - 6 * dpr);
+    }
+  }
+
+  /** Small icons for station/lager/depot on a place */
+  drawBuildingBadges(ctx, d) {
+    if (!d?.buildings) return;
+    const keys = ['station', 'warehouse', 'depot'].filter(k => d.buildings[k]);
+    if (!keys.length) return;
+    const dpr = this.dpr || 1;
+    const size = d.r * 2.45;
+    const baseY = d.y + size * 0.18;
+    const startX = d.x - (keys.length - 1) * 9 * dpr;
+    ctx.font = `${Math.max(11, 12 * dpr)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    keys.forEach((k, i) => {
+      const meta = BUILDING_META[k];
+      const x = startX + i * 18 * dpr;
+      const y = baseY + 14 * dpr;
+      ctx.beginPath();
+      ctx.arc(x, y, 9 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.fill();
+      ctx.strokeStyle = meta?.color || '#57534e';
+      ctx.lineWidth = 1.2 * dpr;
+      ctx.stroke();
+      ctx.fillText(meta?.icon || '•', x, y + 0.5 * dpr);
+    });
   }
 
   /**

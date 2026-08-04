@@ -48,22 +48,25 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **P1-3** Rush hour (~28s peak / 95s cyklus): flere jobs, større mængder, HUD-badge
 - [x] **P1-4** Distrikter vokser (max 8) via leverancer + tid; større radius + job-demand
 
+### Shop + snap + bygninger (04/08 B2 / P0-4 / P2-3)
+- [x] **PROG-B2** Global butik (🛒): billigere veje, snap-boost, turist/logistik + bygninger
+- [x] **P0-4** Tydelig snap: magnet, guide-linje, label (by/kryds/vej), farve pr. type
+- [x] **P2-3** Station / lager / depot på by (demand + assign-bonus), ikoner på kort
+- [x] Pan-ned flyttet væk fra minimap (bottom-left, ikke midt på kort)
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **PROG-B2** | Global shop (infra unlock via level) | By-sheet dækker flåde |
-| 2 | **P0-4** | Tydeligere snap-feedback | Delvist glød |
-| 3 | **P0-5** | Safe-area polish (notch/home) | Delvist `env(safe-area-*)` |
-| 4 | **P2-1** | Trafiklys / envejsveje | Valgfrit tool |
-| 5 | **P2-3** | Station / lager / depot | Placering + buff |
-| 6 | **P2-4** | Achievements | localStorage flags |
-| 7 | **P3-2** | Stærkere bot-AI | bot.js |
-| 8 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
-| 9 | **P3-3/4** | Multiplayer / leaderboard | Backend |
-| 10 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
+| 1 | **P0-5** | Safe-area polish (notch/home) | Delvist `env(safe-area-*)` |
+| 2 | **P2-1** | Trafiklys / envejsveje | Valgfrit tool |
+| 3 | **P2-4** | Achievements | localStorage flags |
+| 4 | **P3-2** | Stærkere bot-AI | bot.js |
+| 5 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
+| 6 | **P3-3/4** | Multiplayer / leaderboard | Backend |
+| 7 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
 
 ### Hurtige polish der stadig kan give værdi
 - [ ] Tydelig “tryk by for at købe”-hint første minut
@@ -80,7 +83,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | P0-1 | ~~Kompakt/foldbar opgaveliste~~ | Done |
 | P0-2 | ~~Minimap + fit all~~ | Done (+ viewport-fix 04/08) |
 | P0-3 | ~~Bedre pathfinding~~ | Done – kan altid finpudses |
-| P0-4 | Tydeligere snap-feedback | Delvist via snap-glow |
+| P0-4 | ~~Tydeligere snap-feedback~~ | Done 2026-08-04 |
 | P0-5 | Safe-area padding | Delvist `env(safe-area-inset-*)` |
 
 ## P0+ – Spil-kerne (se DESIGN-PROGRESSION.md)
@@ -90,7 +93,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-A1–A2 | ~~Job-trafik + bil-fix~~ | Done |
 | PROG-A3 | By-hubs + snap + connected | Delvist i game.js |
 | PROG-B1 | ~~XP + level~~ | Done |
-| PROG-B2 | Global shop (level-unlock infra) | Mangler – flåde er by-sheet |
+| PROG-B2 | ~~Global shop~~ | Done 2026-08-04 – 🛒 butik |
 | PROG-B3 | ~~2-spor~~ | Done |
 | PROG-C1 | ~~Baner + stjerner~~ | Done |
 | PROG-C2 | End-of-run polish | Delvist |

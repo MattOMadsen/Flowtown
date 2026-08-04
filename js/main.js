@@ -536,6 +536,96 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Global shop (PROG-B2)
+const shopSheet = document.getElementById('shop-sheet');
+let shopOpen = false;
+
+function setShopOpen(on) {
+  shopOpen = !!on;
+  if (!shopSheet) return;
+  shopSheet.classList.toggle('hidden', !shopOpen);
+  if (shopOpen) {
+    // Skjul by-sheet visuelt, men behold valgt by (til station/lager/depot)
+    if (districtSheet) districtSheet.classList.add('hidden');
+    refreshShopSheet();
+  }
+}
+
+function refreshShopSheet() {
+  if (!shopSheet || !shopOpen) return;
+  const list = document.getElementById('shop-list');
+  const sub = document.getElementById('shop-sub');
+  const hint = document.getElementById('shop-hint');
+  const d = game.getSelectedDistrict?.();
+  const level = game.meta?.level || 1;
+  if (sub) sub.textContent = `Level ${level} · $${Math.floor(game.money)} · level låser · $ køber`;
+  if (hint) {
+    hint.textContent = d
+      ? `Bygninger placeres i: ${d.name}`
+      : 'Bygninger: tryk en by først, så køb station/lager/depot';
+    hint.classList.toggle('text-teal-700', !!d);
+    hint.classList.toggle('text-amber-700', !d);
+  }
+  const catalog = game.getShopUi?.() || [];
+  if (!list) return;
+  list.innerHTML = catalog.map(item => {
+    if (!item.unlocked) {
+      return `
+        <div class="w-full py-2.5 px-3 rounded-xl border border-dashed border-stone-300 bg-stone-50">
+          <div class="flex justify-between gap-2 items-center">
+            <span class="font-semibold text-stone-500 text-sm">🔒 ${item.icon} ${escapeHtml(item.label)}</span>
+            <span class="text-[11px] text-stone-400">Lv ${item.unlockLevel}</span>
+          </div>
+          <span class="text-[11px] text-stone-400">${escapeHtml(item.desc)}</span>
+        </div>`;
+    }
+    if (item.owned) {
+      return `
+        <div class="w-full py-2.5 px-3 rounded-xl border border-emerald-200 bg-emerald-50">
+          <div class="flex justify-between gap-2 items-center">
+            <span class="font-semibold text-emerald-800 text-sm">✓ ${item.icon} ${escapeHtml(item.label)}</span>
+            <span class="text-[11px] text-emerald-600">Aktiv</span>
+          </div>
+          <span class="text-[11px] text-emerald-700/80">${escapeHtml(item.desc)}</span>
+        </div>`;
+    }
+    const can = item.canBuy;
+    return `
+      <button type="button" data-shop-id="${item.id}"
+        class="w-full text-left py-2.5 px-3 rounded-xl border touch-manipulation active:scale-[0.99] transition
+          ${can ? 'bg-white border-stone-200 hover:border-amber-400' : 'bg-stone-50 border-stone-100 opacity-70'}"
+        ${can ? '' : 'disabled'}>
+        <div class="flex justify-between gap-2 items-center">
+          <span class="font-semibold text-stone-800 text-sm">${item.icon} ${escapeHtml(item.label)}</span>
+          <span class="font-bold text-amber-800 tabular-nums text-sm">$${item.price}</span>
+        </div>
+        <span class="text-[11px] text-stone-500">${escapeHtml(item.desc)}</span>
+        ${item.blockReason && !can ? `<span class="block text-[10px] text-rose-600 mt-0.5">${escapeHtml(item.blockReason)}</span>` : ''}
+      </button>`;
+  }).join('');
+
+  list.querySelectorAll('[data-shop-id]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = btn.getAttribute('data-shop-id');
+      game.buyShopItem(id);
+      refreshShopSheet();
+      refreshDistrictSheet();
+    });
+  });
+}
+
+bindTap('btn-shop', () => {
+  playUi();
+  if (!game.running) {
+    game.showToast?.('Start en bane først');
+    return;
+  }
+  setShopOpen(!shopOpen);
+});
+bindTap('shop-close', () => setShopOpen(false));
+
 // District sheet (køb + opgrader)
 const districtSheet = document.getElementById('district-sheet');
 let dsTab = 'buy';
@@ -569,6 +659,11 @@ function refreshDistrictSheet() {
     districtSheet.classList.add('hidden');
     return;
   }
+  // By-tap mens shop er åben: skift til by-sheet
+  if (shopOpen) {
+    shopOpen = false;
+    if (shopSheet) shopSheet.classList.add('hidden');
+  }
   districtSheet.classList.remove('hidden');
   setDsTab(dsTab);
 
@@ -587,11 +682,15 @@ function refreshDistrictSheet() {
   const growthEl = document.getElementById('ds-growth');
   if (growthEl) {
     const g = d.growth | 0;
-    if (g > 0 || (d.deliveriesHere | 0) > 0) {
+    const b = d.buildings || {};
+    const bIcons = [b.station && '🚉', b.warehouse && '🏭', b.depot && '🚏'].filter(Boolean).join('');
+    const parts = [];
+    if (g > 0) parts.push(`🏙️ Størrelse ${g}/8`);
+    else if ((d.deliveriesHere | 0) > 0) parts.push(`🏙️ ${d.deliveriesHere | 0} leverancer`);
+    if (bIcons) parts.push(bIcons);
+    if (parts.length) {
       growthEl.classList.remove('hidden');
-      growthEl.textContent = g > 0
-        ? `🏙️ Størrelse ${g}/8 · ${d.deliveriesHere | 0} leverancer her`
-        : `🏙️ Vokser med leverancer · ${d.deliveriesHere | 0} indtil videre`;
+      growthEl.textContent = parts.join(' · ');
     } else {
       growthEl.classList.add('hidden');
       growthEl.textContent = '';
@@ -797,6 +896,7 @@ setInterval(() => {
   renderJobs();
   renderBots();
   refreshDistrictSheet();
+  if (shopOpen) refreshShopSheet();
   refreshGoalsUi();
   refreshZoomLabel();
   updateHudOffset();

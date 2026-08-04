@@ -155,6 +155,9 @@ function pickPassengerType(from, to) {
 export function generateJob(districts, existingJobs = [], opts = {}) {
   if (!districts || districts.length < 2) return null;
   const amtOpts = { rush: !!opts.rush };
+  // Global shop buffs: bias passenger vs cargo generation
+  const preferPass = !!opts.preferPassengers;
+  const preferCargo = !!opts.preferCargo;
 
   const factories = districts.filter(d => d.type === 'factory');
   const farms = districts.filter(d => d.type === 'farm');
@@ -172,8 +175,9 @@ export function generateJob(districts, existingJobs = [], opts = {}) {
     return best;
   };
 
-  // ~40% of jobs: force a meaningful factory chain
-  if (factories.length && Math.random() < 0.42) {
+  // ~40% of jobs: force a meaningful factory chain (boost with cargo hub)
+  const factoryChance = preferCargo ? 0.55 : preferPass ? 0.28 : 0.42;
+  if (factories.length && Math.random() < factoryChance) {
     const factory = pickPlace(factories);
     // Prefer outbound finished goods; sometimes inbound from farm
     if (farms.length && Math.random() < 0.35) {
@@ -196,7 +200,8 @@ export function generateJob(districts, existingJobs = [], opts = {}) {
   }
 
   // Dedicated tourist / express attempts (~18% each when places exist)
-  if (Math.random() < (opts.rush ? 0.28 : 0.18)) {
+  const tourBase = opts.rush ? 0.28 : 0.18;
+  if (Math.random() < (preferPass ? tourBase + 0.14 : tourBase)) {
     const hubs = districts.filter(isTouristPlace);
     if (hubs.length >= 2) {
       const from = pickPlace(hubs);
@@ -216,7 +221,10 @@ export function generateJob(districts, existingJobs = [], opts = {}) {
   let bestScore = -Infinity;
 
   for (let attempt = 0; attempt < 32; attempt++) {
-    const wantCargo = Math.random() < 0.42;
+    let cargoP = 0.42;
+    if (preferCargo) cargoP = 0.58;
+    if (preferPass) cargoP = 0.28;
+    const wantCargo = Math.random() < cargoP;
     let typeKey = wantCargo ? 'cargo' : 'passengers';
     const from = districts[Math.floor(Math.random() * districts.length)];
     let to = districts[Math.floor(Math.random() * districts.length)];

@@ -224,7 +224,7 @@ Hver **batch** = 1–3 konkrete leverancer. Rækkefølge kan finjusteres, men af
 | Batch | Indhold | Værdi |
 |-------|---------|--------|
 | **B1** | ~~XP-bar, level, localStorage~~ **DONE** | meta.js + UI; XP ved levering/job/first-link |
-| **B2** | Shop (bottom sheet): 4–6 $ items der er level-unlock’ede | Penge får mere formål |
+| **B2** | ~~Shop (bottom sheet)~~ **DONE** – 🛒 buffs + bygninger | Penge får mere formål |
 | **B3** | 2-spor vej-opgradering ($ + unlock) | Klassisk flaskehals→upgrade loop |
 
 **Succes B:** efter ~5 min har man level’et og købt mindst én ting.
