@@ -926,18 +926,17 @@ export class Game {
   }
 
   /**
-   * Hub-tap for bil-shop. Matcher den synlige sprite (større end gammel 0.52·r
-   * og lidt forskudt opad, som drawPlaceHub).
+   * Hub-tap for bil-shop. By-sprite står på d.y (jord) og fylder opad.
    */
   hitDistrictCore(screenX, screenY) {
     const w = this.screenToWorld(screenX, screenY);
     let best = null;
     let bestD = Infinity;
     for (const d of this.districts) {
-      // Sprite: size ≈ 2.45·r, tegnet med y-offset ~0.34·r opad
+      // Sprite plantet på groundY≈d.y, højde ~2.2·r opad
       const cx = d.x;
-      const cy = d.y - d.r * 0.28;
-      const hitR = d.r * 1.05;
+      const cy = d.y - d.r * 0.55;
+      const hitR = d.r * 1.15;
       const dist = Math.hypot(cx - w.x, cy - w.y);
       if (dist <= hitR && dist < bestD) {
         bestD = dist;

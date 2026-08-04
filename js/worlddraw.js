@@ -4,7 +4,7 @@
  */
 
 import { drawWaterBodies } from './water.js';
-import { getPlaceSprite, getTileImages } from './assets.js';
+import { getPlaceSprite, getImageContentBounds, getTileImages } from './assets.js';
 import { drawTileMap } from './tilemap.js';
 
 /**
@@ -172,78 +172,98 @@ function drawFarmFields(ctx, d, dpr) {
 }
 
 /**
- * Place hub with stronger depth (stylized diorama).
+ * Place hub planted on ground (not floating).
+ * Sprite bottom sits on groundY ≈ d.y; shadow tight under base.
  */
 export function drawPlaceHub(ctx, d, dpr, helpers) {
   const { lightenHex, drawSilhouette } = helpers;
   const type = d.type || 'town';
   const sprite = getPlaceSprite(type, d.spriteKey || null);
-  const size = d.r * 2.55;
-  const connected = d._connected; // optional flag from game
-
-  // Soft selection / life ring under place
-  ctx.beginPath();
-  ctx.ellipse(d.x, d.y + size * 0.22, size * 0.42, size * 0.15, 0, 0, Math.PI * 2);
-  const glow = ctx.createRadialGradient(d.x, d.y + size * 0.18, 0, d.x, d.y + size * 0.22, size * 0.42);
+  // Størrelse vokser med hub, men bunden forbliver på jorden (ingen “lift”)
+  const size = d.r * 2.2;
+  const connected = d._connected;
+  // Jordkontakt = hub-centrum (veje snapper hertil)
+  const groundY = d.y + 2 * dpr;
   const gc = d.color || '#a8a29e';
-  glow.addColorStop(0, hexAlpha(gc, 0.22));
+
+  // Soft life ring under place (på jorden)
+  ctx.beginPath();
+  ctx.ellipse(d.x, groundY, size * 0.4, size * 0.14, 0, 0, Math.PI * 2);
+  const glow = ctx.createRadialGradient(d.x, groundY, 0, d.x, groundY, size * 0.4);
+  glow.addColorStop(0, hexAlpha(gc, 0.2));
   glow.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.fill();
 
-  // Multi-layer contact shadow
+  // Kontakt-skygge (tæt under bygning – “står på jorden”)
   ctx.beginPath();
-  ctx.ellipse(d.x + 4 * dpr, d.y + size * 0.32, size * 0.5, size * 0.17, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(15, 12, 10, 0.32)';
+  ctx.ellipse(d.x + 2 * dpr, groundY + 3 * dpr, size * 0.42, size * 0.13, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(15, 12, 10, 0.28)';
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y + size * 0.28, size * 0.38, size * 0.12, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(20, 16, 12, 0.14)';
+  ctx.ellipse(d.x, groundY + 1 * dpr, size * 0.32, size * 0.09, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(20, 16, 12, 0.16)';
   ctx.fill();
 
-  // Ground plate
+  // Lille græs-/jordplade under base
   ctx.beginPath();
-  ctx.ellipse(d.x, d.y + size * 0.2, size * 0.36, size * 0.13, 0, 0, Math.PI * 2);
-  const plate = ctx.createRadialGradient(d.x, d.y + size * 0.12, 0, d.x, d.y + size * 0.2, size * 0.36);
-  plate.addColorStop(0, 'rgba(70, 65, 58, 0.4)');
-  plate.addColorStop(1, 'rgba(70, 65, 58, 0.04)');
+  ctx.ellipse(d.x, groundY, size * 0.3, size * 0.1, 0, 0, Math.PI * 2);
+  const plate = ctx.createRadialGradient(d.x, groundY - 2 * dpr, 0, d.x, groundY, size * 0.3);
+  plate.addColorStop(0, 'rgba(90, 100, 70, 0.35)');
+  plate.addColorStop(0.65, 'rgba(70, 65, 58, 0.18)');
+  plate.addColorStop(1, 'rgba(70, 65, 58, 0)');
   ctx.fillStyle = plate;
   ctx.fill();
 
   if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-    // slight lift shadow under sprite
-    ctx.drawImage(sprite, d.x - size / 2, d.y - size * 0.66, size, size);
+    const b = getImageContentBounds(sprite);
+    if (b && b.w > 4 && b.h > 4) {
+      // Tegn kun indhold; bund af content = groundY (plantet)
+      const aspect = b.w / b.h;
+      const drawH = size * 0.98;
+      const drawW = drawH * aspect;
+      const dx = d.x - drawW / 2;
+      const dy = groundY - drawH;
+      ctx.drawImage(
+        sprite,
+        b.left, b.top, b.w, b.h,
+        dx, dy, drawW, drawH
+      );
+    } else {
+      // Fallback uden crop: bund af billede på jorden
+      ctx.drawImage(sprite, d.x - size / 2, groundY - size, size, size);
+    }
   } else {
     ctx.beginPath();
-    ctx.arc(d.x, d.y - size * 0.05, size * 0.3, 0, Math.PI * 2);
+    ctx.arc(d.x, groundY - size * 0.22, size * 0.28, 0, Math.PI * 2);
     ctx.fillStyle = lightenHex(d.color || '#a8a29e', 0.08);
     ctx.fill();
     drawSilhouette(ctx, d, type);
   }
 
-  // Hub pin (gold)
+  // Hub pin (guld) – på jorden, under bygning
   ctx.beginPath();
-  ctx.arc(d.x, d.y + size * 0.2, 5 * dpr, 0, Math.PI * 2);
+  ctx.arc(d.x, groundY, 4.5 * dpr, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(251, 191, 36, 0.98)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(28,25,23,0.45)';
   ctx.lineWidth = 1.2 * dpr;
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(d.x - 1 * dpr, d.y + size * 0.18, 1.6 * dpr, 0, Math.PI * 2);
+  ctx.arc(d.x - 1 * dpr, groundY - 1.2 * dpr, 1.5 * dpr, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
   ctx.fill();
 
   // Connected ring
   if (connected) {
     ctx.beginPath();
-    ctx.arc(d.x, d.y + size * 0.2, 8 * dpr, 0, Math.PI * 2);
+    ctx.arc(d.x, groundY, 7.5 * dpr, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(16, 185, 129, 0.55)';
     ctx.lineWidth = 1.5 * dpr;
     ctx.stroke();
   }
 
-  // Label card (glass)
+  // Label card under jorden/base
   const icon = d.icon || '';
   const typeLabel = d.typeLabel || '';
   ctx.font = `bold ${Math.max(10, 11.5 * dpr)}px system-ui, sans-serif`;
@@ -255,7 +275,7 @@ export function drawPlaceHub(ctx, d, dpr, helpers) {
   const bw = Math.max(tw, tw2) + padX * 2 + 4 * dpr;
   const bh = 30 * dpr;
   const bx = d.x - bw / 2;
-  const by = d.y + size * 0.36;
+  const by = groundY + 10 * dpr;
 
   ctx.fillStyle = 'rgba(15,12,10,0.2)';
   roundRect(ctx, bx + 2 * dpr, by + 3 * dpr, bw, bh, 9 * dpr);

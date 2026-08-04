@@ -78,6 +78,64 @@ export function getPlaceSprite(type, variant = null) {
   return placeImgs[type] || placeImgs.town || null;
 }
 
+/**
+ * Content bounds (alpha-crop) for place sprites – undgår “flyvende” byer
+ * pga. sort/tom padding i PNG.
+ * @returns {{ left:number, top:number, right:number, bottom:number, w:number, h:number }|null}
+ */
+export function getImageContentBounds(img, alphaThreshold = 12) {
+  if (!img || !img.complete || !img.naturalWidth) return null;
+  if (img._contentBounds) return img._contentBounds;
+  try {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let left = w;
+    let top = h;
+    let right = 0;
+    let bottom = 0;
+    let found = false;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const a = data[(y * w + x) * 4 + 3];
+        if (a > alphaThreshold) {
+          found = true;
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+    }
+    if (!found) {
+      img._contentBounds = { left: 0, top: 0, right: w - 1, bottom: h - 1, w, h: h };
+      return img._contentBounds;
+    }
+    // Lille padding så kanter ikke skæres skarpt
+    const pad = 2;
+    left = Math.max(0, left - pad);
+    top = Math.max(0, top - pad);
+    right = Math.min(w - 1, right + pad);
+    bottom = Math.min(h - 1, bottom + pad);
+    img._contentBounds = {
+      left,
+      top,
+      right,
+      bottom,
+      w: right - left + 1,
+      h: bottom - top + 1
+    };
+    return img._contentBounds;
+  } catch {
+    return null;
+  }
+}
+
 export function getVehicleSprite(classId, kind) {
   if (classId && vehicleImgs[classId]) return vehicleImgs[classId];
   // class id aliases
