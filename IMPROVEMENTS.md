@@ -145,6 +145,12 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 - [x] **IMP-A1** – dagligt mini-mål + blød streak + hent-belønning
 - [x] **IMP-B4** – end-run: XP, næste unlock, del-score
 
+### ART-1 visuelt løft (04/08)
+- [x] Kenney road-asfalt (CC0) + varmere tiles
+- [x] Vej-lag: skygge, skulder, highlight, bedre pile/motorvej
+- [x] By-hubs: glow, glass-labels, forbundet-ring
+- [x] World vignette/lys + ambient foliage; HUD soft glass
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)
