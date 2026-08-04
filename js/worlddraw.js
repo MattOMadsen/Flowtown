@@ -46,14 +46,14 @@ export function drawWorldTerrain(
     drawTileMap(ctx, tileMap, getTileImages());
   }
 
-  // Studio light from top-left
+  // Studio light – dæmpet så tiles ikke vaskes ud / grønner over
   const light = ctx.createRadialGradient(
     w * 0.18, h * 0.12, 0,
     w * 0.32, h * 0.38, Math.max(w, h) * 0.78
   );
-  light.addColorStop(0, 'rgba(255,255,255,0.16)');
-  light.addColorStop(0.45, 'rgba(255,255,255,0.04)');
-  light.addColorStop(1, 'rgba(40, 32, 24, 0.1)');
+  light.addColorStop(0, 'rgba(255,255,255,0.08)');
+  light.addColorStop(0.5, 'rgba(255,255,255,0.02)');
+  light.addColorStop(1, 'rgba(40, 32, 24, 0.06)');
   ctx.fillStyle = light;
   ctx.fillRect(0, 0, w, h);
 
@@ -131,9 +131,10 @@ function drawAmbientDecor(ctx, w, h, dpr, districts, seed) {
 }
 
 function drawHexGuide(ctx, w, h, size, dpr) {
+  // Meget diskret – må ikke “fylde” kortet
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = 1 * dpr;
+  ctx.strokeStyle = 'rgba(255,255,255,0.055)';
+  ctx.lineWidth = 0.8 * dpr;
   const hexH = size * 2;
   const hexW = Math.sqrt(3) * size;
   const vert = hexH * 0.75;
@@ -157,16 +158,29 @@ function drawHexGuide(ctx, w, h, size, dpr) {
 }
 
 function drawFarmFields(ctx, d, dpr) {
-  const rows = 5;
-  const fw = d.r * 2.6;
-  const fh = d.r * 2.0;
+  // Bløde mark-striber – ikke store grønne firkanter over kortet
+  const rows = 4;
+  const fw = d.r * 2.1;
+  const fh = d.r * 1.55;
   ctx.save();
-  ctx.globalAlpha = 0.32;
-  ctx.translate(d.x + d.r * 0.85, d.y + d.r * 0.45);
-  ctx.rotate(-0.1);
+  ctx.translate(d.x + d.r * 0.75, d.y + d.r * 0.4);
+  ctx.rotate(-0.12);
+  ctx.globalAlpha = 0.16;
+  // afrundet clip så det ikke ligner en boks
+  ctx.beginPath();
+  const rr = 10 * dpr;
+  const x0 = -fw / 2;
+  const y0 = -fh / 2;
+  ctx.moveTo(x0 + rr, y0);
+  ctx.arcTo(x0 + fw, y0, x0 + fw, y0 + fh, rr);
+  ctx.arcTo(x0 + fw, y0 + fh, x0, y0 + fh, rr);
+  ctx.arcTo(x0, y0 + fh, x0, y0, rr);
+  ctx.arcTo(x0, y0, x0 + fw, y0, rr);
+  ctx.closePath();
+  ctx.clip();
   for (let i = 0; i < rows; i++) {
     ctx.fillStyle = i % 2 === 0 ? '#8fbf4a' : '#c9a84a';
-    ctx.fillRect(-fw / 2, -fh / 2 + (i / rows) * fh, fw, fh / rows - dpr);
+    ctx.fillRect(x0, y0 + (i / rows) * fh, fw, fh / rows);
   }
   ctx.restore();
 }
@@ -185,31 +199,24 @@ export function drawPlaceHub(ctx, d, dpr, helpers) {
   const groundY = d.y;
   const gc = d.color || '#a8a29e';
 
-  // Blød skygge der “klistrer” huset til hex-græs (ingen lilla ø-platform)
+  // Kun blød skygge – ingen grøn plade oven på tiles
   ctx.beginPath();
-  ctx.ellipse(d.x + 2 * dpr, groundY + 3 * dpr, size * 0.34, size * 0.12, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(20, 18, 14, 0.28)';
+  ctx.ellipse(d.x + 2 * dpr, groundY + 3 * dpr, size * 0.32, size * 0.11, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(20, 18, 14, 0.26)';
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(d.x, groundY + 1 * dpr, size * 0.28, size * 0.09, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(30, 28, 22, 0.16)';
-  ctx.fill();
-
-  // Meget diskret græs-toning (matcher hex, ikke en grøn “tallerken”)
-  ctx.beginPath();
-  ctx.ellipse(d.x, groundY, size * 0.26, size * 0.085, 0, 0, Math.PI * 2);
-  const sod = ctx.createRadialGradient(d.x, groundY, 0, d.x, groundY, size * 0.28);
-  sod.addColorStop(0, 'rgba(90, 110, 70, 0.22)');
-  sod.addColorStop(1, 'rgba(90, 110, 70, 0)');
-  ctx.fillStyle = sod;
+  ctx.ellipse(d.x, groundY + 1 * dpr, size * 0.24, size * 0.075, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(30, 28, 22, 0.12)';
   ctx.fill();
 
-  // Tynd farvering (stedfarve) – kun når forbundet, ellers næsten usynlig
-  ctx.beginPath();
-  ctx.ellipse(d.x, groundY, size * 0.24, size * 0.08, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = hexAlpha(gc, connected ? 0.4 : 0.18);
-  ctx.lineWidth = 1.4 * dpr;
-  ctx.stroke();
+  // Tynd farvering (stedfarve) – kun når forbundet
+  if (connected) {
+    ctx.beginPath();
+    ctx.ellipse(d.x, groundY, size * 0.22, size * 0.07, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = hexAlpha(gc, 0.35);
+    ctx.lineWidth = 1.3 * dpr;
+    ctx.stroke();
+  }
 
   if (sprite && sprite.complete && sprite.naturalWidth > 0) {
     const nw = sprite.naturalWidth || size;
