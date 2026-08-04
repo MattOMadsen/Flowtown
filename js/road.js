@@ -24,7 +24,13 @@ function asphaltPattern(ctx, dpr) {
 }
 
 export class Road {
-  constructor(points, { owner = 'player', ownerColor = null, lanes = 1, isBridge = false } = {}) {
+  constructor(points, {
+    owner = 'player',
+    ownerColor = null,
+    lanes = 1,
+    isBridge = false,
+    paidCost = 0
+  } = {}) {
     this.points = points;
     this.id = Math.random().toString(36).slice(2);
     this.density = 0;
@@ -32,7 +38,16 @@ export class Road {
     this.ownerColor = ownerColor;
     this.lanes = lanes >= 2 ? 2 : 1;
     this.isBridge = !!isBridge;
+    /** Full $ paid for this segment (for fair refunds) */
+    this.paidCost = Math.max(0, paidCost | 0);
     this._length = null;
+  }
+
+  /** Recalculate paidCost proportionally after length change */
+  scalePaidCost(oldLen, newLen) {
+    if (!oldLen || oldLen <= 0) return;
+    this.paidCost = Math.max(0, Math.round(this.paidCost * (newLen / oldLen)));
+    this.invalidateCache();
   }
 
   invalidateCache() {

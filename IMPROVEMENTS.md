@@ -40,6 +40,10 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-BOUNDS** Tegn kun på bræt
 - [x] **PROG-INDUSTRY** Fabrik→havn/by jobs + layout-kæder
 - [x] **PROG-HUD2** Ikon-tools + mini-HUD ved zoom
+- [x] **PROG-UNDO** Fuld refund ved undo/clear
+- [x] **PROG-ERASE** Slet vejstykke (ikke hele vejen)
+- [x] **PROG-HEX** Blød hex-hjælp under tegning
+- [x] **PROG-GFX** Dybde/lys/hex + tip flyttet til start
 
 ---
 

@@ -769,7 +769,12 @@ export class Game {
     const dx = p.x - last.x;
     const dy = p.y - last.y;
     if (dx * dx + dy * dy > 12) {
-      this.currentStroke.push({ x: p.x, y: p.y });
+      // Soft hex-snap away from strong road/city snap (easier neat roads)
+      let pt = { x: p.x, y: p.y };
+      const nearCity = this.districts.some(d => Math.hypot(d.x - p.x, d.y - p.y) < d.r * 1.6);
+      if (!nearCity) pt = this.snapToHex(p.x, p.y, 0.38);
+      pt = this.clampToWorld(pt);
+      this.currentStroke.push(pt);
       const isBridge = this.mode === 'bridge';
       this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke, { bridge: isBridge });
     }
@@ -839,13 +844,14 @@ export class Game {
    */
   addRoadForOwner(points, owner, ownerColor, cost, chargePlayer, opts = {}) {
     if (!points || points.length < 2) return false;
+    const paid = Math.max(0, Math.round(cost || 0));
     if (chargePlayer) {
-      if (this.money < cost) return false;
-      this.money -= cost;
+      if (this.money < paid) return false;
+      this.money -= paid;
       this.addFloatText(
         points[Math.floor(points.length / 2)].x,
         points[Math.floor(points.length / 2)].y,
-        `−$${cost}`,
+        `−$${paid}`,
         opts.isBridge ? '#0369a1' : '#b91c1c'
       );
     }
@@ -853,7 +859,8 @@ export class Game {
       owner,
       ownerColor,
       lanes: 1,
-      isBridge: !!opts.isBridge
+      isBridge: !!opts.isBridge,
+      paidCost: paid
     }));
     if (owner === 'player') {
       this.checkFirstLinks();
@@ -907,6 +914,7 @@ export class Game {
 
     this.money -= cost;
     road.lanes = 2;
+    road.paidCost = (road.paidCost || 0) + cost; // full undo later
     this.addFloatText(best.point.x, best.point.y - 12, `2-spor −$${cost}`, '#0f766e');
     this.addArrivalParticles(best.point.x, best.point.y, '#10b981');
     this.showToast(`Vej opgraderet til 2-spor ($${cost})`);
@@ -1011,30 +1019,116 @@ export class Game {
     return best;
   }
 
+  /**
+   * Erase a chunk of road around the tap (not the whole road).
+   * Full proportional refund of paidCost for removed length.
+   */
   eraseNear(screenX, screenY) {
     const p = this.screenToWorld(screenX, screenY);
     let bestIdx = -1;
-    let bestDist = 40 * this.dpr;
+    let best = null;
+    let bestDist = 48 * this.dpr;
 
     for (let i = 0; i < this.roads.length; i++) {
-      // Player can only erase own roads
       if (this.roads[i].owner !== 'player') continue;
       const closest = this.roads[i].closestPoint(p.x, p.y);
       if (closest.dist < bestDist) {
         bestDist = closest.dist;
         bestIdx = i;
+        best = closest;
       }
     }
+    if (bestIdx < 0 || !best) return;
 
-    if (bestIdx >= 0) {
-      const road = this.roads[bestIdx];
-      // Partial refund
-      const refund = Math.floor(this.roadCostForLength(road.length) * 0.35);
-      this.money += refund;
-      this.vehicles = this.vehicles.filter(v => v.currentRoad !== road);
-      this.roads.splice(bestIdx, 1);
-      if (refund > 0) this.showToast(`Refund +$${refund}`);
+    const road = this.roads[bestIdx];
+    const oldLen = road.length || 1;
+    const eraseAlong = Math.max(70 * this.dpr, oldLen * 0.18); // chunk size
+    const half = eraseAlong / 2;
+    const tCenter = best.t;
+    // Convert t to arc distance
+    const distCenter = tCenter * oldLen;
+    const cutStart = Math.max(0, distCenter - half);
+    const cutEnd = Math.min(oldLen, distCenter + half);
+
+    const before = this._polylineSliceByDist(road.points, 0, cutStart);
+    const after = this._polylineSliceByDist(road.points, cutEnd, oldLen);
+    const removedLen = Math.max(0, cutEnd - cutStart);
+    const refund = Math.round((road.paidCost || this.roadCostForLength(oldLen)) * (removedLen / oldLen));
+
+    this.vehicles = this.vehicles.filter(v => v.currentRoad !== road);
+    this.roads.splice(bestIdx, 1);
+
+    const minLen = 28 * this.dpr;
+    const mk = (pts, frac) => {
+      if (!pts || pts.length < 2) return;
+      let len = 0;
+      for (let i = 1; i < pts.length; i++) {
+        len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      }
+      if (len < minLen) return;
+      this.roads.push(new Road(pts, {
+        owner: road.owner,
+        ownerColor: road.ownerColor,
+        lanes: road.lanes,
+        isBridge: road.isBridge,
+        paidCost: Math.round((road.paidCost || 0) * frac)
+      }));
+    };
+
+    const beforeLen = Math.max(0, cutStart);
+    const afterLen = Math.max(0, oldLen - cutEnd);
+    const remain = beforeLen + afterLen;
+    mk(before, remain > 0 ? beforeLen / oldLen : 0);
+    mk(after, remain > 0 ? afterLen / oldLen : 0);
+
+    this.money += refund;
+    this.addFloatText(p.x, p.y - 10, `+$${refund}`, '#059669');
+    this.showToast(refund ? `Slettet stykke · +$${refund}` : 'Slettet stykke');
+    this.requestDraw();
+  }
+
+  /** Extract polyline between arc distances [d0, d1] along points */
+  _polylineSliceByDist(points, d0, d1) {
+    if (!points || points.length < 2 || d1 <= d0 + 1) return [];
+    const out = [];
+    let traveled = 0;
+    // start point
+    for (let i = 1; i < points.length; i++) {
+      const p0 = points[i - 1];
+      const p1 = points[i];
+      const seg = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1e-6;
+      const a = traveled;
+      const b = traveled + seg;
+      // collect start
+      if (d0 >= a && d0 <= b && out.length === 0) {
+        const t = (d0 - a) / seg;
+        out.push({ x: p0.x + (p1.x - p0.x) * t, y: p0.y + (p1.y - p0.y) * t });
+      }
+      if (d0 <= a && d1 >= b) {
+        if (out.length === 0) out.push({ x: p0.x, y: p0.y });
+        out.push({ x: p1.x, y: p1.y });
+      } else if (d0 < b && d1 > a) {
+        if (out.length === 0) {
+          const t0 = Math.max(0, (d0 - a) / seg);
+          out.push({ x: p0.x + (p1.x - p0.x) * t0, y: p0.y + (p1.y - p0.y) * t0 });
+        }
+        if (d1 <= b) {
+          const t1 = (d1 - a) / seg;
+          out.push({ x: p0.x + (p1.x - p0.x) * t1, y: p0.y + (p1.y - p0.y) * t1 });
+          break;
+        } else {
+          out.push({ x: p1.x, y: p1.y });
+        }
+      }
+      traveled = b;
     }
+    // dedupe consecutive
+    const cleaned = [];
+    for (const pt of out) {
+      const prev = cleaned[cleaned.length - 1];
+      if (!prev || Math.hypot(pt.x - prev.x, pt.y - prev.y) > 1) cleaned.push(pt);
+    }
+    return cleaned;
   }
 
   snapEndpoints(points) {
@@ -1134,23 +1228,28 @@ export class Game {
     for (let i = this.roads.length - 1; i >= 0; i--) {
       if (this.roads[i].owner === 'player') {
         const road = this.roads[i];
-        const refund = Math.floor(this.roadCostForLength(road.length) * 0.5);
+        // Full refund of what was paid for this road
+        const refund = Math.max(
+          0,
+          road.paidCost || this.roadCostForLength(road.length)
+        );
         this.money += refund;
         this.vehicles = this.vehicles.filter(v => v.currentRoad !== road);
         this.roads.splice(i, 1);
-        this.showToast(`Undo · +$${refund}`);
+        this.showToast(refund ? `Undo · +$${refund} (fuld refund)` : 'Undo');
+        this.requestDraw();
         return;
       }
     }
   }
 
   clearRoads() {
-    // Only clear player roads; refund partial
+    // Full refund of all player roads' paid costs
     let refund = 0;
     const keep = [];
     for (const r of this.roads) {
       if (r.owner === 'player') {
-        refund += Math.floor(this.roadCostForLength(r.length) * 0.4);
+        refund += Math.max(0, r.paidCost || this.roadCostForLength(r.length));
       } else {
         keep.push(r);
       }
@@ -1158,7 +1257,35 @@ export class Game {
     this.roads = keep;
     this.vehicles = this.vehicles.filter(v => v.owner !== 'player');
     this.money += refund;
-    if (refund) this.showToast(`Rydet · +$${refund}`);
+    if (refund) this.showToast(`Rydet · +$${refund} (fuld refund)`);
+    this.requestDraw();
+  }
+
+  /** Hex grid size for snap helpers */
+  get hexSize() {
+    return 34 * (this.dpr || 1);
+  }
+
+  /** Soft snap to hex center (easier drawing, not forced) */
+  snapToHex(x, y, strength = 0.45) {
+    const size = this.hexSize;
+    // axial hex (pointy top)
+    const q = ((Math.sqrt(3) / 3) * x - (1 / 3) * y) / size;
+    const r = ((2 / 3) * y) / size;
+    let rq = Math.round(q);
+    let rr = Math.round(r);
+    let rs = Math.round(-q - r);
+    const q_diff = Math.abs(rq - q);
+    const r_diff = Math.abs(rr - r);
+    const s_diff = Math.abs(rs - (-q - r));
+    if (q_diff > r_diff && q_diff > s_diff) rq = -rr - rs;
+    else if (r_diff > s_diff) rr = -rq - rs;
+    const cx = size * (Math.sqrt(3) * rq + (Math.sqrt(3) / 2) * rr);
+    const cy = size * ((3 / 2) * rr);
+    return {
+      x: x + (cx - x) * strength,
+      y: y + (cy - y) * strength
+    };
   }
 
   areDistrictsRoughlyConnected(a, b) {
@@ -1580,7 +1707,8 @@ export class Game {
     drawWorldTerrain(
       ctx, w, h, this.dpr,
       this.districts, this.mapSeed,
-      this.waterBodies, this.tileMap
+      this.waterBodies, this.tileMap,
+      { showHex: this.mode === 'draw' || this.mode === 'bridge', hexSize: this.hexSize }
     );
   }
 

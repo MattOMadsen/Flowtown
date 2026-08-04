@@ -45,8 +45,6 @@
         <button id="btn-toggle" type="button" class="hud-tool hud-tool-accent" title="Pause">⏸️</button>
         <button id="btn-hud-expand" type="button" class="hud-tool hud-expand-btn" title="Vis menu">☰</button>
       </div>
-      <p class="hud-hint">Tip: træk fra by-kant = vej · tryk midt i by = køb bil · hold finger = flyt kort · 2 fingre = zoom</p>
-
       <!-- Række 3: opgaver (+ mål når campaign) -->
       <div class="hud-missions">
         <div id="jobs-panel" class="hud-jobs">
@@ -156,14 +154,15 @@
         <input type="checkbox" id="start-with-bots" class="rounded border-stone-300" />
         Start med bots
       </label>
-      <p class="text-[11px] text-stone-400 leading-relaxed mb-2">
-        Hold finger = flyt kort · 2 fingre = zoom · træk fra by = vej
-      </p>
-      <button type="button" id="btn-how" class="w-full text-xs text-stone-500 underline mb-1">Kort tip</button>
-      <div id="how-box" class="hidden text-left text-xs text-stone-600 space-y-1 mb-2 bg-stone-50 rounded-xl p-3">
-        <p>• <b>Træk fra by-kant</b> = tegn vej · <b>tryk midt i by</b> = køb bil</p>
-        <p>• <b>Hold</b> finger / pile / 2 fingre = flyt eller zoom kort</p>
-        <p>• Kun inden for land · fabrikker sender gods til havn/by</p>
+      <button type="button" id="btn-how" class="w-full py-2.5 text-sm font-medium text-stone-600 bg-stone-50 hover:bg-stone-100 rounded-xl border border-stone-200 mb-2 touch-manipulation">
+        Sådan spiller du
+      </button>
+      <div id="how-box" class="hidden text-left text-sm text-stone-600 space-y-2 mb-2 bg-gradient-to-b from-stone-50 to-white rounded-xl p-3.5 border border-stone-100 shadow-sm">
+        <p class="font-semibold text-stone-800">Byg & kør</p>
+        <p>✏️ <b>Træk fra by-kant</b> → tegn vej · <b>tryk midt i by</b> → køb bil</p>
+        <p>🖐️ <b>Hold</b> finger / pile / 2 fingre → flyt eller zoom</p>
+        <p>🗑️ <b>Slet</b> fjerner et stykke vej · ↩️ <b>Undo</b> giver fuld refund</p>
+        <p>🏭 Fabrikker sender gods til havn/by · hex-hjælp ses når du tegner</p>
       </div>
     </div>
   </div>
