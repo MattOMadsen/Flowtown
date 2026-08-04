@@ -74,7 +74,7 @@ export const SCENARIOS = [
     blurb: 'Lille dal – lær at forbinde by og landbrug.',
     seed: 101,
     startMoney: 1500,
-    worldScale: 1.08,
+    worldScale: 1.45,
     unlockLevel: 1,
     layout: LAYOUT_INTRO,
     goals: [
@@ -89,7 +89,7 @@ export const SCENARIOS = [
     blurb: 'Havn, fabrik og marker – gods skal ud.',
     seed: 202,
     startMoney: 1350,
-    worldScale: 1.22,
+    worldScale: 1.62,
     unlockLevel: 2,
     layout: LAYOUT_COAST,
     goals: [
@@ -104,7 +104,7 @@ export const SCENARIOS = [
     blurb: 'Stort kort – fuld netværks-udfordring.',
     seed: 303,
     startMoney: 1300,
-    worldScale: 1.42,
+    worldScale: 1.88,
     unlockLevel: 3,
     layout: LAYOUT_VALLEY,
     goals: [
@@ -119,7 +119,7 @@ export const SCENARIOS = [
     blurb: 'Vand deler landet – byg broer og hold flow over vandet.',
     seed: 404,
     startMoney: 1550,
-    worldScale: 1.28,
+    worldScale: 1.72,
     unlockLevel: 3,
     layout: LAYOUT_ISLANDS,
     goals: [
@@ -134,7 +134,7 @@ export const SCENARIOS = [
     blurb: 'Tæt bynet – hold trafikken kørende under rush og mørke.',
     seed: 505,
     startMoney: 1400,
-    worldScale: 1.18,
+    worldScale: 1.58,
     unlockLevel: 4,
     layout: LAYOUT_NIGHT,
     /** Start later in day cycle + slightly wet */
@@ -153,7 +153,7 @@ export const SCENARIOS = [
     blurb: 'Fri leg på det store standardkort. Ingen stjerne-krav.',
     seed: 42,
     startMoney: 1600,
-    worldScale: 1.38,
+    worldScale: 1.85,
     unlockLevel: 1,
     layout: null, // default full layout
     goals: [],

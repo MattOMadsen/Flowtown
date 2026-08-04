@@ -167,21 +167,17 @@ export class Road {
     }
   }
 
-  draw(ctx, dpr) {
-    if (this.points.length < 2) return;
-
-    // dual = tovejs markering; oneWay får enkelt pil-retning
-    const dual = !this.oneWay;
+  /**
+   * Farver/bredder til tegning (bruges også til kryds-pads).
+   */
+  getDrawStyle(dpr) {
     const motor = this.lanes >= 3;
     const bridge = this.isBridge;
-    // Cozy palette: warm asphalt, soft edges
     let edge = bridge ? '#1e3a5f' : motor ? '#1c1917' : '#2a2623';
     let asphalt = bridge ? '#6b7c93' : motor ? '#3f3f46' : '#5c5a62';
     let asphaltHi = bridge ? '#a8b8cc' : motor ? '#a1a1aa' : '#7a7882';
     let shoulder = 'rgba(156, 142, 110, 0.42)';
     let lane = bridge ? '#e0f2fe' : motor ? '#fafafa' : '#eceae6';
-    let alpha = this.owner === 'player' ? 1 : 0.88;
-
     const dens = this.effectiveDensity;
     if (!bridge && dens >= 6) {
       asphalt = '#9f1239';
@@ -201,36 +197,58 @@ export class Road {
       edge = this.mixHex(this.ownerColor, '#1c1917', 0.22);
       lane = '#fef3c7';
     }
+    // Lidt slankere end før – mindre “pølse” ved fletning
+    const wEdge = (motor ? 30 : bridge ? 24 : 25) * dpr;
+    const wBody = (motor ? 22 : bridge ? 16 : 18) * dpr;
+    const wInner = (motor ? 14 : 11) * dpr;
+    return {
+      motor, bridge, dens, edge, asphalt, asphaltHi, shoulder, lane,
+      wEdge, wBody, wInner,
+      alpha: this.owner === 'player' ? 1 : 0.88
+    };
+  }
 
-    const wEdge = (motor ? 34 : bridge ? 26 : 28) * dpr;
-    const wBody = (motor ? 25 : bridge ? 17 : 21) * dpr;
-    const wInner = (motor ? 16 : 13) * dpr;
+  /**
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {number} dpr
+   * @param {{ joinStart?: boolean, joinEnd?: boolean }} [opts]
+   *   join* = endpoint er kryds/T – brug butt + ingen rund kasket (undgår pølse-overlap)
+   */
+  draw(ctx, dpr, opts = {}) {
+    if (this.points.length < 2) return;
+
+    const dual = !this.oneWay;
+    const st = this.getDrawStyle(dpr);
+    const {
+      motor, bridge, dens, edge, asphalt, asphaltHi, shoulder, lane,
+      wEdge, wBody, wInner, alpha
+    } = st;
+    const joinStart = !!opts.joinStart;
+    const joinEnd = !!opts.joinEnd;
 
     ctx.save();
-    ctx.lineCap = 'round';
+    // butt ved fletning = rene T/X-kryds; round kun på frie ender (tegnes som cirkel)
+    ctx.lineCap = 'butt';
     ctx.lineJoin = 'round';
     ctx.globalAlpha = alpha;
 
-    // Drop shadow (offset “floor”)
-    ctx.beginPath();
-    this.path(ctx);
-    ctx.strokeStyle = bridge ? 'rgba(14, 116, 144, 0.18)' : 'rgba(20, 16, 12, 0.28)';
-    ctx.lineWidth = wEdge + 8 * dpr;
-    ctx.stroke();
+    const strokePath = (width, style, a = alpha) => {
+      ctx.beginPath();
+      this.path(ctx);
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.globalAlpha = a;
+      ctx.stroke();
+      ctx.globalAlpha = alpha;
+    };
+
+    // Drop shadow
+    strokePath(wEdge + 6 * dpr, bridge ? 'rgba(14, 116, 144, 0.16)' : 'rgba(20, 16, 12, 0.24)');
 
     // Soft gravel / grass shoulder
     if (!bridge) {
-      ctx.beginPath();
-      this.path(ctx);
-      ctx.strokeStyle = shoulder;
-      ctx.lineWidth = wEdge + 10 * dpr;
-      ctx.stroke();
-      // outer curb ring
-      ctx.beginPath();
-      this.path(ctx);
-      ctx.strokeStyle = 'rgba(68, 64, 60, 0.22)';
-      ctx.lineWidth = wEdge + 2 * dpr;
-      ctx.stroke();
+      strokePath(wEdge + 8 * dpr, shoulder);
+      strokePath(wEdge + 1.5 * dpr, 'rgba(68, 64, 60, 0.2)');
     }
 
     // Bridge pillars + deck accents
@@ -265,51 +283,19 @@ export class Road {
       }
     }
 
-    // Edge curb
-    ctx.beginPath();
-    this.path(ctx);
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = wEdge;
-    ctx.stroke();
+    // Edge curb + asphalt body (butt – rene fletninger)
+    strokePath(wEdge, edge);
+    strokePath(wBody, asphalt);
 
-    // Asphalt body
-    ctx.beginPath();
-    this.path(ctx);
-    ctx.strokeStyle = asphalt;
-    ctx.lineWidth = wBody;
-    ctx.stroke();
-
-    // Asphalt texture (Kenney-derived)
+    // Asphalt texture
     if (!bridge && dens < 4) {
       const pat = asphaltPattern(ctx, dpr);
-      if (pat) {
-        ctx.beginPath();
-        this.path(ctx);
-        ctx.strokeStyle = pat;
-        ctx.lineWidth = wBody * 0.9;
-        ctx.globalAlpha = alpha * (dens >= 3 ? 0.22 : 0.48);
-        ctx.stroke();
-        ctx.globalAlpha = alpha;
-      }
+      if (pat) strokePath(wBody * 0.9, pat, alpha * (dens >= 3 ? 0.22 : 0.48));
     }
 
-    // Specular highlight strip
-    ctx.beginPath();
-    this.path(ctx);
-    ctx.strokeStyle = asphaltHi;
-    ctx.lineWidth = wInner;
-    ctx.globalAlpha = alpha * 0.38;
-    ctx.stroke();
-    ctx.globalAlpha = alpha;
-
-    // Edge highlight (left-ish rim)
-    ctx.beginPath();
-    this.path(ctx);
-    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-    ctx.lineWidth = wBody * 0.35;
-    ctx.globalAlpha = alpha * 0.55;
-    ctx.stroke();
-    ctx.globalAlpha = alpha;
+    // Specular + rim
+    strokePath(wInner, asphaltHi, alpha * 0.38);
+    strokePath(wBody * 0.32, 'rgba(255,255,255,0.12)', alpha * 0.5);
 
     // Bridge rail lines
     if (bridge) {
@@ -324,41 +310,49 @@ export class Road {
 
     // Center marking
     if (dual) {
-      // double line for motorway
       if (motor) {
-        ctx.beginPath();
-        this.path(ctx);
-        ctx.strokeStyle = 'rgba(250, 250, 249, 0.55)';
-        ctx.lineWidth = 5.5 * dpr;
-        ctx.setLineDash([]);
-        ctx.lineCap = 'butt';
-        ctx.stroke();
+        strokePath(5 * dpr, 'rgba(250, 250, 249, 0.5)');
       }
       ctx.beginPath();
       this.path(ctx);
       ctx.strokeStyle = lane;
-      ctx.lineWidth = motor ? 2.2 * dpr : 3 * dpr;
+      ctx.lineWidth = motor ? 2 * dpr : 2.6 * dpr;
       ctx.setLineDash(motor ? [4 * dpr, 10 * dpr] : [11 * dpr, 9 * dpr]);
-      ctx.lineCap = 'butt';
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.beginPath();
-      this.path(ctx);
-      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-      ctx.lineWidth = 1.1 * dpr;
-      ctx.stroke();
+      strokePath(1 * dpr, 'rgba(255,255,255,0.25)');
     } else {
-      // Envejs: colored dashed center
       ctx.beginPath();
       this.path(ctx);
       ctx.strokeStyle = this.oneWay === -1 ? 'rgba(251, 146, 60, 0.9)' : 'rgba(96, 165, 250, 0.92)';
-      ctx.lineWidth = 2.6 * dpr;
+      ctx.lineWidth = 2.4 * dpr;
       ctx.setLineDash([14 * dpr, 8 * dpr]);
-      ctx.lineCap = 'butt';
       ctx.stroke();
       ctx.setLineDash([]);
     }
-    ctx.lineCap = 'round';
+
+    // Frie ender: runde kasketter (ikke ved kryds)
+    const start = this.points[0];
+    const end = this.points[this.points.length - 1];
+    const drawCap = (p) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, wEdge * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = edge;
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, wBody * 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = asphalt;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, wInner * 0.42, 0, Math.PI * 2);
+      ctx.fillStyle = asphaltHi;
+      ctx.globalAlpha = alpha * 0.35;
+      ctx.fill();
+      ctx.globalAlpha = alpha;
+    };
+    if (!joinStart) drawCap(start);
+    if (!joinEnd) drawCap(end);
 
     // Chevrons / direction arrows
     const len = this.length;

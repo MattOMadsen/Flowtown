@@ -156,7 +156,7 @@ export class Game {
     this.worldW = 1600;
     this.worldH = 1200;
     this.mapSeed = 42;
-    this.worldScale = 1.35;
+    this.worldScale = 1.65;
     this.scenario = getScenario('intro');
     this.scenarioId = 'intro';
     this.jobsCompleted = 0;
@@ -220,9 +220,10 @@ export class Game {
   updateDistrictPositions() {
     const dpr = this.dpr || 1;
     // Playable board size in canvas pixels – scales with mapScale, NOT raw screen*2
-    const scale = this.worldScale || 1.15;
-    const baseW = 1180 * dpr;
-    const baseH = 860 * dpr;
+    // Større bræt: base + scale (scenarier sætter worldScale)
+    const scale = this.worldScale || 1.55;
+    const baseW = 1320 * dpr;
+    const baseH = 980 * dpr;
     this.worldW = baseW * scale;
     this.worldH = baseH * scale;
     const w = this.worldW;
@@ -281,7 +282,7 @@ export class Game {
     this.scenario = sc;
     this.scenarioId = sc.id;
     this.mapSeed = sc.seed;
-    this.worldScale = sc.worldScale || 1.95;
+    this.worldScale = sc.worldScale || 1.75;
     this._layout = sc.layout || null;
 
     this.roads = [];
@@ -3939,6 +3940,133 @@ export class Game {
     return `rgb(${d(m[1])},${d(m[2])},${d(m[3])})`;
   }
 
+  /**
+   * Find fletninger: endpoint tæt på anden vej (endpoint eller midt-segment = T-kryds).
+   * @returns {Map<Road, { joinStart:boolean, joinEnd:boolean, joins:Array }>}
+   */
+  _computeRoadJoins() {
+    const dpr = this.dpr || 1;
+    const thresh = Math.max(14, this.getSnapDistance() * dpr * 0.72);
+    const map = new Map();
+    const roads = this.roads || [];
+    for (const road of roads) {
+      map.set(road, { joinStart: false, joinEnd: false, joins: [] });
+    }
+    const mark = (road, which, point) => {
+      const m = map.get(road);
+      if (!m) return;
+      if (which === 'start') m.joinStart = true;
+      else m.joinEnd = true;
+      m.joins.push(point);
+    };
+
+    for (let i = 0; i < roads.length; i++) {
+      const r1 = roads[i];
+      const ends1 = [
+        { which: 'start', p: r1.points[0] },
+        { which: 'end', p: r1.points[r1.points.length - 1] }
+      ];
+      for (const e1 of ends1) {
+        if (!e1.p) continue;
+        for (let j = 0; j < roads.length; j++) {
+          if (i === j) continue;
+          const r2 = roads[j];
+          // Endpoint-endpoint
+          for (const p2 of [r2.points[0], r2.points[r2.points.length - 1]]) {
+            if (!p2) continue;
+            if (Math.hypot(e1.p.x - p2.x, e1.p.y - p2.y) < thresh) {
+              mark(r1, e1.which, { x: (e1.p.x + p2.x) / 2, y: (e1.p.y + p2.y) / 2 });
+            }
+          }
+          // Endpoint midt på anden vej (T-kryds)
+          const c = r2.closestPoint(e1.p.x, e1.p.y);
+          if (c && c.dist < thresh * 0.95 && c.t > 0.06 && c.t < 0.94) {
+            mark(r1, e1.which, { x: c.point.x, y: c.point.y });
+          }
+        }
+        // Snap til by-hub tæller som “fri” ende (rund kasket) – ikke join
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Tegn rene asfalt-pads i kryds (dækker butt-ender, undgår pølse-overlap).
+   */
+  drawRoadJunctions(ctx, joinMeta) {
+    const dpr = this.dpr || 1;
+    const pads = [];
+    const mergeDist = 12 * dpr;
+
+    for (const road of this.roads) {
+      const m = joinMeta?.get(road);
+      if (!m?.joins?.length) continue;
+      const st = road.getDrawStyle?.(dpr) || { wBody: 18 * dpr, asphalt: '#5c5a62', edge: '#2a2623' };
+      for (const j of m.joins) {
+        pads.push({
+          x: j.x,
+          y: j.y,
+          r: st.wBody * 0.58,
+          asphalt: st.asphalt,
+          edge: st.edge,
+          hi: st.asphaltHi || '#7a7882'
+        });
+      }
+    }
+
+    // Merge nærliggende pads
+    const used = new Array(pads.length).fill(false);
+    const merged = [];
+    for (let i = 0; i < pads.length; i++) {
+      if (used[i]) continue;
+      let x = pads[i].x;
+      let y = pads[i].y;
+      let r = pads[i].r;
+      let n = 1;
+      let asphalt = pads[i].asphalt;
+      let edge = pads[i].edge;
+      let hi = pads[i].hi;
+      used[i] = true;
+      for (let j = i + 1; j < pads.length; j++) {
+        if (used[j]) continue;
+        if (Math.hypot(pads[j].x - x / n, pads[j].y - y / n) < mergeDist + r * 0.3) {
+          used[j] = true;
+          x += pads[j].x;
+          y += pads[j].y;
+          r = Math.max(r, pads[j].r);
+          n++;
+        }
+      }
+      merged.push({ x: x / n, y: y / n, r: r * (n > 1 ? 1.08 : 1), asphalt, edge, hi });
+    }
+
+    for (const p of merged) {
+      // ydre curb
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 1.22, 0, Math.PI * 2);
+      ctx.fillStyle = p.edge;
+      ctx.globalAlpha = 0.95;
+      ctx.fill();
+      // asfalt
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.asphalt;
+      ctx.fill();
+      // highlight
+      ctx.beginPath();
+      ctx.arc(p.x - p.r * 0.15, p.y - p.r * 0.18, p.r * 0.42, 0, Math.PI * 2);
+      ctx.fillStyle = p.hi;
+      ctx.globalAlpha = 0.22;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // diskret midterprik
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(2, p.r * 0.12), 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fill();
+    }
+  }
+
   draw() {
     const ctx = this.ctx;
     const w = this.canvas.width;
@@ -3958,39 +4086,16 @@ export class Game {
 
     this.drawBackground(ctx, this.worldW || w * 1.95, this.worldH || h * 1.95);
 
-    // Roads under districts so hubs sit on top of asphalt
-    for (const road of this.roads) road.draw(ctx, this.dpr);
+    // Roads: detect fletninger (T/X) så ends ikke tegnes som runde pølser
+    const joinMeta = this._computeRoadJoins();
+    for (const road of this.roads) {
+      const m = joinMeta.get(road) || { joinStart: false, joinEnd: false };
+      road.draw(ctx, this.dpr, m);
+    }
+    // Kryds-pads oven på veje (samler fletning rent)
+    this.drawRoadJunctions(ctx, joinMeta);
     // IMP-A2: highlight worst congestion after road draw
     this.drawBottleneckGlow(ctx);
-
-    // Junction hubs
-    const connR = 8 * this.dpr;
-    const joinThresh = (this.getSnapDistance() * this.dpr * 0.55) ** 2;
-    for (let i = 0; i < this.roads.length; i++) {
-      const r1 = this.roads[i];
-      const ends1 = [r1.points[0], r1.points[r1.points.length - 1]];
-      for (let j = i + 1; j < this.roads.length; j++) {
-        const r2 = this.roads[j];
-        const ends2 = [r2.points[0], r2.points[r2.points.length - 1]];
-        for (const a of ends1) {
-          for (const b of ends2) {
-            const dx = a.x - b.x, dy = a.y - b.y;
-            if (dx * dx + dy * dy < joinThresh) {
-              const jx = (a.x + b.x) / 2;
-              const jy = (a.y + b.y) / 2;
-              ctx.beginPath();
-              ctx.arc(jx, jy, connR, 0, Math.PI * 2);
-              ctx.fillStyle = '#44403c';
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(jx, jy, connR * 0.55, 0, Math.PI * 2);
-              ctx.fillStyle = '#a8a29e';
-              ctx.fill();
-            }
-          }
-        }
-      }
-    }
 
     for (const d of this.districts) this.drawDistrict(ctx, d);
 
