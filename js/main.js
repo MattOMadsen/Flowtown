@@ -376,10 +376,56 @@ function showEndPanel(stars) {
   if (!end) return;
   end.classList.remove('hidden');
   end.classList.add('flex');
+  game.paused = true;
+
   const es = document.getElementById('end-stars');
   if (es) es.textContent = starString(stars);
+  const title = document.getElementById('end-title');
+  if (title) {
+    title.textContent = stars >= 3
+      ? 'Perfekt netværk!'
+      : stars === 2
+        ? 'Stærkt kørt!'
+        : 'Bane klaret!';
+  }
   const et = document.getElementById('end-text');
-  if (et) et.textContent = stars >= 3 ? 'Alle stjerner! Vælg næste bane eller fortæt.' : 'Stjerner gemt. Du kan fortsætte.';
+  if (et) {
+    et.textContent = stars >= 3
+      ? 'Alle tre stjerner – du er klar til næste udfordring.'
+      : stars === 2
+        ? 'To stjerner gemt. Kan du hente den sidste?'
+        : 'Stjerne gemt. Fortsæt eller prøv en ny bane.';
+  }
+  const ed = document.getElementById('end-delivered');
+  if (ed) ed.textContent = String(game.playerDelivered | 0);
+  const em = document.getElementById('end-money');
+  if (em) em.textContent = `$${Math.floor(game.money)}`;
+  const ej = document.getElementById('end-jobs');
+  if (ej) ej.textContent = String(game.jobsCompleted | 0);
+
+  // Næste bane i listen (hvis ulåst)
+  const nextBtn = document.getElementById('end-next');
+  const list = game.listScenariosForUi?.() || [];
+  const idx = list.findIndex(s => s.id === game.scenarioId);
+  let next = null;
+  for (let i = idx + 1; i < list.length; i++) {
+    if (!list[i].locked && !list[i].freeplay) { next = list[i]; break; }
+  }
+  if (!next) {
+    const fp = list.find(s => s.freeplay && !s.locked);
+    if (fp && game.scenarioId !== fp.id) next = fp;
+  }
+  if (nextBtn) {
+    if (next) {
+      nextBtn.classList.remove('hidden');
+      nextBtn.textContent = next.freeplay ? 'Freeplay →' : `Næste: ${next.name} →`;
+      nextBtn.dataset.nextId = next.id;
+    } else {
+      nextBtn.classList.add('hidden');
+      delete nextBtn.dataset.nextId;
+    }
+  }
+  playUi();
 }
 
 document.getElementById('btn-how')?.addEventListener('click', () => {
@@ -394,6 +440,21 @@ document.getElementById('end-continue')?.addEventListener('click', () => {
   }
   game.running = true;
   game.paused = false;
+});
+document.getElementById('end-next')?.addEventListener('click', () => {
+  const btn = document.getElementById('end-next');
+  const id = btn?.dataset?.nextId;
+  const end = document.getElementById('end-panel');
+  if (end) {
+    end.classList.add('hidden');
+    end.classList.remove('flex');
+  }
+  if (id) {
+    selectedScenarioId = id;
+    playUi();
+    game.start(id);
+    lastStarsShown = 0;
+  }
 });
 
 renderScenarioList();
@@ -916,6 +977,14 @@ setInterval(() => {
       const rem = Math.ceil(game.getRushPhase?.().remaining || 0);
       rushLabel.textContent = `Rush ${rem}s`;
     }
+  }
+  const weatherLabel = document.getElementById('weather-label');
+  if (weatherLabel && game.getAtmosphereUi) {
+    weatherLabel.textContent = game.getAtmosphereUi().short;
+  }
+  const cityHint = document.getElementById('city-hint');
+  if (cityHint) {
+    cityHint.classList.toggle('hidden', !game.shouldShowCityHint?.());
   }
   document.getElementById('road-count').textContent = game.roads.length;
   document.getElementById('arrived-count').textContent = game.arrivedCount;

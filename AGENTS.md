@@ -73,7 +73,8 @@ Distrikter (ca.):
 | 2026-08-04 | Bund-stats + mission-lister dækkede kort | Stats i top-status; missioner som tynd strip + floating dropdown |
 | 2026-08-04 | By-tap til bilkøb virkede ikke | Større hit vs sprite; long-press-pan må ikke stjæle pendingDistrict |
 | 2026-08-04 | Minimap viewport (grøn firkant) skæv | Panel-aspekt = world; viewport fra setTransform; clip til bræt |
-| 2026-08-04 | Pan-ned dækkede minimap midt | Pil ned = bottom-**left** (ikke center over kort) |
+| 2026-08-04 | Pan-ned dækkede minimap midt | Minimap bottom-**left**; pan-ned midt-bund; zoom 2×2 højre |
+| 2026-08-04 | Minimap midt dækkede pan | Kort = venstre bund (brugerønske) |
 
 Når du retter en bruger-rapporteret bug: **tilføj en række** i tabellen ovenfor.
 

@@ -40,6 +40,7 @@
           <span title="Rekord">🏆 <b id="alltime-count">0</b></span>
           <span title="Flow">💨 <b id="flow-pct">0%</b></span>
           <span id="rush-badge" class="hidden" title="Rush hour">🚇 <b id="rush-label">Rush</b></span>
+          <span id="weather-badge" title="Vejr / tid">🌤️ <b id="weather-label">Dag</b></span>
         </div>
       </div>
 
@@ -108,12 +109,12 @@
     <button type="button" id="pan-down" class="pan-edge pan-edge-down pointer-events-auto touch-manipulation" aria-label="Flyt ned">›</button>
   </div>
 
-  <!-- Zoom – høj z-index, store knapper til mobil -->
-  <div id="zoom-controls" class="fixed right-2 sm:right-3 bottom-6 sm:bottom-8 z-40 flex flex-col gap-1.5 pointer-events-auto">
-    <button id="btn-zoom-in" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ind" aria-label="Zoom ind">+</button>
-    <button id="btn-zoom-out" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ud" aria-label="Zoom ud">−</button>
-    <button id="btn-zoom-fit" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[10px] font-bold text-stone-700 active:scale-95 transition" title="Se hele byen" aria-label="Se hele byen">Fit</button>
-    <button id="btn-zoom-reset" type="button" class="zoom-btn w-12 h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[11px] font-semibold text-stone-700 active:scale-95 transition" title="Nulstil zoom" aria-label="Nulstil zoom"><span id="zoom-label">100%</span></button>
+  <!-- Zoom – 2×2 nederst til højre (mobilvenlig) -->
+  <div id="zoom-controls" class="fixed right-2 sm:right-3 bottom-6 sm:bottom-8 z-40 pointer-events-auto">
+    <button id="btn-zoom-in" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ind" aria-label="Zoom ind">+</button>
+    <button id="btn-zoom-out" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ud" aria-label="Zoom ud">−</button>
+    <button id="btn-zoom-fit" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[10px] font-bold text-stone-700 active:scale-95 transition" title="Se hele byen" aria-label="Se hele byen">Fit</button>
+    <button id="btn-zoom-reset" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[11px] font-semibold text-stone-700 active:scale-95 transition" title="Nulstil zoom" aria-label="Nulstil zoom"><span id="zoom-label">100%</span></button>
   </div>
 
   <!-- Achievements (P2-4) -->
@@ -232,16 +233,40 @@
     </div>
   </div>
 
-  <!-- End / stjerner panel -->
-  <div id="end-panel" class="fixed inset-0 z-40 bg-black/45 hidden items-center justify-center p-4 pointer-events-auto">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl text-center">
-      <h3 class="text-lg font-bold text-stone-800 mb-1">Bane færdig</h3>
-      <p id="end-stars" class="text-2xl text-amber-500 font-bold mb-2">★★★</p>
-      <p id="end-text" class="text-sm text-stone-600 mb-4">Godt arbejde!</p>
-      <div class="flex flex-col gap-2">
-        <button type="button" id="end-map" class="py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl">Vælg bane</button>
-        <button type="button" id="end-continue" class="py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-xl">Fortsæt her</button>
+  <!-- End / stjerner panel (celebratory) -->
+  <div id="end-panel" class="fixed inset-0 z-40 bg-black/50 hidden items-center justify-center p-4 pointer-events-auto">
+    <div class="end-card relative bg-gradient-to-b from-amber-50 via-white to-emerald-50 rounded-2xl max-w-sm w-full p-5 sm:p-6 shadow-2xl text-center border border-amber-100 overflow-hidden">
+      <div class="end-burst" aria-hidden="true"></div>
+      <p class="text-xs font-semibold uppercase tracking-wide text-amber-700/80 mb-1">Tillykke</p>
+      <h3 id="end-title" class="text-xl font-extrabold text-stone-800 mb-1">Bane klaret!</h3>
+      <p id="end-stars" class="text-3xl text-amber-500 font-bold mb-1 tracking-wide">★★★</p>
+      <p id="end-text" class="text-sm text-stone-600 mb-3">Godt arbejde!</p>
+      <div id="end-stats" class="grid grid-cols-3 gap-2 mb-4 text-center">
+        <div class="rounded-xl bg-white/80 border border-stone-100 py-2 px-1">
+          <div class="text-[10px] text-stone-500 uppercase">Leveret</div>
+          <div id="end-delivered" class="text-sm font-bold text-stone-800 tabular-nums">0</div>
+        </div>
+        <div class="rounded-xl bg-white/80 border border-stone-100 py-2 px-1">
+          <div class="text-[10px] text-stone-500 uppercase">Penge</div>
+          <div id="end-money" class="text-sm font-bold text-amber-800 tabular-nums">$0</div>
+        </div>
+        <div class="rounded-xl bg-white/80 border border-stone-100 py-2 px-1">
+          <div class="text-[10px] text-stone-500 uppercase">Opgaver</div>
+          <div id="end-jobs" class="text-sm font-bold text-stone-800 tabular-nums">0</div>
+        </div>
       </div>
+      <div class="flex flex-col gap-2">
+        <button type="button" id="end-next" class="hidden py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-xl touch-manipulation">Næste bane →</button>
+        <button type="button" id="end-map" class="py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl touch-manipulation">Vælg bane</button>
+        <button type="button" id="end-continue" class="py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-xl touch-manipulation">Fortsæt her</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Første-minut by-hint (dækker ikke hjørner – midt-top under HUD) -->
+  <div id="city-hint" class="fixed left-1/2 -translate-x-1/2 z-25 hidden pointer-events-none" style="top: calc(var(--hud-offset, 9rem) + 0.35rem)">
+    <div class="bg-emerald-600/95 text-white text-xs sm:text-sm font-semibold px-3 py-2 rounded-full shadow-lg border border-emerald-400/40 max-w-[min(92vw,22rem)] text-center">
+      👆 Tryk midt i en by for at købe bil
     </div>
   </div>
 

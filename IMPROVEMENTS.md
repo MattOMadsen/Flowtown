@@ -59,17 +59,22 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **P2-1** Envejs (➡️ cycle) + trafiklys (🚦) med bil-respekt og gem i session
 - [x] **P2-4** Achievements (🏆): 15 badges, XP + toast, localStorage
 
+### UI + bots + vejr + end (04/08)
+- [x] Minimap **venstre-bund**, pan-ned **midt-bund**, zoom **2×2** højre
+- [x] **P3-2** Stærkere bot-AI (job-steal, haste, motorvej, aggression)
+- [x] **P3-1** Dag/nat + regn/tåge (overlay, fart, HUD)
+- [x] End-of-run panel (stats, næste bane) + “tryk by”-hint første minut
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **P3-2** | Stærkere bot-AI | bot.js |
-| 2 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
-| 3 | **P2-4 polish** | End-of-run celebratory + first-minute hint | UX |
-| 4 | **P3-3/4** | Multiplayer / leaderboard | Backend |
-| 5 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
+| 1 | **P3-3/4** | Multiplayer / leaderboard | Backend |
+| 2 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
+| 3 | **Minimap tap→by** | Hop til by ved prik | Polish |
+| 4 | **Bus / flere sprites** | Flåde-variation | Art |
 
 ### Hurtige polish der stadig kan give værdi
 - [ ] Tydelig “tryk by for at købe”-hint første minut

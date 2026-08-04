@@ -142,9 +142,16 @@ export class Game {
     this.botsEnabled = false;
     this.bots = BOT_PRESETS.map(p => new Bot({
       ...p,
-      money: 420,
-      game: this
+      money: 480,
+      game: this,
+      aggression: p.aggression || 1
     }));
+    /** P3-1: day cycle + weather */
+    this.timeOfDay = 0.35; // 0–1 (0 midnat, 0.25 morgen, 0.5 middag)
+    this.weather = 'clear'; // clear | rain | fog
+    this.weatherTimer = 0;
+    this._cityHintShown = false;
+    this._cityHintUntil = 0;
     for (const b of this.bots) b.enabled = false;
 
     this.initDistricts();
@@ -257,6 +264,11 @@ export class Game {
     this.sessionTime = 0;
     this.rushActive = false;
     this._wasRush = false;
+    this.timeOfDay = 0.32 + Math.random() * 0.15;
+    this.weather = 'clear';
+    this.weatherTimer = 18 + Math.random() * 25;
+    this._cityHintShown = false;
+    this._cityHintUntil = 0;
 
     this.initDistricts();
     this.botsEnabled = !!opts.bots;
@@ -283,10 +295,74 @@ export class Game {
     }
     this.refreshGoals();
     this._sessionDirty = true;
+    // Første minut: hint om at trykke by (hvis ingen flåde)
+    this._cityHintShown = false;
+    this._cityHintUntil = 0;
+    if (this.getPlayerFleet().length === 0) {
+      this._cityHintUntil = 55;
+      this._cityHintShown = true;
+    }
     if (!this._loopStarted) {
       this._loopStarted = true;
       requestAnimationFrame((t) => this.loop(t));
     }
+  }
+
+  /** P3-1: tid + vejr for UI */
+  getAtmosphereUi() {
+    const t = this.timeOfDay;
+    let period = 'Nat';
+    let icon = '🌙';
+    if (t >= 0.22 && t < 0.35) { period = 'Morgen'; icon = '🌅'; }
+    else if (t >= 0.35 && t < 0.62) { period = 'Dag'; icon = '☀️'; }
+    else if (t >= 0.62 && t < 0.78) { period = 'Aften'; icon = '🌇'; }
+    const w = this.weather || 'clear';
+    const wMeta = {
+      clear: { icon: '🌤️', label: 'Klart' },
+      rain: { icon: '🌧️', label: 'Regn' },
+      fog: { icon: '🌫️', label: 'Tåge' }
+    }[w] || { icon: '🌤️', label: 'Klart' };
+    return {
+      period,
+      periodIcon: icon,
+      weather: w,
+      weatherIcon: wMeta.icon,
+      weatherLabel: wMeta.label,
+      label: `${icon} ${period} · ${wMeta.icon} ${wMeta.label}`,
+      short: `${wMeta.icon} ${period}`,
+      speedMul: w === 'rain' ? 0.82 : w === 'fog' ? 0.9 : 1,
+      timeOfDay: t
+    };
+  }
+
+  tickAtmosphere(dt) {
+    // Fuld dag ~ 4 min session-tid
+    this.timeOfDay = (this.timeOfDay + dt / 240) % 1;
+    this.weatherTimer -= dt;
+    if (this.weatherTimer <= 0) {
+      const roll = Math.random();
+      const prev = this.weather;
+      if (roll < 0.55) this.weather = 'clear';
+      else if (roll < 0.82) this.weather = 'rain';
+      else this.weather = 'fog';
+      this.weatherTimer = 22 + Math.random() * 40;
+      if (this.weather !== prev && this.running) {
+        const a = this.getAtmosphereUi();
+        if (this.weather !== 'clear') {
+          this.showToast(`${a.weatherIcon} ${a.weatherLabel} – biler kører lidt langsommere`, 2.4);
+        } else {
+          this.showToast(`${a.periodIcon} Vejret letter`, 1.8);
+        }
+      }
+    }
+    if (this._cityHintUntil > 0) {
+      this._cityHintUntil -= dt;
+      if (this.getPlayerFleet().length > 0) this._cityHintUntil = 0;
+    }
+  }
+
+  shouldShowCityHint() {
+    return this.running && this._cityHintUntil > 0 && this.getPlayerFleet().length === 0;
   }
 
   /**
@@ -746,6 +822,7 @@ export class Game {
     this.tryAchievement('first_car');
     if (this.getPlayerFleet().length >= 5) this.tryAchievement('fleet_5');
     if (this.money >= 1500) this.tryAchievement('money_500');
+    this._cityHintUntil = 0;
     this.assignFleetJobs();
     this._sessionDirty = true;
     return { ok: true, vehicle: v, price };
@@ -2224,10 +2301,11 @@ export class Game {
       if (this.toastTimer <= 0) this.toast = null;
     }
 
-    // P1-3 rush hour + P1-4 growth + P2-1 lights
+    // P1-3 rush + P1-4 growth + P2-1 lights + P3-1 vejr/tid
     this.tickRushHour(dt);
     this.tickDistrictGrowth(dt);
     this.tickTrafficLights();
+    this.tickAtmosphere(dt);
 
     // Jobs (faster spawn during rush)
     this.jobTimer += dt;
@@ -2289,6 +2367,13 @@ export class Game {
         continue;
       }
 
+      // Vejr: blød hastigheds-multiplikator
+      const atmo = this.getAtmosphereUi();
+      if (atmo.speedMul < 1 && v.baseSpeed) {
+        v._weatherMul = atmo.speedMul;
+      } else {
+        v._weatherMul = 1;
+      }
       v.update(dt, this.roads, this.vehicles);
 
       if (v.arrived && v.job) {
@@ -2644,6 +2729,7 @@ export class Game {
 
     // Screen-space UI (toast + minimap)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.drawAtmosphereOverlay(ctx, w, h);
     this.drawMinimap(ctx, w, h);
 
     if (this.toast) {
@@ -2769,9 +2855,61 @@ export class Game {
     });
   }
 
+  /** P3-1: soft day/night + weather overlay (screen space) */
+  drawAtmosphereOverlay(ctx, w, h) {
+    const t = this.timeOfDay ?? 0.4;
+    // Night darkness: peak at midnight (0 and 1)
+    const night = Math.max(0, Math.cos((t - 0.5) * Math.PI * 2));
+    const dark = Math.pow(Math.max(0, night - 0.15), 1.2) * 0.42;
+    if (dark > 0.02) {
+      ctx.fillStyle = `rgba(15, 23, 42, ${dark.toFixed(3)})`;
+      ctx.fillRect(0, 0, w, h);
+      // Soft warm windows at night
+      if (dark > 0.18) {
+        ctx.fillStyle = `rgba(251, 191, 36, ${(dark * 0.06).toFixed(3)})`;
+        ctx.fillRect(0, 0, w, h * 0.35);
+      }
+    }
+    // Dawn / dusk tint
+    if (t > 0.2 && t < 0.35) {
+      const a = (1 - Math.abs(t - 0.28) / 0.1) * 0.12;
+      ctx.fillStyle = `rgba(251, 146, 60, ${Math.max(0, a).toFixed(3)})`;
+      ctx.fillRect(0, 0, w, h);
+    } else if (t > 0.62 && t < 0.78) {
+      const a = (1 - Math.abs(t - 0.7) / 0.1) * 0.14;
+      ctx.fillStyle = `rgba(244, 114, 182, ${Math.max(0, a).toFixed(3)})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+    if (this.weather === 'rain') {
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.06)';
+      ctx.fillRect(0, 0, w, h);
+      const dpr = this.dpr || 1;
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.35)';
+      ctx.lineWidth = 1.2 * dpr;
+      const n = 28;
+      const seed = ((this.sessionTime || 0) * 40) | 0;
+      for (let i = 0; i < n; i++) {
+        const x = ((i * 97 + seed * 3) % 1000) / 1000 * w;
+        const y = ((i * 53 + seed * 7) % 1000) / 1000 * h;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 3 * dpr, y + 12 * dpr);
+        ctx.stroke();
+      }
+    } else if (this.weather === 'fog') {
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.18)';
+      ctx.fillRect(0, 0, w, h);
+      const g = ctx.createRadialGradient(w * 0.5, h * 0.55, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.55);
+      g.addColorStop(0, 'rgba(241, 245, 249, 0.05)');
+      g.addColorStop(1, 'rgba(148, 163, 184, 0.22)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+    }
+  }
+
   /**
-   * Minimap over hele spilbrættet (worldW/H) – bottom-center.
-   * Panel-aspekt = verdens aspekt (ingen letterbox-skævhed), viewport matches setTransform.
+   * Minimap over hele spilbrættet (worldW/H) – bottom-left
+   * (pan-ned er midt-bund; zoom er højre-bund 2×2).
    */
   drawMinimap(ctx, w, h) {
     const dpr = this.dpr || 1;
@@ -2780,15 +2918,15 @@ export class Game {
     const worldH = Math.max(1, this.worldH || h);
     const worldAspect = worldW / worldH;
 
-    // Mobil: ~32% bredde; højde følger brættet så grøn flade = hele kortet
-    const mapCssW = Math.min(210, Math.max(140, cssW * 0.34));
-    const mapCssH = Math.min(mapCssW / worldAspect, cssW * 0.42);
+    // Kompakt: ~28% bredde; bottom-left, fri for pan-ned midt og zoom højre
+    const mapCssW = Math.min(168, Math.max(118, cssW * 0.28));
+    const mapCssH = Math.min(mapCssW / worldAspect, cssW * 0.36);
     const mapW = mapCssW * dpr;
     const mapH = mapCssH * dpr;
-    const mx = (w - mapW) / 2;
-    // Lidt ekstra luft over home-indikator / safe-bottom
-    const safeBotCss = 12;
-    const my = h - mapH - Math.max(28, 20 + safeBotCss) * dpr;
+    const safeLeft = 10 * dpr;
+    const safeBotCss = 14;
+    const mx = safeLeft;
+    const my = h - mapH - Math.max(26, 18 + safeBotCss) * dpr;
 
     // Ens scale i x/y – bræt fylder panelet (evt. lille padding)
     const pad = 3 * dpr;

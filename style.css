@@ -547,18 +547,17 @@ body {
   transform: translateX(-50%) rotate(90deg);
 }
 .pan-edge-up:active { transform: translateX(-50%) rotate(90deg) scale(0.94); }
-/* Venstre for minimap (bottom-center) – dækker ikke kort-panelet */
+/* Midt-bund – fri for minimap (venstre) og zoom (højre) */
 .pan-edge-down {
   bottom: max(1.1rem, calc(var(--safe-bottom) + 0.85rem));
-  left: max(0.5rem, var(--safe-left));
+  left: 50%;
   right: auto;
-  transform: rotate(90deg);
+  transform: translateX(-50%) rotate(90deg);
 }
-.pan-edge-down:active { transform: rotate(90deg) scale(0.94); }
+.pan-edge-down:active { transform: translateX(-50%) rotate(90deg) scale(0.94); }
 
 @media (min-width: 640px) {
   .pan-edge-down {
-    left: max(1rem, var(--safe-left));
     bottom: max(1.25rem, calc(var(--safe-bottom) + 1rem));
   }
 }
@@ -575,7 +574,12 @@ body {
   -webkit-user-select: none;
   user-select: none;
   right: max(0.5rem, var(--safe-right)) !important;
-  bottom: max(1.5rem, calc(var(--safe-bottom) + 1.25rem)) !important;
+  bottom: max(1.35rem, calc(var(--safe-bottom) + 1.1rem)) !important;
+  /* 2×2 i stedet for høj stak */
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  width: auto;
 }
 
 #bot-panel {
@@ -605,6 +609,32 @@ body {
   -webkit-backdrop-filter: blur(10px);
   border-radius: 1rem !important;
   box-shadow: 0 4px 16px rgba(28, 25, 23, 0.1) !important;
+}
+
+.end-card {
+  animation: end-pop 0.45s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+@keyframes end-pop {
+  from { opacity: 0; transform: scale(0.88) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.end-burst {
+  pointer-events: none;
+  position: absolute;
+  inset: -20% -10% auto;
+  height: 55%;
+  background:
+    radial-gradient(circle at 20% 80%, rgba(251, 191, 36, 0.35), transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(52, 211, 153, 0.28), transparent 40%),
+    radial-gradient(circle at 50% 0%, rgba(244, 114, 182, 0.2), transparent 50%);
+}
+#city-hint {
+  z-index: 25;
+  animation: city-hint-bob 2.2s ease-in-out infinite;
+}
+@keyframes city-hint-bob {
+  0%, 100% { transform: translate(-50%, 0); opacity: 0.95; }
+  50% { transform: translate(-50%, 4px); opacity: 1; }
 }
 
 #help .bg-white {

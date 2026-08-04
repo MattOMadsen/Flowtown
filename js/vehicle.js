@@ -392,7 +392,8 @@ export class Vehicle {
     }
     // 2-spor: mindre opbremsning ved tæt trafik
     const laneEase = this.currentRoad?.lanes >= 2 ? 0.55 : 1;
-    this.speed = this.baseSpeed * Math.max(0.14, 1 - nearby * 0.13 * laneEase);
+    const weatherMul = this._weatherMul != null ? this._weatherMul : 1;
+    this.speed = this.baseSpeed * weatherMul * Math.max(0.14, 1 - nearby * 0.13 * laneEase);
     // Envejs: korrektér ulovlig retning
     if (this.currentRoad.oneWay === 1 && this.reverse) this.reverse = false;
     if (this.currentRoad.oneWay === -1 && !this.reverse) this.reverse = true;
