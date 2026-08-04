@@ -533,6 +533,8 @@ function refreshDistrictSheet() {
   }
 }
 
+window.addEventListener('flowtown:district-sheet', () => refreshDistrictSheet());
+
 bindTap('ds-close', () => {
   game.closeDistrictSheet?.();
   refreshDistrictSheet();

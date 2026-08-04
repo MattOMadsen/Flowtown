@@ -109,9 +109,11 @@ export class InputHandler {
   armLongPressPan() {
     this.clearLongPress();
     this.longPressPan = false;
+    // By-tap: ingen long-press-pan – ellers stjæles shop ved ~340ms hold
+    if (this.pendingDistrict) return;
     this.longPressTimer = setTimeout(() => {
-      if (this.movedPx < 12 && !this.drawing) {
-        // Long-press → pan (works without Flyt tool)
+      if (this.movedPx < 12 && !this.drawing && !this.pendingDistrict) {
+        // Long-press på tomt land → pan (uden Flyt-værktøj)
         this.longPressPan = true;
         this.pendingDistrict = null;
         this.panning = true;
@@ -120,7 +122,7 @@ export class InputHandler {
         this.game.currentStroke = null;
         this.game.showToast?.('Flyt kort…', 0.9);
       }
-    }, 340);
+    }, 420);
   }
 
   getPos(e) {
@@ -228,10 +230,20 @@ export class InputHandler {
   }
 
   onMouseUp() {
+    this.clearLongPress();
     if (this.panning) {
       this.panning = false;
       this.panLast = null;
-      this.clearLongPress();
+      this.longPressPan = false;
+      // Hvis long-press nåede at starte pan, men der var by-tap, åbn shop alligevel
+      // (bør ikke ske længere – pendingDistrict arm'er ikke pan)
+      if (this.pendingDistrict && this.movedPx <= 11) {
+        this.game.openDistrictSheet(this.pendingDistrict);
+      }
+      this.pendingDistrict = null;
+      this.downPos = null;
+      this.movedPx = 0;
+      this.drawing = false;
       return;
     }
     this.onUp();
@@ -266,9 +278,10 @@ export class InputHandler {
     }
 
     const mode = this.game.mode;
+    // Shop ved by-tap i de fleste modes (slet/opgrader bruger by-området til værktøj)
     const canShop =
       this.game.running &&
-      mode !== 'erase' && mode !== 'upgrade' && mode !== 'bridge' && mode !== 'pan';
+      mode !== 'erase' && mode !== 'upgrade' && mode !== 'pan';
 
     // Center of city = short tap opens shop; drag = draw road FROM city
     const core = canShop ? this.game.hitDistrictCore?.(pos.x, pos.y) : null;
@@ -294,7 +307,7 @@ export class InputHandler {
 
     // Drag from city center → DRAW road (not pan, not shop)
     if (this.pendingDistrict && this.downPos) {
-      if (this.movedPx > 11) {
+      if (this.movedPx > 14) {
         const d = this.pendingDistrict;
         this.pendingDistrict = null;
         this.panning = false;
@@ -322,7 +335,8 @@ export class InputHandler {
       this.longPressPan = false;
     }
     if (this.pendingDistrict) {
-      if (this.movedPx <= 11) {
+      // Tillad lidt finger-rysten før det tæller som træk (vej)
+      if (this.movedPx <= 14) {
         this.game.openDistrictSheet(this.pendingDistrict);
       }
       this.pendingDistrict = null;

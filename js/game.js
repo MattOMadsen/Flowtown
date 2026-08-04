@@ -346,14 +346,21 @@ export class Game {
     return best;
   }
 
-  /** Only inner hub – short tap opens shop (not road) */
+  /**
+   * Hub-tap for bil-shop. Matcher den synlige sprite (større end gammel 0.52·r
+   * og lidt forskudt opad, som drawPlaceHub).
+   */
   hitDistrictCore(screenX, screenY) {
     const w = this.screenToWorld(screenX, screenY);
     let best = null;
     let bestD = Infinity;
     for (const d of this.districts) {
-      const dist = Math.hypot(d.x - w.x, d.y - w.y);
-      if (dist <= d.r * 0.52 && dist < bestD) {
+      // Sprite: size ≈ 2.45·r, tegnet med y-offset ~0.34·r opad
+      const cx = d.x;
+      const cy = d.y - d.r * 0.28;
+      const hitR = d.r * 1.05;
+      const dist = Math.hypot(cx - w.x, cy - w.y);
+      if (dist <= hitR && dist < bestD) {
         bestD = dist;
         best = d;
       }
@@ -380,6 +387,10 @@ export class Game {
   openDistrictSheet(district) {
     if (!district || !this.running) return;
     this.selectedDistrictName = district.name;
+    // Hook til UI (main.js) – undgå at vente på setInterval
+    try {
+      window.dispatchEvent(new CustomEvent('flowtown:district-sheet'));
+    } catch (_) { /* ignore */ }
   }
 
   closeDistrictSheet() {
