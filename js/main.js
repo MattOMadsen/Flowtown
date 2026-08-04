@@ -1518,10 +1518,22 @@ document.getElementById('daily-claim')?.addEventListener('click', (e) => {
   refreshDailyUi();
 });
 
-// PWA service worker
+// PWA service worker – tving opdatering så mobil ikke sidder i gammel cache
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => { /* offline first fail ok */ });
+    navigator.serviceWorker
+      .register('./sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        reg.update().catch(() => {});
+        // Genindlæs én gang når ny SW tager over
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+      })
+      .catch(() => { /* offline first fail ok */ });
   });
 }
 
