@@ -101,11 +101,13 @@ function pickName(pool, used, rng) {
 /**
  * Build place definitions with stable names for a seed.
  * @param {number} [seed=42]
+ * @param {object[]|null} [layout] relative slots; default DEFAULT_LAYOUT
  */
-export function buildPlaceDefs(seed = 42) {
+export function buildPlaceDefs(seed = 42, layout = null) {
   const rng = mulberry32(seed | 0);
   const used = new Set();
-  return DEFAULT_LAYOUT.map((slot, i) => {
+  const slots = layout && layout.length ? layout : DEFAULT_LAYOUT;
+  return slots.map((slot, i) => {
     const type = PLACE_TYPES[slot.type] || PLACE_TYPES.town;
     const pool = NAME_POOLS[slot.type] || NAME_POOLS.town;
     const name = pickName(pool, used, rng);

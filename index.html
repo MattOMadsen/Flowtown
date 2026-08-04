@@ -71,7 +71,7 @@
   </div>
 
   <!-- Jobs: øverst midt, foldbar – safe zone mellem Nord/Øst -->
-  <div id="jobs-panel" class="fixed top-[3.6rem] sm:top-16 left-1/2 -translate-x-1/2 z-20 w-[min(70vw,16rem)] sm:w-[min(92vw,18rem)] pointer-events-auto">
+  <div id="jobs-panel" class="fixed top-[7.25rem] sm:top-32 left-1/2 -translate-x-1/2 z-20 w-[min(70vw,16rem)] sm:w-[min(92vw,18rem)] pointer-events-auto">
     <div class="bg-white/92 backdrop-blur rounded-xl shadow border border-stone-200 p-2 sm:p-2.5">
       <button type="button" id="btn-jobs-toggle" class="w-full flex items-center justify-between gap-2 text-left touch-manipulation">
         <span class="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide">
@@ -141,31 +141,48 @@
     </div>
   </div>
 
-  <!-- Help overlay -->
-  <div id="help" class="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4 sm:p-6 pointer-events-auto">
-    <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-xl text-center max-h-[90vh] overflow-y-auto">
-      <h2 class="text-xl font-bold text-stone-800 mb-2">Velkommen til Flowtown</h2>
-      <p class="text-stone-600 text-sm mb-3 leading-relaxed text-left space-y-1.5">
-        <span class="block">• Stort kort: <b>byer, landbrug, fabrikker, havn</b> – brug <b>Fit</b> / pan / zoom</span>
-        <span class="block">• <b>Tegn</b> veje mellem steder (koster penge)</span>
-        <span class="block">• <b>2-spor</b>: tryk en vej for at opgradere (mindre kø)</span>
-        <span class="block">• <b>Tryk et sted</b>: køb biltyper og <b>opgrader last</b></span>
-        <span class="block">• Efter flere opgraderinger låses <b>hurtig bil</b> og <b>tung lastbil</b> op</span>
-        <span class="block">• Ledige biler tager selv opgaver (👤 · 📦)</span>
-        <span class="block">• Få <b>$</b> til veje/biler og <b>XP</b> til level (gemmes)</span>
-        <span class="block">• Første forbindelse mellem byer giver ekstra XP</span>
-        <span class="block">• <b>Bots</b>: slå modstandere til for konkurrence</span>
-        <span class="block">• <b>Slet</b> egne veje (delvis refund)</span>
-        <span class="block">• <b>Zoom</b>: hjul / knib / + − · <b>Fit</b> = hele byen · minimap nederst midt</span>
-        <span class="block">• Fold <b>Aktive opgaver</b> for mere plads</span>
+  <!-- Mål (bane) – under XP, foldbar safe zone -->
+  <div id="goals-panel" class="fixed top-[4.25rem] sm:top-[4.5rem] left-1/2 -translate-x-1/2 z-20 w-[min(92vw,18rem)] pointer-events-none hidden">
+    <div class="bg-white/90 backdrop-blur rounded-xl shadow border border-stone-200 px-2.5 py-1.5 pointer-events-auto">
+      <div class="flex items-center justify-between gap-2">
+        <span id="goals-title" class="text-[10px] sm:text-xs font-semibold text-stone-600 truncate">Mål</span>
+        <span id="goals-stars" class="text-amber-500 text-xs font-bold tabular-nums">☆☆☆</span>
+      </div>
+      <ul id="goals-list" class="mt-1 space-y-0.5 text-[10px] sm:text-[11px] text-stone-600"></ul>
+    </div>
+  </div>
+
+  <!-- Map select / help -->
+  <div id="help" class="fixed inset-0 z-30 bg-black/45 flex items-center justify-center p-3 sm:p-6 pointer-events-auto">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-xl max-h-[92vh] overflow-y-auto">
+      <h2 class="text-xl font-bold text-stone-800 mb-1 text-center">Flowtown</h2>
+      <p class="text-stone-500 text-xs sm:text-sm mb-3 text-center">Vælg bane · byg netværk · tjen stjerner</p>
+      <div id="scenario-list" class="space-y-2 mb-3"></div>
+      <label class="flex items-center gap-2 text-sm text-stone-600 mb-3 px-1">
+        <input type="checkbox" id="start-with-bots" class="rounded border-stone-300" />
+        Start med bots
+      </label>
+      <p class="text-[11px] text-stone-400 leading-relaxed mb-2">
+        Tegn veje · 2-spor · tryk steder for flåde · Fit/zoom · stjerner gemmes
       </p>
-      <div class="flex flex-col sm:flex-row gap-2">
-        <button id="btn-start" class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl active:scale-95 transition">
-          Start solo
-        </button>
-        <button id="btn-start-bots" class="flex-1 py-3 bg-rose-500 hover:bg-rose-600 text-white font-medium rounded-xl active:scale-95 transition">
-          Start med bots
-        </button>
+      <button type="button" id="btn-how" class="w-full text-xs text-stone-500 underline mb-1">Kort tip</button>
+      <div id="how-box" class="hidden text-left text-xs text-stone-600 space-y-1 mb-2 bg-stone-50 rounded-xl p-3">
+        <p>• Steder: by, landbrug, fabrik, havn – gods følger kæder</p>
+        <p>• Køb biler i by-sheet · opgrader last · unlock hurtig/tung</p>
+        <p>• 2-spor mindsker kø på travle stræk</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- End / stjerner panel -->
+  <div id="end-panel" class="fixed inset-0 z-40 bg-black/45 hidden items-center justify-center p-4 pointer-events-auto">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl text-center">
+      <h3 class="text-lg font-bold text-stone-800 mb-1">Bane færdig</h3>
+      <p id="end-stars" class="text-2xl text-amber-500 font-bold mb-2">★★★</p>
+      <p id="end-text" class="text-sm text-stone-600 mb-4">Godt arbejde!</p>
+      <div class="flex flex-col gap-2">
+        <button type="button" id="end-map" class="py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-xl">Vælg bane</button>
+        <button type="button" id="end-continue" class="py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-xl">Fortsæt her</button>
       </div>
     </div>
   </div>

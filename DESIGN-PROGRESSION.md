@@ -324,6 +324,7 @@ Hver **batch** = 1–3 konkrete leverancer. Rækkefølge kan finjusteres, men af
 | 2026-08-03 | Køb biler i stedet for auto-spawn; tryk på by → køb 1 bil | **F1+F2 done** | F1–F2 |
 | 2026-08-03 | Opgrader biler (læs/fart); unlock bedre biltyper efter X opgraderinger; variation | U1–U3 done | U1–U3 |
 | 2026-08-04 | Større map, længere mellem byer; fabrik/landbrug/havn; realistiske navne | **M1 done** (batch) | **M1** |
+| 2026-08-04 | C1 baner + meget bedre kort/verden-design | **C1 + VIS1 done** | C1 |
 | — | *(næste forslag fra dig)* | — | — |
 
 ---

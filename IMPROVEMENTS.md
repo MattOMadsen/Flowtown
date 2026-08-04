@@ -23,6 +23,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-U3** Visuel klasse-forskel + job-match i assign
 - [x] **PROG-M1** Større map, stedtyper (by/landbrug/fabrik/havn), realistiske navne, typed jobs
 - [x] **PROG-B3** 2-spor vej-opgradering (mode + visual + capacity)
+- [x] **PROG-C1** Baner + 3 stjerner + map-select
+- [x] **PROG-VIS1** Bedre verdenskort (terrain, vand, markers, hubs)
 
 ---
 
@@ -46,7 +48,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-B1 | ~~XP + level + localStorage meta~~ | Done 2026-08-03 |
 | PROG-B2 | Shop UI (flåde/infra unlock’et af level) | bottom sheet |
 | PROG-B3 | ~~2-spor vej-opgradering~~ | Done 2026-08-04 |
-| PROG-C1 | Baner/scenarios + 3-stjerne mål | scenarios.js |
+| PROG-C1 | ~~Baner/scenarios + 3-stjerne~~ | Done 2026-08-04 |
+| PROG-VIS1 | ~~Bedre verdenskort~~ | Done 2026-08-04 |
 | PROG-C2 | Map-select + end-of-run | campaign |
 | PROG-C3 | Større world bounds + flere byer på senere baner | Delvist → M1 |
 | PROG-M1 | ~~Større map + TTD-steder + navne~~ | Done 2026-08-04 |

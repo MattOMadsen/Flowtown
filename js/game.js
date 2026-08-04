@@ -22,8 +22,15 @@ import {
   VEHICLE_CLASSES,
   cargoCapacity
 } from './fleet.js';
-import { saveMeta } from './meta.js';
+import { saveMeta, setScenarioStars, getScenarioStars } from './meta.js';
 import { buildPlaceDefs, placeTypeMeta } from './places.js';
+import { drawWorldTerrain, drawPlaceHub } from './worlddraw.js';
+import {
+  SCENARIOS,
+  getScenario,
+  evaluateGoals,
+  goalLabel
+} from './scenarios.js';
 
 const START_MONEY = 500;
 const MAX_JOBS = 5;
@@ -87,6 +94,13 @@ export class Game {
     this.worldW = 2400;
     this.worldH = 1800;
     this.mapSeed = 42;
+    this.worldScale = 1.95;
+    this.scenario = getScenario('intro');
+    this.scenarioId = 'intro';
+    this.jobsCompleted = 0;
+    this.goalEval = { stars: 0, details: [] };
+    this.runEnded = false;
+    this._layout = null;
 
     // Bots
     this.botsEnabled = false;
@@ -115,17 +129,16 @@ export class Game {
   }
 
   initDistricts() {
-    this.districtDefs = buildPlaceDefs(this.mapSeed);
+    this.districtDefs = buildPlaceDefs(this.mapSeed, this._layout);
     this.updateDistrictPositions();
   }
 
   updateDistrictPositions() {
     const cw = this.canvas.width || 1200;
     const ch = this.canvas.height || 800;
-    // World larger than screen → længere mellem steder (TTD-følelse)
-    const scale = 1.95;
-    this.worldW = Math.max(cw * scale, 2200 * (this.dpr || 1));
-    this.worldH = Math.max(ch * scale, 1650 * (this.dpr || 1));
+    const scale = this.worldScale || 1.95;
+    this.worldW = Math.max(cw * scale, 2000 * (this.dpr || 1));
+    this.worldH = Math.max(ch * scale, 1500 * (this.dpr || 1));
     const w = this.worldW;
     const h = this.worldH;
     const minSide = Math.min(w, h);
@@ -155,21 +168,130 @@ export class Game {
     }
   }
 
-  start() {
+  /**
+   * Load a campaign scenario (resets session state).
+   * @param {string} scenarioId
+   * @param {{ bots?: boolean }} [opts]
+   */
+  loadScenario(scenarioId, opts = {}) {
+    const sc = getScenario(scenarioId);
+    this.scenario = sc;
+    this.scenarioId = sc.id;
+    this.mapSeed = sc.seed;
+    this.worldScale = sc.worldScale || 1.95;
+    this._layout = sc.layout || null;
+
+    this.roads = [];
+    this.vehicles = [];
+    this.jobs = [];
+    this.particles = [];
+    this.floatTexts = [];
+    this.money = sc.startMoney != null ? sc.startMoney : START_MONEY;
+    this.playerScore = 0;
+    this.arrivedCount = 0;
+    this.playerDelivered = 0;
+    this.totalSpawned = 0;
+    this.jobsCompleted = 0;
+    this.runEnded = false;
+    this.selectedDistrictName = null;
+    this.currentStroke = null;
+    this.pendingRoadCost = 0;
+    this.jobTimer = 0;
+    this.assignTimer = 0;
+
+    this.initDistricts();
+    this.botsEnabled = !!opts.bots;
+    for (const b of this.bots) b.enabled = this.botsEnabled;
+    if (!this.botsEnabled) {
+      this.vehicles = this.vehicles.filter(v => v.owner === 'player');
+    }
+    return sc;
+  }
+
+  start(scenarioId = null) {
+    if (scenarioId) this.loadScenario(scenarioId, { bots: this.botsEnabled });
     this.running = true;
     this.paused = false;
     this.lastTime = performance.now();
     this.fitCamera(48);
     this.addJob();
     this.addJob();
-    this.addJob();
+    if ((this.districts.length || 0) >= 6) this.addJob();
     if (this.getPlayerFleet().length === 0) {
-      this.showToast('Stort kort – tryk et sted for at købe bil · Fit viser det hele', 3.8);
+      const name = this.scenario?.name || 'kortet';
+      this.showToast(`${name}: tryk et sted · køb bil · Fit viser det hele`, 3.6);
     }
+    this.refreshGoals();
     if (!this._loopStarted) {
       this._loopStarted = true;
       requestAnimationFrame((t) => this.loop(t));
     }
+  }
+
+  allPlacesHaveRoad() {
+    if (!this.districts.length) return false;
+    for (const d of this.districts) {
+      const near = this.findNearestRoadPoint(d.x, d.y, d.r + 95);
+      if (!near) return false;
+    }
+    return true;
+  }
+
+  refreshGoals() {
+    this.goalEval = evaluateGoals(this.scenario, {
+      delivered: this.playerDelivered,
+      money: this.money,
+      jobsCompleted: this.jobsCompleted,
+      allConnected: this.allPlacesHaveRoad()
+    });
+    return this.goalEval;
+  }
+
+  getGoalsUi() {
+    this.refreshGoals();
+    const evaled = this.goalEval;
+    return {
+      scenarioName: this.scenario?.name || '',
+      freeplay: !!this.scenario?.freeplay || !(this.scenario?.goals?.length),
+      stars: evaled.stars || 0,
+      bestStars: getScenarioStars(this.meta, this.scenarioId),
+      details: (evaled.details || []).map(d => ({
+        label: goalLabel(d.goal),
+        done: d.done,
+        progress: d.progress,
+        stars: d.goal.stars || 1
+      }))
+    };
+  }
+
+  /** Persist stars + optional end-of-run */
+  tryCompleteScenario(force = false) {
+    if (this.scenario?.freeplay || !this.scenario?.goals?.length) return null;
+    this.refreshGoals();
+    const stars = this.goalEval.stars || 0;
+    if (stars < 1 && !force) return null;
+    const improved = setScenarioStars(this.meta, this.scenarioId, stars);
+    // XP only when star-record improves
+    if (improved) {
+      this.grantXp(12 + stars * 18, { silent: false });
+      this.showToast(`${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} gemt!`, 2.8);
+    }
+    if (stars >= 3) this.runEnded = true;
+    if (force) this.runEnded = true;
+    return { stars, improved, freeplay: false };
+  }
+
+  listScenariosForUi() {
+    const level = this.meta?.level || 1;
+    return SCENARIOS.map(s => ({
+      id: s.id,
+      name: s.name,
+      blurb: s.blurb,
+      unlockLevel: s.unlockLevel || 1,
+      locked: level < (s.unlockLevel || 1),
+      stars: getScenarioStars(this.meta, s.id),
+      freeplay: !!s.freeplay
+    }));
   }
 
   getPlayerFleet() {
@@ -584,6 +706,7 @@ export class Game {
     this.roads.push(new Road(points, { owner, ownerColor, lanes: 1 }));
     if (owner === 'player') {
       this.checkFirstLinks();
+      this.refreshGoals();
     }
     return true;
   }
@@ -1097,6 +1220,7 @@ export class Game {
       if (jobComplete(job)) {
         job.active = false;
         jobJustCompleted = true;
+        if (vehicle.owner === 'player') this.jobsCompleted = (this.jobsCompleted || 0) + 1;
         this.showToast(`Opgave klar: ${job.from.name} → ${job.to.name}!`);
         this.addArrivalParticles(vehicle.x, vehicle.y, job.to.color);
       }
@@ -1300,113 +1424,15 @@ export class Game {
   }
 
   drawBackground(ctx, w, h) {
-    // Soft meadow over full world bounds
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, '#e8f0e4');
-    sky.addColorStop(0.45, '#efe8da');
-    sky.addColorStop(1, '#e4dccf');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, w, h);
-
-    // Soft grass patches
-    const patches = [
-      [0.2, 0.3, 0.18], [0.7, 0.25, 0.15], [0.5, 0.7, 0.2],
-      [0.15, 0.65, 0.14], [0.85, 0.55, 0.16], [0.4, 0.15, 0.12],
-      [0.3, 0.85, 0.14], [0.75, 0.75, 0.13]
-    ];
-    for (const [rx, ry, rr] of patches) {
-      const x = rx * w, y = ry * h, r = rr * Math.min(w, h);
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, 'rgba(134, 180, 120, 0.14)');
-      g.addColorStop(1, 'rgba(134, 180, 120, 0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Subtle grid over world
-    ctx.strokeStyle = 'rgba(60, 50, 40, 0.035)';
-    ctx.lineWidth = 1;
-    const step = 56 * this.dpr;
-    for (let x = 0; x < w; x += step) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-    }
-    for (let y = 0; y < h; y += step) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    }
+    drawWorldTerrain(ctx, w, h, this.dpr, this.districts, this.mapSeed);
   }
 
   drawDistrict(ctx, d) {
-    const type = d.type || 'town';
-    // Outer glow
-    const glow = ctx.createRadialGradient(d.x, d.y, d.r * 0.2, d.x, d.y, d.r * 2.1);
-    glow.addColorStop(0, d.color + '55');
-    glow.addColorStop(0.5, d.color + '22');
-    glow.addColorStop(1, d.color + '00');
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, d.r * 2.1, 0, Math.PI * 2);
-    ctx.fillStyle = glow;
-    ctx.fill();
-
-    // Soft ground disc
-    ctx.beginPath();
-    ctx.arc(d.x, d.y + 3 * this.dpr, d.r * 1.05, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(28, 25, 23, 0.12)';
-    ctx.fill();
-
-    // Main disc
-    const disc = ctx.createRadialGradient(
-      d.x - d.r * 0.25, d.y - d.r * 0.3, d.r * 0.1,
-      d.x, d.y, d.r
-    );
-    disc.addColorStop(0, this.lightenHex(d.color, 0.25));
-    disc.addColorStop(0.65, d.color);
-    disc.addColorStop(1, this.darkenHex(d.color, 0.82));
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-    ctx.fillStyle = disc;
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 2.5 * this.dpr;
-    ctx.stroke();
-
-    // Simple type silhouette (cozy, not detailed sprites)
-    this.drawPlaceSilhouette(ctx, d, type);
-
-    // Label under place (ikke midt i hub – bedre mobil-læsbarhed)
-    const icon = d.icon || '🏠';
-    const typeLabel = d.typeLabel || '';
-    ctx.font = `bold ${Math.max(10, 11.5 * this.dpr)}px system-ui`;
-    const label = d.name;
-    const tw = ctx.measureText(label).width;
-    const padX = 7 * this.dpr;
-    const bh = 28 * this.dpr;
-    const bw = Math.max(tw + padX * 2, 52 * this.dpr);
-    const bx = d.x - bw / 2;
-    const by = d.y + d.r * 0.75;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.beginPath();
-    const rr = 7 * this.dpr;
-    ctx.moveTo(bx + rr, by);
-    ctx.arcTo(bx + bw, by, bx + bw, by + bh, rr);
-    ctx.arcTo(bx + bw, by + bh, bx, by + bh, rr);
-    ctx.arcTo(bx, by + bh, bx, by, rr);
-    ctx.arcTo(bx, by, bx + bw, by, rr);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(28,25,23,0.1)';
-    ctx.lineWidth = 1 * this.dpr;
-    ctx.stroke();
-
-    ctx.fillStyle = '#292524';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, d.x, by + 10 * this.dpr);
-    ctx.font = `${Math.max(8, 9 * this.dpr)}px system-ui`;
-    ctx.fillStyle = '#57534e';
-    ctx.fillText(`${icon} ${typeLabel}`, d.x, by + 20 * this.dpr);
+    drawPlaceHub(ctx, d, this.dpr, {
+      lightenHex: (c, a) => this.lightenHex(c, a),
+      darkenHex: (c, f) => this.darkenHex(c, f),
+      drawSilhouette: (c, dist, type) => this.drawPlaceSilhouette(c, dist, type)
+    });
   }
 
   drawPlaceSilhouette(ctx, d, type) {
@@ -1499,9 +1525,9 @@ export class Game {
     const h = this.canvas.height;
     const cam = this.camera;
 
-    // Screen-space clear (covers pan gaps)
+    // Screen-space clear (covers pan gaps) – soft outside-world tone
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#d6d3cd';
+    ctx.fillStyle = '#a8a396';
     ctx.fillRect(0, 0, w, h);
 
     // World transform

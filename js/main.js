@@ -61,15 +61,126 @@ btnBots.addEventListener('click', () => {
   updateBotButton();
 });
 
-function startGame(withBots) {
-  document.getElementById('help').style.display = 'none';
-  if (withBots) game.setBotsEnabled(true);
-  updateBotButton();
-  game.start();
+let selectedScenarioId = 'intro';
+let lastStarsShown = -1;
+
+function starString(n) {
+  const s = Math.max(0, Math.min(3, n | 0));
+  return '★'.repeat(s) + '☆'.repeat(3 - s);
 }
 
-document.getElementById('btn-start').addEventListener('click', () => startGame(false));
-document.getElementById('btn-start-bots').addEventListener('click', () => startGame(true));
+function renderScenarioList() {
+  const list = document.getElementById('scenario-list');
+  if (!list || !game.listScenariosForUi) return;
+  const items = game.listScenariosForUi();
+  list.innerHTML = items.map(s => {
+    const locked = s.locked;
+    const sel = s.id === selectedScenarioId;
+    return `
+      <button type="button" data-scenario="${s.id}"
+        class="w-full text-left p-3 rounded-xl border transition touch-manipulation
+          ${locked ? 'opacity-50 border-stone-200 bg-stone-50' : sel ? 'border-emerald-500 ring-2 ring-emerald-400 bg-emerald-50' : 'border-stone-200 bg-white hover:border-stone-300'}"
+        ${locked ? 'disabled' : ''}>
+        <div class="flex justify-between gap-2 items-start">
+          <span class="font-semibold text-stone-800 text-sm">${escapeHtml(s.name)}</span>
+          <span class="text-amber-500 text-xs font-bold shrink-0">${locked ? '🔒 Lv' + s.unlockLevel : starString(s.stars)}</span>
+        </div>
+        <p class="text-[11px] text-stone-500 mt-0.5">${escapeHtml(s.blurb || '')}</p>
+      </button>`;
+  }).join('');
+
+  list.querySelectorAll('[data-scenario]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      selectedScenarioId = btn.getAttribute('data-scenario');
+      renderScenarioList();
+      startGame();
+    });
+  });
+}
+
+function startGame() {
+  const help = document.getElementById('help');
+  if (help) help.style.display = 'none';
+  const withBots = !!document.getElementById('start-with-bots')?.checked;
+  game.loadScenario(selectedScenarioId, { bots: withBots });
+  updateBotButton();
+  game.start();
+  lastStarsShown = -1;
+  const goalsPanel = document.getElementById('goals-panel');
+  if (goalsPanel) goalsPanel.classList.toggle('hidden', !!game.scenario?.freeplay);
+  refreshGoalsUi();
+}
+
+function openMapSelect() {
+  game.running = false;
+  game.closeDistrictSheet?.();
+  const help = document.getElementById('help');
+  if (help) help.style.display = 'flex';
+  const end = document.getElementById('end-panel');
+  if (end) {
+    end.classList.add('hidden');
+    end.classList.remove('flex');
+  }
+  renderScenarioList();
+}
+
+function refreshGoalsUi() {
+  const ui = game.getGoalsUi?.();
+  const panel = document.getElementById('goals-panel');
+  if (!ui || !panel) return;
+  if (ui.freeplay) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+  const title = document.getElementById('goals-title');
+  if (title) title.textContent = ui.scenarioName || 'Mål';
+  const stars = document.getElementById('goals-stars');
+  if (stars) stars.textContent = starString(ui.stars);
+  const list = document.getElementById('goals-list');
+  if (list) {
+    list.innerHTML = (ui.details || []).map(d => `
+      <li class="flex justify-between gap-2 ${d.done ? 'text-emerald-700 font-medium' : ''}">
+        <span class="truncate">${d.done ? '✓' : '○'} ${escapeHtml(d.label)}</span>
+        <span class="tabular-nums shrink-0 text-stone-500">${escapeHtml(d.progress)}</span>
+      </li>`).join('');
+  }
+
+  // Auto-save stars when they increase; show end panel at 3★
+  if (ui.stars > lastStarsShown && ui.stars >= 1) {
+    lastStarsShown = ui.stars;
+    const res = game.tryCompleteScenario(false);
+    if (ui.stars >= 3) showEndPanel(ui.stars);
+  }
+}
+
+function showEndPanel(stars) {
+  const end = document.getElementById('end-panel');
+  if (!end) return;
+  end.classList.remove('hidden');
+  end.classList.add('flex');
+  const es = document.getElementById('end-stars');
+  if (es) es.textContent = starString(stars);
+  const et = document.getElementById('end-text');
+  if (et) et.textContent = stars >= 3 ? 'Alle stjerner! Vælg næste bane eller fortæt.' : 'Stjerner gemt. Du kan fortsætte.';
+}
+
+document.getElementById('btn-how')?.addEventListener('click', () => {
+  document.getElementById('how-box')?.classList.toggle('hidden');
+});
+document.getElementById('end-map')?.addEventListener('click', () => openMapSelect());
+document.getElementById('end-continue')?.addEventListener('click', () => {
+  const end = document.getElementById('end-panel');
+  if (end) {
+    end.classList.add('hidden');
+    end.classList.remove('flex');
+  }
+  game.running = true;
+  game.paused = false;
+});
+
+renderScenarioList();
 
 // Zoom UI – touch + click, stopPropagation så canvas ikke spiser events
 const zoomLabel = document.getElementById('zoom-label');
@@ -369,6 +480,7 @@ setInterval(() => {
   renderJobs();
   renderBots();
   refreshDistrictSheet();
+  refreshGoalsUi();
   refreshZoomLabel();
 }, 280);
 

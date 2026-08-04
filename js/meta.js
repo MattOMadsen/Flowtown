@@ -24,7 +24,9 @@ export function defaultMeta() {
     /** Lifetime vehicle upgrades (U1/U2 progression) */
     totalUpgrades: 0,
     /** Unlocked vehicle class ids */
-    unlockedClasses: ['car_std', 'truck_std']
+    unlockedClasses: ['car_std', 'truck_std'],
+    /** Best stars per scenario id: { intro: 2, ... } */
+    scenarioStars: {}
   };
 }
 
@@ -45,7 +47,10 @@ export function loadMeta() {
       totalUpgrades: Math.max(0, parseInt(data.totalUpgrades, 10) || 0),
       unlockedClasses: Array.isArray(data.unlockedClasses) && data.unlockedClasses.length
         ? data.unlockedClasses
-        : [...base.unlockedClasses]
+        : [...base.unlockedClasses],
+      scenarioStars: data.scenarioStars && typeof data.scenarioStars === 'object'
+        ? data.scenarioStars
+        : {}
     };
   } catch {
     return defaultMeta();
@@ -62,11 +67,26 @@ export function saveMeta(meta) {
       unlocks: meta.unlocks || [],
       firstLinks: meta.firstLinks || [],
       totalUpgrades: meta.totalUpgrades || 0,
-      unlockedClasses: meta.unlockedClasses || ['car_std', 'truck_std']
+      unlockedClasses: meta.unlockedClasses || ['car_std', 'truck_std'],
+      scenarioStars: meta.scenarioStars || {}
     }));
   } catch {
     /* private mode / quota */
   }
+}
+
+export function getScenarioStars(meta, scenarioId) {
+  return Math.max(0, Math.min(3, (meta?.scenarioStars || {})[scenarioId] | 0));
+}
+
+/** Update best stars; returns true if improved */
+export function setScenarioStars(meta, scenarioId, stars) {
+  if (!meta.scenarioStars) meta.scenarioStars = {};
+  const prev = meta.scenarioStars[scenarioId] | 0;
+  const next = Math.max(prev, Math.min(3, stars | 0));
+  meta.scenarioStars[scenarioId] = next;
+  saveMeta(meta);
+  return next > prev;
 }
 
 /**
