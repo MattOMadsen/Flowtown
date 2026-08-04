@@ -26,27 +26,33 @@ export function buildWaterBodies(worldW, worldH, districts = [], seed = 42) {
     if (d.type !== 'harbor') continue;
     const towardLeft = d.x < w * 0.5;
     const towardTop = d.y < h * 0.5;
+    // One smooth bay (not two overlapping blobs that look tiled)
+    const bayCx = towardLeft
+      ? Math.max(d.r * 2.2, d.x - d.r * 2.4)
+      : Math.min(w - d.r * 2.2, d.x + d.r * 2.4);
+    const bayCy = d.y + (towardTop ? -d.r * 0.15 : d.r * 0.15);
     bodies.push({
       kind: 'blob',
       role: 'bay',
-      cx: towardLeft ? d.x - d.r * 1.9 : d.x + d.r * 1.9,
-      cy: d.y + d.r * 0.2,
-      rx: d.r * 4.2,
-      ry: d.r * 3.0,
-      rot: (towardLeft ? -0.15 : 0.15) + (rng() - 0.5) * 0.2,
-      lobes: 5 + Math.floor(rng() * 3),
-      seed: (seed + d.x) | 0
+      cx: bayCx,
+      cy: bayCy,
+      rx: d.r * 4.8,
+      ry: d.r * 3.6,
+      rot: (towardLeft ? -0.2 : 0.2) + (rng() - 0.5) * 0.12,
+      lobes: 7 + Math.floor(rng() * 2),
+      seed: (seed + d.x * 3) | 0
     });
+    // Soft open water toward map edge (still one organic body)
     bodies.push({
       kind: 'blob',
       role: 'sea',
-      cx: towardLeft ? Math.min(d.x * 0.55, w * 0.12) : Math.max(d.x + (w - d.x) * 0.45, w * 0.88),
-      cy: d.y + (towardTop ? -d.r * 0.3 : d.r * 0.3),
-      rx: d.r * 5.0,
-      ry: d.r * 3.8,
-      rot: rng() * 0.4 - 0.2,
-      lobes: 6,
-      seed: (seed + 99 + d.y) | 0
+      cx: towardLeft ? Math.max(minSide * 0.06, bayCx - d.r * 1.8) : Math.min(w - minSide * 0.06, bayCx + d.r * 1.8),
+      cy: bayCy + (towardTop ? -d.r * 0.4 : d.r * 0.4),
+      rx: d.r * 5.5,
+      ry: d.r * 4.2,
+      rot: (towardLeft ? 0.1 : -0.1),
+      lobes: 8,
+      seed: (seed + 99 + d.y * 2) | 0
     });
   }
 

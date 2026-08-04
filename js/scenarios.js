@@ -4,32 +4,39 @@
 
 /** Compact intro layout */
 export const LAYOUT_INTRO = [
-  { rx: 0.42, ry: 0.42, rr: 0.042, type: 'capital' },
-  { rx: 0.18, ry: 0.22, rr: 0.034, type: 'town' },
-  { rx: 0.78, ry: 0.28, rr: 0.032, type: 'factory' },
-  { rx: 0.22, ry: 0.72, rr: 0.034, type: 'farm' },
-  { rx: 0.72, ry: 0.72, rr: 0.034, type: 'town' }
+  { rx: 0.45, ry: 0.42, rr: 0.038, type: 'capital' },
+  { rx: 0.16, ry: 0.20, rr: 0.030, type: 'town' },
+  { rx: 0.78, ry: 0.22, rr: 0.030, type: 'factory' },
+  { rx: 0.12, ry: 0.55, rr: 0.028, type: 'farm' },
+  { rx: 0.82, ry: 0.58, rr: 0.028, type: 'town' },
+  { rx: 0.48, ry: 0.78, rr: 0.030, type: 'farm' }
 ];
 
 export const LAYOUT_COAST = [
-  { rx: 0.55, ry: 0.42, rr: 0.036, type: 'capital' },
-  { rx: 0.12, ry: 0.35, rr: 0.036, type: 'harbor' },
-  { rx: 0.28, ry: 0.18, rr: 0.030, type: 'town' },
-  { rx: 0.82, ry: 0.22, rr: 0.032, type: 'factory' },
-  { rx: 0.78, ry: 0.55, rr: 0.030, type: 'town' },
-  { rx: 0.45, ry: 0.78, rr: 0.032, type: 'farm' },
-  { rx: 0.22, ry: 0.72, rr: 0.030, type: 'farm' }
+  { rx: 0.52, ry: 0.40, rr: 0.034, type: 'capital' },
+  { rx: 0.10, ry: 0.32, rr: 0.034, type: 'harbor' },
+  { rx: 0.28, ry: 0.16, rr: 0.028, type: 'town' },
+  { rx: 0.78, ry: 0.18, rr: 0.030, type: 'factory' },
+  { rx: 0.90, ry: 0.42, rr: 0.027, type: 'town' },
+  { rx: 0.72, ry: 0.58, rr: 0.028, type: 'town' },
+  { rx: 0.40, ry: 0.72, rr: 0.030, type: 'farm' },
+  { rx: 0.18, ry: 0.70, rr: 0.028, type: 'farm' },
+  { rx: 0.62, ry: 0.82, rr: 0.028, type: 'factory' }
 ];
 
 export const LAYOUT_VALLEY = [
-  { rx: 0.50, ry: 0.48, rr: 0.034, type: 'capital' },
-  { rx: 0.15, ry: 0.15, rr: 0.028, type: 'town' },
-  { rx: 0.85, ry: 0.15, rr: 0.028, type: 'factory' },
-  { rx: 0.12, ry: 0.50, rr: 0.032, type: 'harbor' },
-  { rx: 0.88, ry: 0.50, rr: 0.030, type: 'factory' },
-  { rx: 0.20, ry: 0.85, rr: 0.030, type: 'farm' },
-  { rx: 0.50, ry: 0.88, rr: 0.030, type: 'farm' },
-  { rx: 0.80, ry: 0.82, rr: 0.030, type: 'town' }
+  { rx: 0.48, ry: 0.46, rr: 0.032, type: 'capital' },
+  { rx: 0.12, ry: 0.12, rr: 0.026, type: 'town' },
+  { rx: 0.40, ry: 0.14, rr: 0.024, type: 'town' },
+  { rx: 0.82, ry: 0.12, rr: 0.026, type: 'factory' },
+  { rx: 0.10, ry: 0.42, rr: 0.030, type: 'harbor' },
+  { rx: 0.30, ry: 0.38, rr: 0.024, type: 'farm' },
+  { rx: 0.70, ry: 0.36, rr: 0.026, type: 'factory' },
+  { rx: 0.90, ry: 0.48, rr: 0.026, type: 'town' },
+  { rx: 0.16, ry: 0.72, rr: 0.026, type: 'farm' },
+  { rx: 0.48, ry: 0.78, rr: 0.026, type: 'town' },
+  { rx: 0.72, ry: 0.80, rr: 0.026, type: 'farm' },
+  { rx: 0.88, ry: 0.78, rr: 0.026, type: 'factory' }
 ];
 
 /**
@@ -43,7 +50,7 @@ export const SCENARIOS = [
     blurb: 'Lille dal – lær at forbinde by og landbrug.',
     seed: 101,
     startMoney: 1100,
-    worldScale: 1.0,
+    worldScale: 1.08,
     unlockLevel: 1,
     layout: LAYOUT_INTRO,
     goals: [
@@ -58,7 +65,7 @@ export const SCENARIOS = [
     blurb: 'Havn, fabrik og marker – gods skal ud.',
     seed: 202,
     startMoney: 1000,
-    worldScale: 1.12,
+    worldScale: 1.22,
     unlockLevel: 2,
     layout: LAYOUT_COAST,
     goals: [
@@ -73,7 +80,7 @@ export const SCENARIOS = [
     blurb: 'Stort kort – fuld netværks-udfordring.',
     seed: 303,
     startMoney: 950,
-    worldScale: 1.28,
+    worldScale: 1.42,
     unlockLevel: 3,
     layout: LAYOUT_VALLEY,
     goals: [
@@ -88,7 +95,7 @@ export const SCENARIOS = [
     blurb: 'Fri leg på det store standardkort. Ingen stjerne-krav.',
     seed: 42,
     startMoney: 1200,
-    worldScale: 1.2,
+    worldScale: 1.38,
     unlockLevel: 1,
     layout: null, // default full layout
     goals: [],

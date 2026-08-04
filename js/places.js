@@ -69,16 +69,21 @@ const NAME_POOLS = {
   ]
 };
 
-/** Default world layout – relative coords (0–1) on a large map */
+/** Default freeplay layout – larger board, more places */
 export const DEFAULT_LAYOUT = [
-  { rx: 0.48, ry: 0.46, rr: 0.038, type: 'capital' },
-  { rx: 0.14, ry: 0.16, rr: 0.032, type: 'town' },
-  { rx: 0.86, ry: 0.18, rr: 0.030, type: 'factory' },
-  { rx: 0.10, ry: 0.52, rr: 0.034, type: 'harbor' },
-  { rx: 0.88, ry: 0.48, rr: 0.030, type: 'town' },
-  { rx: 0.18, ry: 0.86, rr: 0.032, type: 'farm' },
-  { rx: 0.52, ry: 0.88, rr: 0.031, type: 'factory' },
-  { rx: 0.82, ry: 0.82, rr: 0.032, type: 'farm' }
+  { rx: 0.48, ry: 0.46, rr: 0.036, type: 'capital' },
+  { rx: 0.12, ry: 0.14, rr: 0.028, type: 'town' },
+  { rx: 0.38, ry: 0.18, rr: 0.026, type: 'town' },
+  { rx: 0.72, ry: 0.14, rr: 0.028, type: 'factory' },
+  { rx: 0.90, ry: 0.28, rr: 0.027, type: 'town' },
+  { rx: 0.08, ry: 0.42, rr: 0.032, type: 'harbor' },
+  { rx: 0.28, ry: 0.48, rr: 0.026, type: 'farm' },
+  { rx: 0.68, ry: 0.42, rr: 0.028, type: 'factory' },
+  { rx: 0.88, ry: 0.55, rr: 0.026, type: 'town' },
+  { rx: 0.14, ry: 0.72, rr: 0.028, type: 'farm' },
+  { rx: 0.42, ry: 0.78, rr: 0.027, type: 'town' },
+  { rx: 0.62, ry: 0.82, rr: 0.028, type: 'farm' },
+  { rx: 0.86, ry: 0.80, rr: 0.027, type: 'factory' }
 ];
 
 function mulberry32(a) {

@@ -97,7 +97,7 @@ export class Game {
     this.worldW = 1600;
     this.worldH = 1200;
     this.mapSeed = 42;
-    this.worldScale = 1.15;
+    this.worldScale = 1.35;
     this.scenario = getScenario('intro');
     this.scenarioId = 'intro';
     this.jobsCompleted = 0;
@@ -859,7 +859,7 @@ export class Game {
     this.roads.push(new Road(points, {
       owner,
       ownerColor,
-      lanes: 1,
+      lanes: opts.lanes != null ? opts.lanes : 2, // tovejs som standard
       isBridge: !!opts.isBridge,
       paidCost: paid
     }));
@@ -901,8 +901,8 @@ export class Game {
     }
 
     const road = best.road;
-    if (road.lanes >= 2) {
-      this.showToast('Allerede 2-sporet');
+    if (road.lanes >= 3) {
+      this.showToast('Allerede motorvej');
       return false;
     }
 
@@ -914,11 +914,12 @@ export class Game {
     }
 
     this.money -= cost;
-    road.lanes = 2;
-    road.paidCost = (road.paidCost || 0) + cost; // full undo later
-    this.addFloatText(best.point.x, best.point.y - 12, `2-spor −$${cost}`, '#0f766e');
+    // Veje er allerede tovejs (2) – opgrader til motorvej (3)
+    road.lanes = 3;
+    road.paidCost = (road.paidCost || 0) + cost;
+    this.addFloatText(best.point.x, best.point.y - 12, `Motorvej −$${cost}`, '#0f766e');
     this.addArrivalParticles(best.point.x, best.point.y, '#10b981');
-    this.showToast(`Vej opgraderet til 2-spor ($${cost})`);
+    this.showToast(`Opgraderet til motorvej ($${cost})`);
     this.requestDraw();
     return true;
   }

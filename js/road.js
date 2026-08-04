@@ -36,7 +36,7 @@ export class Road {
     this.density = 0;
     this.owner = owner;
     this.ownerColor = ownerColor;
-    this.lanes = lanes >= 2 ? 2 : 1;
+    this.lanes = Math.max(1, Math.min(3, lanes | 0 || 2));
     this.isBridge = !!isBridge;
     /** Full $ paid for this segment (for fair refunds) */
     this.paidCost = Math.max(0, paidCost | 0);
@@ -141,12 +141,14 @@ export class Road {
   draw(ctx, dpr) {
     if (this.points.length < 2) return;
 
-    const dual = this.lanes >= 2;
+    // Always two-way look; lanes 3 = motorway (wider)
+    const dual = true;
+    const motor = this.lanes >= 3;
     const bridge = this.isBridge;
-    let edge = bridge ? '#1e3a5f' : '#1c1917';
-    let asphalt = bridge ? '#64748b' : dual ? '#4b5563' : '#57534e';
-    let asphaltHi = bridge ? '#94a3b8' : dual ? '#9ca3af' : '#78716c';
-    let lane = bridge ? '#e0f2fe' : dual ? '#e5e7eb' : '#fbbf24';
+    let edge = bridge ? '#1e3a5f' : motor ? '#1c1917' : '#292524';
+    let asphalt = bridge ? '#64748b' : motor ? '#3f3f46' : '#52525b';
+    let asphaltHi = bridge ? '#94a3b8' : motor ? '#a1a1aa' : '#71717a';
+    let lane = bridge ? '#e0f2fe' : motor ? '#fafafa' : '#e4e4e7';
     let alpha = this.owner === 'player' ? 1 : 0.9;
 
     const dens = this.effectiveDensity;
@@ -161,15 +163,15 @@ export class Road {
       edge = '#431407';
       lane = '#fed7aa';
     } else if (this.owner !== 'player' && this.ownerColor) {
-      asphalt = this.mixHex(this.ownerColor, dual ? '#4b5563' : '#57534e', 0.35);
+      asphalt = this.mixHex(this.ownerColor, '#52525b', 0.35);
       asphaltHi = this.mixHex(this.ownerColor, '#a8a29e', 0.45);
       edge = this.mixHex(this.ownerColor, '#1c1917', 0.2);
       lane = '#fef3c7';
     }
 
-    const wEdge = (dual ? 28 : bridge ? 22 : 20) * dpr;
-    const wBody = (dual ? 22 : bridge ? 16 : 15) * dpr;
-    const wInner = (dual ? 16 : 11) * dpr;
+    const wEdge = (motor ? 32 : bridge ? 24 : 26) * dpr;
+    const wBody = (motor ? 24 : bridge ? 16 : 20) * dpr;
+    const wInner = (motor ? 17 : 14) * dpr;
 
     ctx.save();
     ctx.lineCap = 'round';
