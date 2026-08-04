@@ -213,50 +213,55 @@ export function drawWaterBodies(ctx, bodies, dpr) {
     const isLake = b.role === 'lake';
     const maxR = Math.max(b.rx, b.ry);
 
-    // Wide grass/sand ring (covers any tile edges under the lake)
+    // Soft sand halo
     ctx.beginPath();
-    pathBlob(ctx, { ...b, rx: b.rx * 1.22, ry: b.ry * 1.22 });
-    ctx.fillStyle = isLake ? '#c9b896' : '#b8a888';
+    pathBlob(ctx, { ...b, rx: b.rx * 1.16, ry: b.ry * 1.16 });
+    ctx.fillStyle = isLake ? 'rgba(230, 218, 185, 0.85)' : 'rgba(220, 205, 170, 0.8)';
     ctx.fill();
 
-    // Beach ring
+    // Beach
     ctx.beginPath();
-    pathBlob(ctx, { ...b, rx: b.rx * 1.1, ry: b.ry * 1.1 });
-    ctx.fillStyle = isLake ? '#e2d4b0' : '#d4c4a0';
+    pathBlob(ctx, { ...b, rx: b.rx * 1.07, ry: b.ry * 1.07 });
+    ctx.fillStyle = isLake ? '#efe4c8' : '#e5d8b8';
     ctx.fill();
 
-    // Solid water body (opaque – no tile grid bleed)
+    // Water – lysere, mere “glass 2026”
     const g = ctx.createRadialGradient(
-      b.cx - b.rx * 0.18,
-      b.cy - b.ry * 0.22,
-      maxR * 0.04,
+      b.cx - b.rx * 0.2,
+      b.cy - b.ry * 0.25,
+      maxR * 0.05,
       b.cx,
       b.cy,
-      maxR * 1.05
+      maxR * 1.02
     );
     if (isLake) {
-      g.addColorStop(0, '#a5e8ff');
-      g.addColorStop(0.28, '#7dd3fc');
-      g.addColorStop(0.55, '#38bdf8');
-      g.addColorStop(0.82, '#0ea5e9');
-      g.addColorStop(1, '#0369a1');
+      g.addColorStop(0, '#c8f0ff');
+      g.addColorStop(0.3, '#8fddff');
+      g.addColorStop(0.6, '#4ec4f5');
+      g.addColorStop(0.88, '#1a9fd4');
+      g.addColorStop(1, '#0b6f9e');
     } else {
-      g.addColorStop(0, '#7dd3fc');
-      g.addColorStop(0.3, '#38bdf8');
-      g.addColorStop(0.6, '#0ea5e9');
-      g.addColorStop(0.85, '#0284c7');
-      g.addColorStop(1, '#0c4a6e');
+      g.addColorStop(0, '#9fe4ff');
+      g.addColorStop(0.35, '#5bc8f5');
+      g.addColorStop(0.65, '#28aee0');
+      g.addColorStop(0.9, '#0f88c0');
+      g.addColorStop(1, '#0a5a88');
     }
     ctx.beginPath();
     pathBlob(ctx, b);
     ctx.fillStyle = g;
     ctx.fill();
 
-    // Deep rim under edge
+    // Thin modern rim
     ctx.beginPath();
     pathBlob(ctx, b);
-    ctx.strokeStyle = 'rgba(7, 89, 133, 0.35)';
-    ctx.lineWidth = 4 * dpr;
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.stroke();
+    ctx.beginPath();
+    pathBlob(ctx, b);
+    ctx.strokeStyle = 'rgba(10, 80, 120, 0.22)';
+    ctx.lineWidth = 2.5 * dpr;
     ctx.stroke();
 
     // Specular glass sheen

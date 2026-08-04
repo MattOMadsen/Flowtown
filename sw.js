@@ -1,5 +1,5 @@
 /* Flowtown service worker – netværk først for JS/CSS så opdateringer rammer mobil */
-const CACHE = 'flowtown-v16-roads2026';
+const CACHE = 'flowtown-v17-modern2026';
 // Kun statiske assets (ikke JS/CSS/HTML) – ellers sidder man fast i gammel spil-kode
 const PRECACHE = [
   './assets/icons/icon-192.png',
