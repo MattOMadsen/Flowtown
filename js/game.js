@@ -1571,6 +1571,7 @@ export class Game {
   /**
    * Proper segment intersection (not shared endpoint / collinear overlap).
    * Returns true if segments AB and CD cross properly.
+   * Tillader også “næsten-kryds” med lille epsilon (floating point).
    */
   _segmentsCrossProper(ax, ay, bx, by, cx, cy, dx, dy) {
     const cross = (ox, oy, px, py, qx, qy) => (px - ox) * (qy - oy) - (py - oy) * (qx - ox);
@@ -1578,11 +1579,36 @@ export class Game {
     const d2 = cross(cx, cy, dx, dy, bx, by);
     const d3 = cross(ax, ay, bx, by, cx, cy);
     const d4 = cross(ax, ay, bx, by, dx, dy);
+    // Strict proper intersection
     if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
       && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
       return true;
     }
+    // Næsten-kryds (endpoint-on-segment tæller ikke – det fanges af t/u-check)
+    const eps = 1e-6;
+    if (Math.abs(d1) < eps || Math.abs(d2) < eps || Math.abs(d3) < eps || Math.abs(d4) < eps) {
+      return false;
+    }
     return false;
+  }
+
+  /** Indsæt punkter langs stroke så kryds-detektion ikke misser buer. */
+  _densifyPolyline(points, stepCss = 16) {
+    if (!points || points.length < 2) return points || [];
+    const step = Math.max(8, stepCss) * Math.max(1, this.dpr || 1);
+    const out = [{ x: points[0].x, y: points[0].y }];
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1];
+      const b = points[i];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 1) continue;
+      const n = Math.max(1, Math.ceil(len / step));
+      for (let k = 1; k <= n; k++) {
+        const t = k / n;
+        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      }
+    }
+    return out;
   }
 
   /** Parameter 0–1 along polyline for a point on segment i→i+1 at local t. */
@@ -1598,43 +1624,56 @@ export class Game {
     let before = 0;
     for (let i = 0; i < segIndex - 1 && i < segs.length; i++) before += segs[i];
     const segLen = segs[segIndex - 1] || 0;
-    return Math.max(0.05, Math.min(0.95, (before + localT * segLen) / total));
+    return Math.max(0.02, Math.min(0.98, (before + localT * segLen) / total));
   }
 
   /**
    * Find all proper mid-crossings with existing roads (not T-junction snap).
    * Sorted by tOnNew ascending. Deduped when nearly same t.
+   *
+   * Vigtigt: undgå dpr-store “skip”-zoner på korte segmenter (mobil-bug:
+   * skip≈70px + korte streger = ALLE kryds blev filtreret væk).
+   *
    * @returns {Array<{ road, point, tOnNew, tOnOld }>}
    */
-  findAllStrokeRoadCrossings(points, endSkip = 28) {
+  findAllStrokeRoadCrossings(points, endSkipCss = 22) {
     if (!points || points.length < 2 || !this.roads?.length) return [];
-    const skip = endSkip * Math.max(1, this.dpr || 1);
+    // Kun hele stroke-/vej-ender – IKKE hvert segment-hjørne
+    const endSkip = Math.max(12, endSkipCss) * Math.max(1, this.dpr || 1);
     const found = [];
+    const strokeStart = points[0];
+    const strokeEnd = points[points.length - 1];
+
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
       const b = points[i];
       const segLen = Math.hypot(b.x - a.x, b.y - a.y);
-      if (segLen < 4) continue;
+      if (segLen < 2) continue;
       for (const road of this.roads) {
         const rp = road.points;
         if (!rp || rp.length < 2) continue;
+        const roadStart = rp[0];
+        const roadEnd = rp[rp.length - 1];
         for (let j = 1; j < rp.length; j++) {
           const c = rp[j - 1];
           const d = rp[j];
           const otherLen = Math.hypot(d.x - c.x, d.y - c.y);
-          if (otherLen < 4) continue;
+          if (otherLen < 2) continue;
           if (!this._segmentsCrossProper(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)) continue;
           const den = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
-          if (Math.abs(den) < 1e-8) continue;
+          if (Math.abs(den) < 1e-9) continue;
           const t = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / den;
           const u = -((a.x - b.x) * (a.y - c.y) - (a.y - b.y) * (a.x - c.x)) / den;
-          if (t < 0.08 || t > 0.92 || u < 0.08 || u > 0.92) continue;
+          // Kun midt på segmenter – undgår T-kryds ved vertices
+          if (t < 0.04 || t > 0.96 || u < 0.04 || u > 0.96) continue;
           const ix = a.x + t * (b.x - a.x);
           const iy = a.y + t * (b.y - a.y);
-          const nearEnd = (p) => Math.hypot(ix - p.x, iy - p.y) < skip;
-          if (nearEnd(a) || nearEnd(b) || nearEnd(c) || nearEnd(d)) continue;
-          if (nearEnd(points[0]) || nearEnd(points[points.length - 1])) continue;
-          if (nearEnd(rp[0]) || nearEnd(rp[rp.length - 1])) continue;
+          // Skip hvis kryds er ved HELE stroke-enden (T-forbindelse til eksisterende)
+          const distEnd = (p) => Math.hypot(ix - p.x, iy - p.y);
+          if (distEnd(strokeStart) < endSkip || distEnd(strokeEnd) < endSkip) continue;
+          // Skip hvis kryds er ved HELE den eksisterende vejs ende (T ind i den)
+          if (distEnd(roadStart) < endSkip * 0.85 || distEnd(roadEnd) < endSkip * 0.85) continue;
+
           found.push({
             road,
             point: { x: ix, y: iy },
@@ -1645,12 +1684,11 @@ export class Game {
       }
     }
     found.sort((x, y) => x.tOnNew - y.tOnNew);
-    // Dedup: samme t (eller samme vej meget tæt)
     const out = [];
     for (const f of found) {
       const prev = out[out.length - 1];
-      if (prev && Math.abs(prev.tOnNew - f.tOnNew) < 0.04) continue;
-      if (prev && prev.road === f.road && Math.abs(prev.tOnNew - f.tOnNew) < 0.08) continue;
+      if (prev && Math.abs(prev.tOnNew - f.tOnNew) < 0.03) continue;
+      if (prev && prev.road === f.road && Math.abs(prev.tOnNew - f.tOnNew) < 0.06) continue;
       out.push(f);
     }
     return out;
@@ -2332,7 +2370,10 @@ export class Game {
     const waterFrac = strokeWaterFraction(points, this.waterBodies, this.districts);
     const wantBridge = this.mode === 'bridge';
     const crossesWater = waterFrac > 0.08;
-    const crossesRoad = this.strokeCrossesExistingRoads(points);
+    // Densify til mere pålidelig kryds-detektion (lange buer / få vertices)
+    const detectPts = this._densifyPolyline(points, 16);
+    const crossings = this.findAllStrokeRoadCrossings(detectPts);
+    const crossesRoad = crossings.length > 0;
 
     if (crossesWater && !wantBridge) {
       this.showToast('Over vand: brug Bro-værktøjet');
@@ -2346,8 +2387,13 @@ export class Game {
 
     // Vej over vej (ikke vand, ikke bro-værktøj): vælg bro/lys pr. kryds (eller alle)
     if (crossesRoad && !wantBridge && !crossesWater) {
-      const crossings = this.findAllStrokeRoadCrossings(points);
-      const prices = this.getCrossingChoicePrices(points, crossings, new Array(crossings.length).fill(null), 0);
+      // Map tOnNew fra detectPts til original points (samme geometri)
+      const crossingsOnOrig = this.findAllStrokeRoadCrossings(points);
+      const useCrossings = crossingsOnOrig.length ? crossingsOnOrig : crossings;
+      const usePoints = crossingsOnOrig.length ? points : detectPts;
+      const prices = this.getCrossingChoicePrices(
+        usePoints, useCrossings, new Array(useCrossings.length).fill(null), 0
+      );
       const minCost = Math.min(prices.bridgeAll, prices.junctionAll, prices.bridge, prices.junction);
       if (this.money < minCost) {
         this.showToast(`Ikke råd (mangler $${minCost - Math.floor(this.money)})`);
@@ -2359,15 +2405,15 @@ export class Game {
         return;
       }
       this.openCrossingChoice({
-        points: points.map(p => ({ x: p.x, y: p.y })),
-        crossings
+        points: usePoints.map(p => ({ x: p.x, y: p.y })),
+        crossings: useCrossings
       });
       this.currentStroke = null;
       this.pendingRoadCost = 0;
       this.clearActiveSnap();
       this.showToast(
-        crossings.length > 1
-          ? `${crossings.length} kryds – vælg pr. kryds eller alle`
+        useCrossings.length > 1
+          ? `${useCrossings.length} kryds – vælg pr. kryds eller alle`
           : 'Vælg: bro eller kryds med lys'
       );
       return;
