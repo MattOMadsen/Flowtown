@@ -65,8 +65,8 @@ export function drawWorldTerrain(
     if (d.type === 'farm') drawFarmFields(ctx, d, dpr);
   }
 
-  // Ambient foliage dots (cheap “life” without extra sprites)
-  drawAmbientDecor(ctx, w, h, dpr, districts, seed);
+  // Ambient foliage (ekstra buske uden for skov-tiles)
+  drawAmbientDecor(ctx, w, h, dpr, districts, seed, tileMap);
 
   if (opts.showHex && opts.hexSize) {
     drawHexGuide(ctx, w, h, opts.hexSize, dpr);
@@ -104,25 +104,47 @@ export function drawWorldTerrain(
   ctx.stroke();
 }
 
-function drawAmbientDecor(ctx, w, h, dpr, districts, seed) {
+function drawAmbientDecor(ctx, w, h, dpr, districts, seed, tileMap = null) {
   let s = (seed | 0) + 991;
   const rng = () => {
     s = (s * 1664525 + 1013904223) >>> 0;
     return s / 4294967296;
   };
   ctx.save();
-  for (let i = 0; i < 48; i++) {
+  // Små buske i græs (ikke oven i skov-canopy / byer)
+  for (let i = 0; i < 56; i++) {
     const x = rng() * w;
     const y = rng() * h;
-    // skip near districts
     let near = false;
     for (const d of districts) {
-      if (Math.hypot(d.x - x, d.y - y) < d.r * 2.2) { near = true; break; }
+      if (Math.hypot(d.x - x, d.y - y) < d.r * 2.1) { near = true; break; }
     }
     if (near) continue;
-    const r = (1.2 + rng() * 2.4) * dpr;
-    ctx.globalAlpha = 0.12 + rng() * 0.14;
-    ctx.fillStyle = rng() > 0.55 ? '#5a8f3c' : '#6b9e48';
+    // undgå stier (dirt-bånd)
+    if (tileMap?.paths?.length) {
+      let onPath = false;
+      for (const pts of tileMap.paths) {
+        for (let j = 1; j < pts.length; j++) {
+          const ax = pts[j - 1].x;
+          const ay = pts[j - 1].y;
+          const bx = pts[j].x;
+          const by = pts[j].y;
+          const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay))
+            / Math.max(1, (bx - ax) ** 2 + (by - ay) ** 2)));
+          const px = ax + (bx - ax) * t;
+          const py = ay + (by - ay) * t;
+          if (Math.hypot(x - px, y - py) < (tileMap.tileSize || 40) * 0.45) {
+            onPath = true;
+            break;
+          }
+        }
+        if (onPath) break;
+      }
+      if (onPath) continue;
+    }
+    const r = (1.4 + rng() * 3.2) * dpr;
+    ctx.globalAlpha = 0.1 + rng() * 0.16;
+    ctx.fillStyle = rng() > 0.5 ? '#4f8a38' : '#639e48';
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();

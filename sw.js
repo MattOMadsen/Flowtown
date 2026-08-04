@@ -1,5 +1,5 @@
 /* Flowtown service worker – offline cache for core shell */
-const CACHE = 'flowtown-v8-tiles';
+const CACHE = 'flowtown-v9-forest-paths';
 const PRECACHE = [
   './',
   './index.html',
