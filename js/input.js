@@ -216,7 +216,7 @@ export class InputHandler {
     // Tap-on-city candidate (F1) – not in erase/upgrade mode
     const hit = this.game.hitDistrict?.(pos.x, pos.y);
     const mode = this.game.mode;
-    if (hit && this.game.running && mode !== 'erase' && mode !== 'upgrade') {
+    if (hit && this.game.running && mode !== 'erase' && mode !== 'upgrade' && mode !== 'bridge') {
       this.pendingDistrict = hit;
       this.drawing = false;
       return;

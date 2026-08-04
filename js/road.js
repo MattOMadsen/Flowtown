@@ -1,12 +1,12 @@
 export class Road {
-  constructor(points, { owner = 'player', ownerColor = null, lanes = 1 } = {}) {
+  constructor(points, { owner = 'player', ownerColor = null, lanes = 1, isBridge = false } = {}) {
     this.points = points;
     this.id = Math.random().toString(36).slice(2);
     this.density = 0;
     this.owner = owner;
     this.ownerColor = ownerColor;
-    /** 1 = single track, 2 = dual (upgraded) */
     this.lanes = lanes >= 2 ? 2 : 1;
+    this.isBridge = !!isBridge;
     this._length = null;
   }
 
@@ -26,7 +26,6 @@ export class Road {
     return len;
   }
 
-  /** Effective congestion for visuals / pathfinding (2-spor tåler mere) */
   get effectiveDensity() {
     return (this.density || 0) / Math.max(1, this.lanes);
   }
@@ -64,7 +63,6 @@ export class Road {
     return Math.atan2(p2.y - p1.y, p2.x - p1.x);
   }
 
-  /** Closest point on polyline (segment-accurate, not only samples) */
   closestPoint(x, y) {
     let best = this.points[0] || { x, y };
     let bestDist = Infinity;
@@ -104,19 +102,20 @@ export class Road {
     if (this.points.length < 2) return;
 
     const dual = this.lanes >= 2;
-    let edge = '#1c1917';
-    let asphalt = dual ? '#4b5563' : '#57534e';
-    let asphaltHi = dual ? '#9ca3af' : '#78716c';
-    let lane = dual ? '#e5e7eb' : '#fbbf24';
+    const bridge = this.isBridge;
+    let edge = bridge ? '#1e3a5f' : '#1c1917';
+    let asphalt = bridge ? '#64748b' : dual ? '#4b5563' : '#57534e';
+    let asphaltHi = bridge ? '#94a3b8' : dual ? '#9ca3af' : '#78716c';
+    let lane = bridge ? '#e0f2fe' : dual ? '#e5e7eb' : '#fbbf24';
     let alpha = this.owner === 'player' ? 1 : 0.9;
 
     const dens = this.effectiveDensity;
-    if (dens >= 6) {
+    if (!bridge && dens >= 6) {
       asphalt = '#991b1b';
       asphaltHi = '#b91c1c';
       edge = '#450a0a';
       lane = '#fecaca';
-    } else if (dens >= 3) {
+    } else if (!bridge && dens >= 3) {
       asphalt = '#9a3412';
       asphaltHi = '#c2410c';
       edge = '#431407';
@@ -128,9 +127,8 @@ export class Road {
       lane = '#fef3c7';
     }
 
-    // 2-spor: bredere vej
-    const wEdge = (dual ? 28 : 20) * dpr;
-    const wBody = (dual ? 22 : 15) * dpr;
+    const wEdge = (dual ? 28 : bridge ? 22 : 20) * dpr;
+    const wBody = (dual ? 22 : bridge ? 16 : 15) * dpr;
     const wInner = (dual ? 16 : 11) * dpr;
 
     ctx.save();
@@ -138,21 +136,47 @@ export class Road {
     ctx.lineJoin = 'round';
     ctx.globalAlpha = alpha;
 
+    // VIS2: soft gravel shoulder
+    if (!bridge) {
+      ctx.beginPath();
+      this.path(ctx);
+      ctx.strokeStyle = 'rgba(168, 152, 120, 0.35)';
+      ctx.lineWidth = wEdge + 7 * dpr;
+      ctx.stroke();
+    }
+
+    // Bridge pillars
+    if (bridge) {
+      const len = this.length;
+      const count = Math.max(2, Math.floor(len / (70 * dpr)));
+      for (let i = 1; i <= count; i++) {
+        const t = i / (count + 1);
+        const p = this.getPointAt(t);
+        const ang = this.getAngleAt(t) + Math.PI / 2;
+        const hw = 5 * dpr;
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.75)';
+        ctx.fillRect(p.x - hw * 0.45, p.y, hw * 0.9, 14 * dpr);
+        // water reflection stub
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.15)';
+        ctx.fillRect(p.x - hw * 0.35, p.y + 12 * dpr, hw * 0.7, 6 * dpr);
+      }
+    }
+
     // Soft ground shadow
     ctx.beginPath();
     this.path(ctx);
-    ctx.strokeStyle = 'rgba(28, 25, 23, 0.18)';
+    ctx.strokeStyle = bridge ? 'rgba(14, 116, 144, 0.22)' : 'rgba(28, 25, 23, 0.2)';
     ctx.lineWidth = wEdge + 4 * dpr;
     ctx.stroke();
 
-    // Dark curb / edge
+    // Edge
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = edge;
     ctx.lineWidth = wEdge;
     ctx.stroke();
 
-    // Main asphalt
+    // Asphalt / deck
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = asphalt;
@@ -164,11 +188,22 @@ export class Road {
     this.path(ctx);
     ctx.strokeStyle = asphaltHi;
     ctx.lineWidth = wInner;
-    ctx.globalAlpha = alpha * 0.35;
+    ctx.globalAlpha = alpha * 0.38;
     ctx.stroke();
     ctx.globalAlpha = alpha;
 
-    // Center marking: dual = double solid-ish dash pair look
+    // Bridge rail lines
+    if (bridge) {
+      ctx.beginPath();
+      this.path(ctx);
+      ctx.strokeStyle = 'rgba(224, 242, 254, 0.7)';
+      ctx.lineWidth = 1.4 * dpr;
+      ctx.setLineDash([4 * dpr, 6 * dpr]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Center marking
     if (dual) {
       ctx.beginPath();
       this.path(ctx);
@@ -178,7 +213,6 @@ export class Road {
       ctx.lineCap = 'butt';
       ctx.stroke();
       ctx.setLineDash([]);
-      // thin twin line effect via second pass offset visually as solid center
       ctx.beginPath();
       this.path(ctx);
       ctx.strokeStyle = 'rgba(255,255,255,0.35)';
@@ -196,7 +230,7 @@ export class Road {
     }
     ctx.lineCap = 'round';
 
-    // Direction chevrons (dual: both directions)
+    // Chevrons
     const len = this.length;
     const arrowCount = Math.max(1, Math.floor(len / (110 * dpr)));
     for (let i = 1; i <= arrowCount; i++) {
@@ -218,9 +252,12 @@ export class Road {
         ctx.restore();
       };
 
-      const fill = dens >= 3 ? 'rgba(254, 226, 226, 0.9)' : 'rgba(254, 243, 199, 0.95)';
+      const fill = dens >= 3 && !bridge
+        ? 'rgba(254, 226, 226, 0.9)'
+        : bridge
+          ? 'rgba(224, 242, 254, 0.95)'
+          : 'rgba(254, 243, 199, 0.95)';
       if (dual) {
-        // offset left/right of center for opposite lanes
         const ang = angle + Math.PI / 2;
         const off = 4.5 * dpr;
         ctx.save();

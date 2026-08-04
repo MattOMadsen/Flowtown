@@ -25,6 +25,7 @@ import {
 import { saveMeta, setScenarioStars, getScenarioStars } from './meta.js';
 import { buildPlaceDefs, placeTypeMeta } from './places.js';
 import { drawWorldTerrain, drawPlaceHub } from './worlddraw.js';
+import { buildWaterBodies, strokeWaterFraction } from './water.js';
 import {
   SCENARIOS,
   getScenario,
@@ -101,6 +102,7 @@ export class Game {
     this.goalEval = { stars: 0, details: [] };
     this.runEnded = false;
     this._layout = null;
+    this.waterBodies = [];
 
     // Bots
     this.botsEnabled = false;
@@ -166,6 +168,7 @@ export class Game {
       job.from = this.districts.find(d => d.name === job.from.name) || job.from;
       job.to = this.districts.find(d => d.name === job.to.name) || job.to;
     }
+    this.waterBodies = buildWaterBodies(w, h, this.districts, this.mapSeed);
   }
 
   /**
@@ -619,13 +622,20 @@ export class Game {
     return Math.max(15, Math.round(ROAD_BASE_COST + len * ROAD_COST_PER_PX * 22));
   }
 
-  estimateStrokeCost(points) {
+  estimateStrokeCost(points, { bridge = false } = {}) {
     if (!points || points.length < 2) return 0;
     let len = 0;
     for (let i = 1; i < points.length; i++) {
       len += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
     }
-    return this.roadCostForLength(len);
+    let cost = this.roadCostForLength(len);
+    const waterFrac = strokeWaterFraction(points, this.waterBodies);
+    if (bridge || waterFrac > 0.05) {
+      // Broer er dyre – især over meget vand
+      cost = Math.round(cost * (2.15 + waterFrac * 2.4));
+      cost = Math.max(cost, 55);
+    }
+    return cost;
   }
 
   showToast(msg, ms = 2.2) {
@@ -642,6 +652,7 @@ export class Game {
       this.upgradeRoadNear(x, y);
       return;
     }
+    // draw + bridge modes
     const p = this.screenToWorld(x, y);
     const snapped = this.findSnapPoint(p.x, p.y);
     this.currentStroke = [{ x: snapped.x, y: snapped.y }];
@@ -656,7 +667,8 @@ export class Game {
     const dy = p.y - last.y;
     if (dx * dx + dy * dy > 12) {
       this.currentStroke.push({ x: p.x, y: p.y });
-      this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke);
+      const isBridge = this.mode === 'bridge';
+      this.pendingRoadCost = this.estimateStrokeCost(this.currentStroke, { bridge: isBridge });
     }
   }
 
@@ -675,19 +687,34 @@ export class Game {
     }
 
     points = this.snapEndpoints(points);
-    const cost = this.estimateStrokeCost(points);
+    const waterFrac = strokeWaterFraction(points, this.waterBodies);
+    const wantBridge = this.mode === 'bridge';
+    const crossesWater = waterFrac > 0.08;
+
+    if (crossesWater && !wantBridge) {
+      this.showToast('Over vand: brug Bro-værktøjet');
+      this.currentStroke = null;
+      this.pendingRoadCost = 0;
+      const mid = points[Math.floor(points.length / 2)];
+      this.addArrivalParticles(mid.x, mid.y, '#0ea5e9');
+      return;
+    }
+
+    // Bridge without water is just an expensive road (ok) or soft warn
+    const isBridge = wantBridge || crossesWater;
+    const cost = this.estimateStrokeCost(points, { bridge: isBridge });
 
     if (this.money < cost) {
       this.showToast(`Ikke råd (mangler $${cost - this.money})`);
       this.currentStroke = null;
       this.pendingRoadCost = 0;
-      // Flash red particles at end
       const end = points[points.length - 1];
       this.addArrivalParticles(end.x, end.y, '#ef4444');
       return;
     }
 
-    this.addRoadForOwner(points, 'player', null, cost, true);
+    this.addRoadForOwner(points, 'player', null, cost, true, { isBridge });
+    if (isBridge) this.showToast(crossesWater ? 'Bro bygget!' : 'Bro-segment (dyrt)');
     this.currentStroke = null;
     this.pendingRoadCost = 0;
   }
@@ -696,14 +723,24 @@ export class Game {
    * Shared road placement for player + bots.
    * @returns {boolean} success
    */
-  addRoadForOwner(points, owner, ownerColor, cost, chargePlayer) {
+  addRoadForOwner(points, owner, ownerColor, cost, chargePlayer, opts = {}) {
     if (!points || points.length < 2) return false;
     if (chargePlayer) {
       if (this.money < cost) return false;
       this.money -= cost;
-      this.addFloatText(points[Math.floor(points.length / 2)].x, points[Math.floor(points.length / 2)].y, `−$${cost}`, '#b91c1c');
+      this.addFloatText(
+        points[Math.floor(points.length / 2)].x,
+        points[Math.floor(points.length / 2)].y,
+        `−$${cost}`,
+        opts.isBridge ? '#0369a1' : '#b91c1c'
+      );
     }
-    this.roads.push(new Road(points, { owner, ownerColor, lanes: 1 }));
+    this.roads.push(new Road(points, {
+      owner,
+      ownerColor,
+      lanes: 1,
+      isBridge: !!opts.isBridge
+    }));
     if (owner === 'player') {
       this.checkFirstLinks();
       this.refreshGoals();
@@ -1424,7 +1461,7 @@ export class Game {
   }
 
   drawBackground(ctx, w, h) {
-    drawWorldTerrain(ctx, w, h, this.dpr, this.districts, this.mapSeed);
+    drawWorldTerrain(ctx, w, h, this.dpr, this.districts, this.mapSeed, this.waterBodies);
   }
 
   drawDistrict(ctx, d) {
@@ -1435,72 +1472,119 @@ export class Game {
     });
   }
 
+  /** VIS2 – mere detaljerede silhuetter pr. stedtype */
   drawPlaceSilhouette(ctx, d, type) {
-    const s = d.r * 0.55;
+    const s = d.r * 0.58;
+    const dpr = this.dpr;
     ctx.save();
-    ctx.translate(d.x, d.y);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.strokeStyle = 'rgba(28,25,23,0.2)';
-    ctx.lineWidth = 1.2 * this.dpr;
+    ctx.translate(d.x, d.y - d.r * 0.05);
+    ctx.lineJoin = 'round';
 
     if (type === 'farm') {
-      // barn
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillRect(-s * 0.7, -s * 0.15, s * 1.4, s * 0.7);
+      // silo
+      ctx.fillStyle = 'rgba(214, 211, 209, 0.75)';
+      ctx.fillRect(s * 0.35, -s * 0.7, s * 0.32, s * 1.05);
       ctx.beginPath();
-      ctx.moveTo(-s * 0.85, -s * 0.15);
-      ctx.lineTo(0, -s * 0.75);
-      ctx.lineTo(s * 0.85, -s * 0.15);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(180, 83, 9, 0.55)';
+      ctx.arc(s * 0.51, -s * 0.7, s * 0.16, Math.PI, 0);
       ctx.fill();
-    } else if (type === 'factory') {
-      ctx.fillStyle = 'rgba(68, 64, 60, 0.45)';
-      ctx.fillRect(-s * 0.75, -s * 0.2, s * 1.5, s * 0.75);
-      ctx.fillRect(-s * 0.55, -s * 0.85, s * 0.28, s * 0.65);
-      ctx.fillRect(s * 0.15, -s * 0.95, s * 0.28, s * 0.75);
-      ctx.fillStyle = 'rgba(120, 113, 108, 0.5)';
-      ctx.fillRect(-s * 0.5, -s * 1.05, s * 0.18, s * 0.22);
-      ctx.fillRect(s * 0.2, -s * 1.15, s * 0.18, s * 0.22);
-    } else if (type === 'harbor') {
-      ctx.fillStyle = 'rgba(14, 165, 233, 0.35)';
-      ctx.fillRect(-s * 0.9, s * 0.15, s * 1.8, s * 0.35);
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillRect(-s * 0.2, -s * 0.5, s * 0.2, s * 0.7);
+      // barn body
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.7)';
+      ctx.fillRect(-s * 0.75, -s * 0.1, s * 1.15, s * 0.72);
+      ctx.fillStyle = 'rgba(180, 83, 9, 0.65)';
       ctx.beginPath();
-      ctx.moveTo(-s * 0.1, -s * 0.5);
-      ctx.lineTo(s * 0.55, -s * 0.15);
-      ctx.lineTo(-s * 0.1, s * 0.05);
+      ctx.moveTo(-s * 0.9, -s * 0.1);
+      ctx.lineTo(-s * 0.15, -s * 0.78);
+      ctx.lineTo(s * 0.5, -s * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      // door
+      ctx.fillStyle = 'rgba(68, 64, 60, 0.45)';
+      ctx.fillRect(-s * 0.35, s * 0.15, s * 0.28, s * 0.45);
+    } else if (type === 'factory') {
+      ctx.fillStyle = 'rgba(87, 83, 78, 0.55)';
+      ctx.fillRect(-s * 0.85, -s * 0.05, s * 1.7, s * 0.7);
+      // windows row
+      ctx.fillStyle = 'rgba(253, 224, 71, 0.35)';
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(-s * 0.7 + i * s * 0.38, s * 0.08, s * 0.16, s * 0.2);
+      }
+      // chimneys + smoke puffs
+      ctx.fillStyle = 'rgba(68, 64, 60, 0.7)';
+      ctx.fillRect(-s * 0.5, -s * 0.95, s * 0.22, s * 0.9);
+      ctx.fillRect(s * 0.2, -s * 1.05, s * 0.26, s * 1.0);
+      ctx.fillStyle = 'rgba(168, 162, 158, 0.35)';
+      ctx.beginPath();
+      ctx.arc(-s * 0.35, -s * 1.1, s * 0.18, 0, Math.PI * 2);
+      ctx.arc(s * 0.4, -s * 1.25, s * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'harbor') {
+      // pier
+      ctx.fillStyle = 'rgba(120, 113, 108, 0.55)';
+      ctx.fillRect(-s * 1.0, s * 0.2, s * 2.0, s * 0.28);
+      for (let i = 0; i < 5; i++) {
+        ctx.fillRect(-s * 0.85 + i * s * 0.4, s * 0.48, s * 0.1, s * 0.22);
+      }
+      // crane / mast
+      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+      ctx.lineWidth = 2.2 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.15, s * 0.2);
+      ctx.lineTo(-s * 0.15, -s * 0.75);
+      ctx.lineTo(s * 0.65, -s * 0.2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.5)';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.1, -s * 0.15);
+      ctx.lineTo(s * 0.7, s * 0.05);
+      ctx.lineTo(s * 0.1, s * 0.15);
       ctx.closePath();
       ctx.fill();
     } else if (type === 'capital') {
-      // small skyline
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillRect(-s * 0.7, -s * 0.1, s * 0.4, s * 0.65);
-      ctx.fillRect(-s * 0.2, -s * 0.55, s * 0.45, s * 1.1);
-      ctx.fillRect(s * 0.35, -s * 0.25, s * 0.35, s * 0.8);
-      ctx.fillStyle = 'rgba(251, 191, 36, 0.7)';
+      // cathedral / hall
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.fillRect(-s * 0.55, -s * 0.15, s * 1.1, s * 0.75);
+      ctx.fillRect(-s * 0.22, -s * 0.7, s * 0.44, s * 0.55);
+      // spire
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.85)';
       ctx.beginPath();
-      ctx.moveTo(-s * 0.05, -s * 0.55);
-      ctx.lineTo(s * 0.02, -s * 0.95);
-      ctx.lineTo(s * 0.12, -s * 0.55);
+      ctx.moveTo(-s * 0.08, -s * 0.7);
+      ctx.lineTo(s * 0.0, -s * 1.15);
+      ctx.lineTo(s * 0.12, -s * 0.7);
+      ctx.fill();
+      // side towers
+      ctx.fillStyle = 'rgba(237, 233, 254, 0.7)';
+      ctx.fillRect(-s * 0.85, s * 0.0, s * 0.28, s * 0.55);
+      ctx.fillRect(s * 0.55, s * 0.0, s * 0.28, s * 0.55);
+      ctx.fillStyle = 'rgba(167, 139, 250, 0.7)';
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.9, 0);
+      ctx.lineTo(-s * 0.71, -s * 0.35);
+      ctx.lineTo(-s * 0.52, 0);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(s * 0.52, 0);
+      ctx.lineTo(s * 0.71, -s * 0.35);
+      ctx.lineTo(s * 0.9, 0);
       ctx.fill();
     } else {
-      // town houses
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillRect(-s * 0.65, -s * 0.05, s * 0.5, s * 0.55);
-      ctx.fillRect(s * 0.05, -s * 0.2, s * 0.55, s * 0.7);
-      ctx.fillStyle = 'rgba(180, 83, 9, 0.45)';
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.75, -s * 0.05);
-      ctx.lineTo(-s * 0.4, -s * 0.55);
-      ctx.lineTo(-s * 0.05, -s * 0.05);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(-s * 0.05, -s * 0.2);
-      ctx.lineTo(s * 0.32, -s * 0.65);
-      ctx.lineTo(s * 0.7, -s * 0.2);
-      ctx.fill();
+      // town: 3 houses + chimney
+      const house = (ox, sc, roof) => {
+        ctx.fillStyle = 'rgba(255,255,255,0.68)';
+        ctx.fillRect(ox - sc * 0.35, -sc * 0.05, sc * 0.7, sc * 0.6);
+        ctx.fillStyle = roof;
+        ctx.beginPath();
+        ctx.moveTo(ox - sc * 0.45, -sc * 0.05);
+        ctx.lineTo(ox, -sc * 0.55);
+        ctx.lineTo(ox + sc * 0.45, -sc * 0.05);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.4)';
+        ctx.fillRect(ox - sc * 0.12, sc * 0.12, sc * 0.18, sc * 0.18);
+      };
+      house(-s * 0.45, s * 0.85, 'rgba(185, 28, 28, 0.55)');
+      house(s * 0.35, s * 1.0, 'rgba(180, 83, 9, 0.55)');
+      house(s * 0.05, s * 0.7, 'rgba(120, 53, 15, 0.5)');
+      ctx.fillStyle = 'rgba(68, 64, 60, 0.5)';
+      ctx.fillRect(s * 0.45, -s * 0.55, s * 0.1, s * 0.25);
     }
     ctx.restore();
   }
@@ -1571,11 +1655,12 @@ export class Game {
 
     this.drawJobMarkers(ctx);
 
-    // Preview stroke
-    if (this.mode === 'draw' && this.currentStroke && this.currentStroke.length > 1) {
+    // Preview stroke (draw + bridge)
+    if ((this.mode === 'draw' || this.mode === 'bridge') && this.currentStroke && this.currentStroke.length > 1) {
       const ok = this.money >= this.pendingRoadCost;
+      const bridge = this.mode === 'bridge';
       ctx.beginPath();
-      ctx.strokeStyle = ok ? '#0f766e' : '#b91c1c';
+      ctx.strokeStyle = ok ? (bridge ? '#0284c7' : '#0f766e') : '#b91c1c';
       ctx.lineWidth = 16 * this.dpr;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';

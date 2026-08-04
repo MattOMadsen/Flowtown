@@ -25,6 +25,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-B3** 2-spor vej-opgradering (mode + visual + capacity)
 - [x] **PROG-C1** Baner + 3 stjerner + map-select
 - [x] **PROG-VIS1** Bedre verdenskort (terrain, vand, markers, hubs)
+- [x] **PROG-D1** Vand/kyst + bro-tool
+- [x] **PROG-VIS2** Skarpere steder + vej/bro-art
 
 ---
 
@@ -53,8 +55,9 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-C2 | Map-select + end-of-run | campaign |
 | PROG-C3 | Større world bounds + flere byer på senere baner | Delvist → M1 |
 | PROG-M1 | ~~Større map + TTD-steder + navne~~ | Done 2026-08-04 |
-| PROG-D1 | Vand (sø/kyst) blokerer normal vej | terrain |
-| PROG-D2 | Broer (dyrere segment, krydser vand) | tool/cost |
+| PROG-D1 | ~~Vand + kyst~~ | Done 2026-08-04 |
+| PROG-D2 | ~~Broer~~ | Done (Bro-tool) |
+| PROG-VIS2 | ~~Skarpere art~~ | Done 2026-08-04 |
 | PROG-D3 | Flere jobtyper (ekspres, turist, …) | jobs.js |
 | PROG-F1 | ~~Køb bil via by-tryk~~ | Done |
 | PROG-F2 | ~~Auto-assign + flåde-UI~~ | Done |
