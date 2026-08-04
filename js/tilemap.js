@@ -186,55 +186,35 @@ function softPath(ax, ay, bx, by, rng) {
 }
 
 /**
- * Sømløs tegning – bløde lag, ingen gitter.
+ * Sømløs tegning – ren gradient + ellipser. INGEN tile-bitmaps (de skaber firkanter).
  */
-export function drawTileMap(ctx, tileMap, tileImgs) {
-  if (!tileMap || tileMap.kind === 'hex') {
-    // hex deprecated – seamless only
-  }
+export function drawTileMap(ctx, tileMap, _tileImgs) {
   if (!tileMap) return;
 
   const w = tileMap.worldW || 2000;
   const h = tileMap.worldH || 1500;
-  const grass = tileImgs?.grass || tileImgs?.grass2;
+  const seed = tileMap.seed || 1;
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
 
-  // 1) Base meadow – moderne soft green
-  const base = ctx.createLinearGradient(0, 0, w * 0.15, h);
-  base.addColorStop(0, '#c5dfa8');
-  base.addColorStop(0.4, '#b8d69a');
-  base.addColorStop(0.75, '#c8d9a4');
-  base.addColorStop(1, '#d2d0a8');
+  // 1) Ren meadow – ingen tekstur-fliser
+  const base = ctx.createLinearGradient(0, 0, w * 0.2, h);
+  base.addColorStop(0, '#c8e0aa');
+  base.addColorStop(0.35, '#bdd99c');
+  base.addColorStop(0.7, '#c6dba4');
+  base.addColorStop(1, '#d0d4a8');
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, w, h);
 
-  // 2) Soft grass texture wash (stor scale, lav alpha – ingen cells)
-  if (grass && grass.complete && grass.naturalWidth > 0) {
-    ctx.globalAlpha = 0.22;
-    const tw = Math.max(180, Math.min(280, w * 0.12));
-    for (let y = -tw * 0.2; y < h + tw; y += tw * 0.85) {
-      for (let x = -tw * 0.2; x < w + tw; x += tw * 0.85) {
-        const ox = ((x * 0.01) % 1) * 12;
-        ctx.drawImage(grass, x + ox, y, tw * 1.05, tw * 1.05);
-      }
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  // 3) Soft color noise (meget subtil)
-  const seed = tileMap.seed || 1;
-  for (let i = 0; i < 28; i++) {
-    const nx = noise2(i * 3, 7, seed);
-    const ny = noise2(i * 5, 11, seed + 2);
-    const x = nx * w;
-    const y = ny * h;
-    const r = Math.min(w, h) * (0.06 + noise2(i, 2, seed) * 0.08);
+  // 2) Subtile farve-blobs (store, meget bløde – ingen gitter)
+  for (let i = 0; i < 18; i++) {
+    const x = noise2(i * 3, 7, seed) * w;
+    const y = noise2(i * 5, 11, seed + 2) * h;
+    const r = Math.min(w, h) * (0.08 + noise2(i, 2, seed) * 0.1);
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const warm = noise2(i, 9, seed) > 0.5;
-    g.addColorStop(0, warm ? 'rgba(200, 190, 120, 0.07)' : 'rgba(100, 150, 80, 0.08)');
+    const warm = noise2(i, 9, seed) > 0.55;
+    g.addColorStop(0, warm ? 'rgba(195, 185, 120, 0.09)' : 'rgba(110, 155, 85, 0.1)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -242,14 +222,14 @@ export function drawTileMap(ctx, tileMap, tileImgs) {
     ctx.fill();
   }
 
-  // 4) Dirt patches (bløde ellipser)
+  // 3) Dirt patches
   for (const p of tileMap.dirtPatches || []) {
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rot || 0);
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(p.rx, p.ry));
-    g.addColorStop(0, `rgba(196, 175, 130, ${p.alpha * 1.1})`);
-    g.addColorStop(0.55, `rgba(180, 160, 115, ${p.alpha * 0.55})`);
+    g.addColorStop(0, `rgba(196, 175, 130, ${Math.min(0.28, p.alpha * 1.15)})`);
+    g.addColorStop(0.6, `rgba(180, 160, 115, ${p.alpha * 0.4})`);
     g.addColorStop(1, 'rgba(180, 160, 115, 0)');
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -258,33 +238,27 @@ export function drawTileMap(ctx, tileMap, tileImgs) {
     ctx.restore();
   }
 
-  // 5) Diskrete stier
+  // 4) Stier – meget tynde
   for (const pts of tileMap.paths || []) {
     if (!pts || pts.length < 2) continue;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(150, 125, 85, 0.14)';
-    ctx.lineWidth = Math.min(w, h) * 0.008;
+    ctx.strokeStyle = 'rgba(145, 120, 80, 0.12)';
+    ctx.lineWidth = Math.min(w, h) * 0.006;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.strokeStyle = 'rgba(210, 190, 150, 0.12)';
-    ctx.lineWidth = Math.min(w, h) * 0.004;
-    ctx.stroke();
   }
 
-  // 6) Skov – bløde canopy-klumper
+  // 5) Skov – skarpe mini-træer (ikke grøn tåge)
   for (const f of tileMap.forestBlobs || []) {
     drawForestBlob(ctx, f);
   }
 
-  // 7) Soft light
-  const sun = ctx.createRadialGradient(w * 0.3, h * 0.2, 0, w * 0.45, h * 0.4, Math.max(w, h) * 0.6);
-  sun.addColorStop(0, 'rgba(255, 252, 240, 0.1)');
+  // 6) Let lys
+  const sun = ctx.createRadialGradient(w * 0.28, h * 0.18, 0, w * 0.4, h * 0.35, Math.max(w, h) * 0.55);
+  sun.addColorStop(0, 'rgba(255, 252, 240, 0.08)');
   sun.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = sun;
   ctx.fillRect(0, 0, w, h);
@@ -292,36 +266,56 @@ export function drawTileMap(ctx, tileMap, tileImgs) {
   ctx.restore();
 }
 
+/** Skarpe top-down træer – flere små cirkler med synlig kant, ikke sløret sky */
 function drawForestBlob(ctx, f) {
   const { x, y, r, seed = 1 } = f;
-  // soft ground shadow under trees
+  const scale = Math.max(28, r * 0.55);
+
+  // diskret skygge under lunden
   ctx.beginPath();
-  ctx.ellipse(x + 2, y + 4, r * 1.05, r * 0.55, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(40, 55, 30, 0.1)';
+  ctx.ellipse(x + 1, y + 3, scale * 1.15, scale * 0.55, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(35, 50, 25, 0.12)';
   ctx.fill();
 
-  const n = 5 + (seed % 4);
+  const n = 7 + (seed % 5);
+  // bageste træer først
+  const trees = [];
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + noise2(i, seed, 3) * 0.8;
-    const d = r * (0.15 + noise2(i, seed + 1, 5) * 0.55);
-    const cx = x + Math.cos(a) * d;
-    const cy = y + Math.sin(a) * d * 0.75;
-    const tr = r * (0.28 + noise2(i, seed + 2, 7) * 0.28);
-    const g = ctx.createRadialGradient(cx - tr * 0.2, cy - tr * 0.25, tr * 0.1, cx, cy, tr);
-    g.addColorStop(0, 'rgba(120, 165, 90, 0.45)');
-    g.addColorStop(0.5, 'rgba(70, 120, 60, 0.4)');
-    g.addColorStop(1, 'rgba(45, 85, 40, 0.05)');
+    const a = (i / n) * Math.PI * 2 + noise2(i, seed, 3) * 1.1;
+    const d = scale * (0.12 + noise2(i, seed + 1, 5) * 0.7);
+    trees.push({
+      cx: x + Math.cos(a) * d,
+      cy: y + Math.sin(a) * d * 0.7,
+      tr: scale * (0.22 + noise2(i, seed + 2, 7) * 0.2),
+      shade: 0.35 + noise2(i, seed + 4, 9) * 0.35
+    });
+  }
+  trees.sort((a, b) => a.cy - b.cy);
+
+  for (const t of trees) {
+    // solid canopy (ikke transparent gradient-udsmeltning)
+    const fill = t.shade > 0.55 ? '#4d8a42' : t.shade > 0.4 ? '#5a9a4a' : '#6aad55';
+    const edge = '#3a6b34';
     ctx.beginPath();
-    ctx.arc(cx, cy, tr, 0, Math.PI * 2);
-    ctx.fillStyle = g;
+    ctx.arc(t.cx, t.cy, t.tr, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = Math.max(1, t.tr * 0.08);
+    ctx.stroke();
+    // lille highlight
+    ctx.beginPath();
+    ctx.arc(t.cx - t.tr * 0.25, t.cy - t.tr * 0.28, t.tr * 0.28, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
     ctx.fill();
   }
-  // center canopy
-  const g0 = ctx.createRadialGradient(x - r * 0.1, y - r * 0.15, 0, x, y, r * 0.55);
-  g0.addColorStop(0, 'rgba(95, 145, 75, 0.4)');
-  g0.addColorStop(1, 'rgba(50, 90, 45, 0.05)');
+
+  // midtertræ
   ctx.beginPath();
-  ctx.arc(x, y, r * 0.55, 0, Math.PI * 2);
-  ctx.fillStyle = g0;
+  ctx.arc(x, y - scale * 0.05, scale * 0.32, 0, Math.PI * 2);
+  ctx.fillStyle = '#4a8540';
   ctx.fill();
+  ctx.strokeStyle = '#355f30';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
 }
