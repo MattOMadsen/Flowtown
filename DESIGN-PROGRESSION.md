@@ -326,6 +326,7 @@ Hver **batch** = 1–3 konkrete leverancer. Rækkefølge kan finjusteres, men af
 | 2026-08-04 | Større map, længere mellem byer; fabrik/landbrug/havn; realistiske navne | **M1 done** (batch) | **M1** |
 | 2026-08-04 | C1 baner + meget bedre kort/verden-design | **C1 + VIS1 done** | C1 |
 | 2026-08-04 | Design: zoom, intet tomt land, sprites, rigtigt playable board | **VIS3 done** | VIS3 |
+| 2026-08-04 | Pænere tile-map / ground assets | **VIS4 done** | VIS4 |
 | — | *(næste forslag fra dig)* | — | — |
 
 ---

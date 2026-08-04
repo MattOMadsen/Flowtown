@@ -1,6 +1,5 @@
 /**
- * Load place/vehicle sprites (PNG with transparency).
- * Fallback: null → canvas silhouette without glow-bubbles.
+ * Load place/vehicle/tile assets.
  */
 
 const PLACE_SRC = {
@@ -18,8 +17,16 @@ const VEHICLE_SRC = {
   truck_heavy: 'assets/vehicles/truck.png'
 };
 
+const TILE_SRC = {
+  grass: 'assets/tiles/grass.png',
+  dirt: 'assets/tiles/dirt.png',
+  forest: 'assets/tiles/forest.png',
+  water: 'assets/tiles/water.png'
+};
+
 const placeImgs = {};
 const vehicleImgs = {};
+const tileImgs = {};
 let ready = false;
 let loadPromise = null;
 
@@ -33,17 +40,22 @@ function loadImage(src) {
   });
 }
 
+async function loadMap(srcMap, target) {
+  const entries = Object.entries(srcMap);
+  const imgs = await Promise.all(entries.map(([, src]) => loadImage(src)));
+  entries.forEach(([k], i) => { target[k] = imgs[i]; });
+}
+
 export function loadGameAssets() {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
-    const pEntries = Object.entries(PLACE_SRC);
-    const vEntries = Object.entries(VEHICLE_SRC);
-    const pImgs = await Promise.all(pEntries.map(([, src]) => loadImage(src)));
-    const vImgs = await Promise.all(vEntries.map(([, src]) => loadImage(src)));
-    pEntries.forEach(([k], i) => { placeImgs[k] = pImgs[i]; });
-    vEntries.forEach(([k], i) => { vehicleImgs[k] = vImgs[i]; });
+    await Promise.all([
+      loadMap(PLACE_SRC, placeImgs),
+      loadMap(VEHICLE_SRC, vehicleImgs),
+      loadMap(TILE_SRC, tileImgs)
+    ]);
     ready = true;
-    return { placeImgs, vehicleImgs };
+    return { placeImgs, vehicleImgs, tileImgs };
   })();
   return loadPromise;
 }
@@ -56,6 +68,10 @@ export function getVehicleSprite(classId, kind) {
   if (classId && vehicleImgs[classId]) return vehicleImgs[classId];
   if (kind === 'truck') return vehicleImgs.truck || null;
   return vehicleImgs.car || null;
+}
+
+export function getTileImages() {
+  return tileImgs;
 }
 
 export function assetsReady() {

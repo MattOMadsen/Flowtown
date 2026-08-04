@@ -27,6 +27,7 @@ import { buildPlaceDefs, placeTypeMeta } from './places.js';
 import { drawWorldTerrain, drawPlaceHub } from './worlddraw.js';
 import { buildWaterBodies, strokeWaterFraction } from './water.js';
 import { loadGameAssets } from './assets.js';
+import { buildTileMap } from './tilemap.js';
 import {
   SCENARIOS,
   getScenario,
@@ -104,6 +105,7 @@ export class Game {
     this.runEnded = false;
     this._layout = null;
     this.waterBodies = [];
+    this.tileMap = null;
 
     // Bots
     this.botsEnabled = false;
@@ -177,6 +179,7 @@ export class Game {
       job.to = this.districts.find(d => d.name === job.to.name) || job.to;
     }
     this.waterBodies = buildWaterBodies(w, h, this.districts, this.mapSeed);
+    this.tileMap = buildTileMap(w, h, this.dpr, this.districts, this.waterBodies, this.mapSeed);
   }
 
   /**
@@ -1477,7 +1480,11 @@ export class Game {
   }
 
   drawBackground(ctx, w, h) {
-    drawWorldTerrain(ctx, w, h, this.dpr, this.districts, this.mapSeed, this.waterBodies);
+    drawWorldTerrain(
+      ctx, w, h, this.dpr,
+      this.districts, this.mapSeed,
+      this.waterBodies, this.tileMap
+    );
   }
 
   drawDistrict(ctx, d) {
