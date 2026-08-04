@@ -14,24 +14,35 @@ document.getElementById('btn-toggle').addEventListener('click', (e) => {
 
 const btnDraw = document.getElementById('btn-draw');
 const btnErase = document.getElementById('btn-erase');
+const btnUpgrade = document.getElementById('btn-upgrade');
 const btnBots = document.getElementById('btn-bots');
 const botPanel = document.getElementById('bot-panel');
 
 function setMode(mode) {
   game.setMode(mode);
-  if (mode === 'draw') {
-    btnDraw.classList.add('ring-2', 'ring-emerald-500');
-    btnErase.classList.remove('ring-2', 'ring-rose-500');
-    canvas.style.cursor = 'crosshair';
-  } else {
-    btnErase.classList.add('ring-2', 'ring-rose-500');
-    btnDraw.classList.remove('ring-2', 'ring-emerald-500');
-    canvas.style.cursor = 'pointer';
+  const ring = (btn, on, color) => {
+    if (!btn) return;
+    btn.classList.toggle('ring-2', on);
+    if (color === 'emerald') btn.classList.toggle('ring-emerald-500', on);
+    if (color === 'rose') btn.classList.toggle('ring-rose-500', on);
+    if (color === 'sky') btn.classList.toggle('ring-sky-500', on);
+  };
+  ring(btnDraw, mode === 'draw', 'emerald');
+  ring(btnErase, mode === 'erase', 'rose');
+  ring(btnUpgrade, mode === 'upgrade', 'sky');
+  if (btnUpgrade) {
+    btnUpgrade.classList.toggle('bg-sky-500', mode === 'upgrade');
+    btnUpgrade.classList.toggle('text-white', mode === 'upgrade');
+    btnUpgrade.classList.toggle('border-sky-600', mode === 'upgrade');
+    btnUpgrade.classList.toggle('bg-white/95', mode !== 'upgrade');
+    btnUpgrade.classList.toggle('text-stone-700', mode !== 'upgrade');
   }
+  canvas.style.cursor = mode === 'draw' ? 'crosshair' : 'pointer';
 }
 
 btnDraw.addEventListener('click', () => setMode('draw'));
 btnErase.addEventListener('click', () => setMode('erase'));
+if (btnUpgrade) btnUpgrade.addEventListener('click', () => setMode('upgrade'));
 setMode('draw');
 
 function updateBotButton() {

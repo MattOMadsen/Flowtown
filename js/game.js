@@ -516,6 +516,10 @@ export class Game {
       this.eraseNear(x, y);
       return;
     }
+    if (this.mode === 'upgrade') {
+      this.upgradeRoadNear(x, y);
+      return;
+    }
     const p = this.screenToWorld(x, y);
     const snapped = this.findSnapPoint(p.x, p.y);
     this.currentStroke = [{ x: snapped.x, y: snapped.y }];
@@ -523,7 +527,7 @@ export class Game {
   }
 
   continueStroke(x, y) {
-    if (this.mode === 'erase' || !this.currentStroke) return;
+    if (this.mode === 'erase' || this.mode === 'upgrade' || !this.currentStroke) return;
     const p = this.screenToWorld(x, y);
     const last = this.currentStroke[this.currentStroke.length - 1];
     const dx = p.x - last.x;
@@ -535,7 +539,7 @@ export class Game {
   }
 
   endStroke() {
-    if (this.mode === 'erase' || !this.currentStroke || this.currentStroke.length < 2) {
+    if (this.mode === 'erase' || this.mode === 'upgrade' || !this.currentStroke || this.currentStroke.length < 2) {
       this.currentStroke = null;
       this.pendingRoadCost = 0;
       return;
@@ -577,10 +581,62 @@ export class Game {
       this.money -= cost;
       this.addFloatText(points[Math.floor(points.length / 2)].x, points[Math.floor(points.length / 2)].y, `−$${cost}`, '#b91c1c');
     }
-    this.roads.push(new Road(points, { owner, ownerColor }));
+    this.roads.push(new Road(points, { owner, ownerColor, lanes: 1 }));
     if (owner === 'player') {
       this.checkFirstLinks();
     }
+    return true;
+  }
+
+  /** Cost to upgrade a road segment to 2-spor */
+  upgradeRoadCost(road) {
+    if (!road) return 0;
+    const base = 28;
+    const per = 0.038;
+    return Math.max(35, Math.floor(base + road.length * per));
+  }
+
+  /**
+   * B3: Tap road in upgrade mode → 2-spor for $.
+   */
+  upgradeRoadNear(screenX, screenY) {
+    const p = this.screenToWorld(screenX, screenY);
+    let best = null;
+    let bestDist = 48 * this.dpr;
+
+    for (const road of this.roads) {
+      if (road.owner !== 'player') continue;
+      const c = road.closestPoint(p.x, p.y);
+      if (c.dist < bestDist) {
+        bestDist = c.dist;
+        best = { road, point: c.point };
+      }
+    }
+
+    if (!best) {
+      this.showToast('Tryk på din egen vej for 2-spor');
+      return false;
+    }
+
+    const road = best.road;
+    if (road.lanes >= 2) {
+      this.showToast('Allerede 2-sporet');
+      return false;
+    }
+
+    const cost = this.upgradeRoadCost(road);
+    if (this.money < cost) {
+      this.showToast(`Ikke råd (mangler $${cost - Math.floor(this.money)})`);
+      this.addArrivalParticles(best.point.x, best.point.y, '#ef4444');
+      return false;
+    }
+
+    this.money -= cost;
+    road.lanes = 2;
+    this.addFloatText(best.point.x, best.point.y - 12, `2-spor −$${cost}`, '#0f766e');
+    this.addArrivalParticles(best.point.x, best.point.y, '#10b981');
+    this.showToast(`Vej opgraderet til 2-spor ($${cost})`);
+    this.requestDraw();
     return true;
   }
 

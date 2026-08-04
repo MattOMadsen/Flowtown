@@ -22,6 +22,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-U2** Unlock hurtig bil (5) / tung lastbil (10) via totalUpgrades
 - [x] **PROG-U3** Visuel klasse-forskel + job-match i assign
 - [x] **PROG-M1** Større map, stedtyper (by/landbrug/fabrik/havn), realistiske navne, typed jobs
+- [x] **PROG-B3** 2-spor vej-opgradering (mode + visual + capacity)
 
 ---
 
@@ -44,7 +45,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-A3 | By-hubs + stærk snap + connected + bynavne | game.js |
 | PROG-B1 | ~~XP + level + localStorage meta~~ | Done 2026-08-03 |
 | PROG-B2 | Shop UI (flåde/infra unlock’et af level) | bottom sheet |
-| PROG-B3 | 2-spor vej-opgradering for $ | capacity loop |
+| PROG-B3 | ~~2-spor vej-opgradering~~ | Done 2026-08-04 |
 | PROG-C1 | Baner/scenarios + 3-stjerne mål | scenarios.js |
 | PROG-C2 | Map-select + end-of-run | campaign |
 | PROG-C3 | Større world bounds + flere byer på senere baner | Delvist → M1 |

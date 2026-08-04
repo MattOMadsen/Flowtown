@@ -246,7 +246,8 @@ export class Vehicle {
         while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - 2 * Math.PI);
         const directionScore = 1 - (angleDiff / Math.PI);
 
-        const densityPenalty = (r.density || 0) * 6;
+        const dens = r.effectiveDensity != null ? r.effectiveDensity : (r.density || 0);
+        const densityPenalty = dens * 6;
         const ownerBonus = r.owner === this.owner ? 20 : 0;
         const endpointBonus = (c.t < 0.08 || c.t > 0.92) ? 25 : 0;
 
@@ -373,8 +374,10 @@ export class Vehicle {
       const dy = other.y - this.y;
       if (dx * dx + dy * dy < 44 * 44) nearby++;
     }
-    this.speed = this.baseSpeed * Math.max(0.14, 1 - nearby * 0.13);
-    if (nearby >= 4) this.idleTime += dt;
+    // 2-spor: mindre opbremsning ved tæt trafik
+    const laneEase = this.currentRoad?.lanes >= 2 ? 0.55 : 1;
+    this.speed = this.baseSpeed * Math.max(0.14, 1 - nearby * 0.13 * laneEase);
+    if (nearby >= (this.currentRoad?.lanes >= 2 ? 6 : 4)) this.idleTime += dt;
     else this.idleTime = Math.max(0, this.idleTime - dt * 0.5);
     this.stuck = this.idleTime > 8;
 

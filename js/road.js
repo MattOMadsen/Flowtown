@@ -1,10 +1,12 @@
 export class Road {
-  constructor(points, { owner = 'player', ownerColor = null } = {}) {
+  constructor(points, { owner = 'player', ownerColor = null, lanes = 1 } = {}) {
     this.points = points;
     this.id = Math.random().toString(36).slice(2);
     this.density = 0;
     this.owner = owner;
     this.ownerColor = ownerColor;
+    /** 1 = single track, 2 = dual (upgraded) */
+    this.lanes = lanes >= 2 ? 2 : 1;
     this._length = null;
   }
 
@@ -22,6 +24,11 @@ export class Road {
     }
     this._length = len;
     return len;
+  }
+
+  /** Effective congestion for visuals / pathfinding (2-spor tåler mere) */
+  get effectiveDensity() {
+    return (this.density || 0) / Math.max(1, this.lanes);
   }
 
   getPointAt(t) {
@@ -96,33 +103,35 @@ export class Road {
   draw(ctx, dpr) {
     if (this.points.length < 2) return;
 
-    // Density → asphalt tone
+    const dual = this.lanes >= 2;
     let edge = '#1c1917';
-    let asphalt = '#57534e';
-    let asphaltHi = '#78716c';
-    let lane = '#fbbf24';
+    let asphalt = dual ? '#4b5563' : '#57534e';
+    let asphaltHi = dual ? '#9ca3af' : '#78716c';
+    let lane = dual ? '#e5e7eb' : '#fbbf24';
     let alpha = this.owner === 'player' ? 1 : 0.9;
 
-    if (this.density >= 6) {
+    const dens = this.effectiveDensity;
+    if (dens >= 6) {
       asphalt = '#991b1b';
       asphaltHi = '#b91c1c';
       edge = '#450a0a';
       lane = '#fecaca';
-    } else if (this.density >= 3) {
+    } else if (dens >= 3) {
       asphalt = '#9a3412';
       asphaltHi = '#c2410c';
       edge = '#431407';
       lane = '#fed7aa';
     } else if (this.owner !== 'player' && this.ownerColor) {
-      asphalt = this.mixHex(this.ownerColor, '#57534e', 0.35);
+      asphalt = this.mixHex(this.ownerColor, dual ? '#4b5563' : '#57534e', 0.35);
       asphaltHi = this.mixHex(this.ownerColor, '#a8a29e', 0.45);
       edge = this.mixHex(this.ownerColor, '#1c1917', 0.2);
       lane = '#fef3c7';
     }
 
-    const wEdge = 20 * dpr;
-    const wBody = 15 * dpr;
-    const wInner = 11 * dpr;
+    // 2-spor: bredere vej
+    const wEdge = (dual ? 28 : 20) * dpr;
+    const wBody = (dual ? 22 : 15) * dpr;
+    const wInner = (dual ? 16 : 11) * dpr;
 
     ctx.save();
     ctx.lineCap = 'round';
@@ -150,7 +159,7 @@ export class Road {
     ctx.lineWidth = wBody;
     ctx.stroke();
 
-    // Slight highlight stripe down the middle of asphalt
+    // Highlight
     ctx.beginPath();
     this.path(ctx);
     ctx.strokeStyle = asphaltHi;
@@ -159,18 +168,35 @@ export class Road {
     ctx.stroke();
     ctx.globalAlpha = alpha;
 
-    // Center dashed lane
-    ctx.beginPath();
-    this.path(ctx);
-    ctx.strokeStyle = lane;
-    ctx.lineWidth = 2 * dpr;
-    ctx.setLineDash([8 * dpr, 10 * dpr]);
-    ctx.lineCap = 'butt';
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // Center marking: dual = double solid-ish dash pair look
+    if (dual) {
+      ctx.beginPath();
+      this.path(ctx);
+      ctx.strokeStyle = lane;
+      ctx.lineWidth = 3.2 * dpr;
+      ctx.setLineDash([10 * dpr, 8 * dpr]);
+      ctx.lineCap = 'butt';
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // thin twin line effect via second pass offset visually as solid center
+      ctx.beginPath();
+      this.path(ctx);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1.2 * dpr;
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      this.path(ctx);
+      ctx.strokeStyle = lane;
+      ctx.lineWidth = 2 * dpr;
+      ctx.setLineDash([8 * dpr, 10 * dpr]);
+      ctx.lineCap = 'butt';
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.lineCap = 'round';
 
-    // Direction chevrons
+    // Direction chevrons (dual: both directions)
     const len = this.length;
     const arrowCount = Math.max(1, Math.floor(len / (110 * dpr)));
     for (let i = 1; i <= arrowCount; i++) {
@@ -178,17 +204,36 @@ export class Road {
       const p = this.getPointAt(t);
       const angle = this.getAngleAt(t);
 
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(angle);
-      ctx.fillStyle = this.density >= 3 ? 'rgba(254, 226, 226, 0.9)' : 'rgba(254, 243, 199, 0.95)';
-      ctx.beginPath();
-      ctx.moveTo(6.5 * dpr, 0);
-      ctx.lineTo(-4.5 * dpr, -3.8 * dpr);
-      ctx.lineTo(-4.5 * dpr, 3.8 * dpr);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      const drawArrow = (rot, fill) => {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(rot);
+        ctx.fillStyle = fill;
+        ctx.beginPath();
+        ctx.moveTo(6.5 * dpr, 0);
+        ctx.lineTo(-4.5 * dpr, -3.8 * dpr);
+        ctx.lineTo(-4.5 * dpr, 3.8 * dpr);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      };
+
+      const fill = dens >= 3 ? 'rgba(254, 226, 226, 0.9)' : 'rgba(254, 243, 199, 0.95)';
+      if (dual) {
+        // offset left/right of center for opposite lanes
+        const ang = angle + Math.PI / 2;
+        const off = 4.5 * dpr;
+        ctx.save();
+        ctx.translate(Math.cos(ang) * off, Math.sin(ang) * off);
+        drawArrow(angle, fill);
+        ctx.restore();
+        ctx.save();
+        ctx.translate(-Math.cos(ang) * off, -Math.sin(ang) * off);
+        drawArrow(angle + Math.PI, fill);
+        ctx.restore();
+      } else {
+        drawArrow(angle, fill);
+      }
     }
 
     ctx.restore();

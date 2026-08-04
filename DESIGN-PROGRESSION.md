@@ -389,9 +389,8 @@ Tjen $ på jobs → tryk by → køb bil → bil kører selv til job fra den by
 ### Anbefalet rækkefølge nu
 1. ~~**F1+F2**~~ done  
 2. **U1** bil-klasser + opgrader last (by-sheet) – retention uden kedelig grind  
-3. **B3** 2-spor (netværk-dybde)  
-4. **U2** unlock næste tier efter X opgraderinger  
-5. C baner, D vand/broer, B2 global shop hvis stadig behov  
+3. ~~**B3** 2-spor~~ done  
+4. C baner, D vand/broer, B2 global shop hvis stadig behov 
 
 ---
 

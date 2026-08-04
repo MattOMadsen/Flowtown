@@ -213,9 +213,10 @@ export class InputHandler {
       return;
     }
 
-    // Tap-on-city candidate (F1) – only if we don't drag far
+    // Tap-on-city candidate (F1) – not in erase/upgrade mode
     const hit = this.game.hitDistrict?.(pos.x, pos.y);
-    if (hit && this.game.running && this.game.mode !== 'erase') {
+    const mode = this.game.mode;
+    if (hit && this.game.running && mode !== 'erase' && mode !== 'upgrade') {
       this.pendingDistrict = hit;
       this.drawing = false;
       return;
