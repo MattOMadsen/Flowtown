@@ -2391,6 +2391,13 @@ export class Game {
   }
 
   endStroke() {
+    // Bloker ny vej mens kryds-valg er åbent
+    if (this.pendingCrossing) {
+      this.currentStroke = null;
+      this.pendingRoadCost = 0;
+      this.clearActiveSnap();
+      return;
+    }
     if (this.mode === 'erase' || this.mode === 'upgrade' || this.mode === 'oneway'
       || this.mode === 'light' || !this.currentStroke || this.currentStroke.length < 2) {
       this.currentStroke = null;
@@ -2742,6 +2749,18 @@ export class Game {
 
   clearActiveSnap() {
     this.activeSnap = null;
+  }
+
+  /**
+   * Annuller igangværende vejstreg uden at bygge (pinch / multi-touch).
+   * Må ALDRIG kalde endStroke.
+   */
+  cancelStroke() {
+    this.currentStroke = null;
+    this.pendingRoadCost = 0;
+    this.clearActiveSnap();
+    // Luk evt. åben kryds-dialog hvis streg forsvandt under valg? nej – pendingCrossing er separat
+    this.requestDraw?.();
   }
 
   /**

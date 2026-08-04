@@ -37,9 +37,11 @@ Distrikter (ca.):
 
 ## Zoom & kamera
 
-- Camera: `{ x, y, zoom }` i canvas-pixel space; `screenToWorld` skal matche `setTransform(zoom,0,0,zoom,x,y)`.
-- Zoom: knapper (+/−/fit/reset), musehjul, pinch.
-- Efter zoom/pan: `requestDraw()` så det virker også uden for main-loop edge cases.
+- Camera: `{ x, y, zoom, rotation }` i canvas-pixel space.
+- Transform: `applyCameraTransform` = R(rotation)·S(zoom) + (x,y); `screenToWorld` skal matche.
+- Zoom: knapper (+/−/fit/reset), musehjul, pinch; drej: ↺↻ / Q·E / pinch-vinkel.
+- Fit/reset: `rotation = 0`. Efter zoom/pan/rot: `requestDraw()`.
+- Input: se `STABILISERING.md` – states idle|pending|draw|pan|pinch; pinch commit’er aldrig vej.
 - Undgå dobbelt-fire på mobil (touchend + click) med debounce.
 
 ## Veje & snap

@@ -1,5 +1,5 @@
 /* Flowtown service worker – netværk først for JS/CSS så opdateringer rammer mobil */
-const CACHE = 'flowtown-v19-pinch-fix';
+const CACHE = 'flowtown-v20-stabilize';
 // Kun statiske assets (ikke JS/CSS/HTML) – ellers sidder man fast i gammel spil-kode
 const PRECACHE = [
   './assets/icons/icon-192.png',
