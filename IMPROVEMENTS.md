@@ -91,9 +91,9 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 |----|---------|------------|--------|
 | IMP-A1 | Daglige/ugentlige mini-mål | Ja | Mangler |
 | IMP-A2 | Flaskehals-feedback (glød, toast, hint) | Ja | ~~Done~~ Batch 1 |
-| IMP-A3 | Flere baner med personlighed | Ja | Mangler |
-| IMP-A4 | Flow-score som stjerne/mål | Hybrid | Mangler |
-| IMP-A5 | Synligere by-bygninger (effekt i UI) | Ja polish | Mangler |
+| IMP-A3 | Flere baner med personlighed | Ja | ~~Done~~ Ø-broerne + Nat-rush |
+| IMP-A4 | Flow-score som stjerne/mål | Hybrid | ~~Done~~ `flow` goal + hold-timer |
+| IMP-A5 | Synligere by-bygninger (effekt i UI) | Ja polish | ~~Done~~ by-sheet panel |
 
 ### B – Retention
 | ID | Forslag | Anbefaling | Status |
@@ -135,7 +135,7 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 
 ### Batch-rækkefølge (anbefalet)
 1. ~~**IMP-A2 + IMP-D1**~~ flaskehals + mere-menu **DONE 2026-08-04**  
-2. **IMP-A3 + A4 + A5** – baner, flow-stjerne, bygning-UI  
+2. ~~**IMP-A3 + A4 + A5**~~ baner, flow-stjerne, bygning-UI **DONE**  
 3. **PWA + IMP-A1 + IMP-B4** – app-følelse + habit + end-run  
 
 ---
@@ -144,10 +144,9 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **IMP-A3/A4/A5** | Baner + flow-mål + bygning-UI | Batch 2 |
-| 2 | **PWA + IMP-A1 + B4** | Install, dagligt mål, end-run | Batch 3 |
-| 3 | **T-1–T-5** | Tests, cull, a11y | Kvalitet |
-| 4 | **Ægte multiplayer** | Live session / server | Backend |
+| 1 | **PWA + IMP-A1 + B4** | Install, dagligt mål, end-run | Batch 3 |
+| 2 | **T-1–T-5** | Tests, cull, a11y | Kvalitet |
+| 3 | **Ægte multiplayer** | Live session / server | Backend |
 
 ---
 

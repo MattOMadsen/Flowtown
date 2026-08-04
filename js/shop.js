@@ -80,10 +80,43 @@ export const SHOP_ITEMS = [
 ];
 
 export const BUILDING_META = {
-  station: { id: 'station', icon: '🚉', label: 'Station', color: '#2563eb' },
-  warehouse: { id: 'warehouse', icon: '🏭', label: 'Lager', color: '#b45309' },
-  depot: { id: 'depot', icon: '🚏', label: 'Depot', color: '#0f766e' }
+  station: {
+    id: 'station',
+    icon: '🚉',
+    label: 'Station',
+    color: '#2563eb',
+    effect: '+28% passager-demand',
+    effectShort: '+👤 jobs'
+  },
+  warehouse: {
+    id: 'warehouse',
+    icon: '🏭',
+    label: 'Lager',
+    color: '#b45309',
+    effect: '+28% gods-demand',
+    effectShort: '+📦 jobs'
+  },
+  depot: {
+    id: 'depot',
+    icon: '🚏',
+    label: 'Depot',
+    color: '#0f766e',
+    effect: 'Hurtigere assign · lille demand-boost',
+    effectShort: '⚡ assign'
+  }
 };
+
+/** Human-readable buff lines for a district's buildings */
+export function districtBuildingEffects(buildings) {
+  if (!buildings) return [];
+  const lines = [];
+  for (const key of ['station', 'warehouse', 'depot']) {
+    if (!buildings[key]) continue;
+    const m = BUILDING_META[key];
+    if (m) lines.push({ id: key, icon: m.icon, label: m.label, effect: m.effect, color: m.color });
+  }
+  return lines;
+}
 
 export function getShopItem(id) {
   return SHOP_ITEMS.find(i => i.id === id) || null;

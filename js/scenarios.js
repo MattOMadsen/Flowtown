@@ -39,8 +39,32 @@ export const LAYOUT_VALLEY = [
   { rx: 0.88, ry: 0.78, rr: 0.026, type: 'factory' }
 ];
 
+/** Ø-kæde: steder på hver side – broer er nøglen */
+export const LAYOUT_ISLANDS = [
+  { rx: 0.18, ry: 0.28, rr: 0.032, type: 'harbor' },
+  { rx: 0.22, ry: 0.55, rr: 0.028, type: 'town' },
+  { rx: 0.14, ry: 0.78, rr: 0.026, type: 'farm' },
+  { rx: 0.48, ry: 0.42, rr: 0.034, type: 'capital' },
+  { rx: 0.52, ry: 0.72, rr: 0.027, type: 'factory' },
+  { rx: 0.78, ry: 0.22, rr: 0.030, type: 'town' },
+  { rx: 0.86, ry: 0.48, rr: 0.030, type: 'factory' },
+  { rx: 0.82, ry: 0.76, rr: 0.028, type: 'harbor' }
+];
+
+/** Tæt bynet – godt til flow/kø-udfordring */
+export const LAYOUT_NIGHT = [
+  { rx: 0.50, ry: 0.48, rr: 0.036, type: 'capital' },
+  { rx: 0.28, ry: 0.28, rr: 0.028, type: 'town' },
+  { rx: 0.72, ry: 0.26, rr: 0.028, type: 'town' },
+  { rx: 0.22, ry: 0.52, rr: 0.026, type: 'factory' },
+  { rx: 0.78, ry: 0.52, rr: 0.026, type: 'factory' },
+  { rx: 0.38, ry: 0.74, rr: 0.027, type: 'farm' },
+  { rx: 0.62, ry: 0.76, rr: 0.027, type: 'farm' },
+  { rx: 0.50, ry: 0.18, rr: 0.026, type: 'harbor' }
+];
+
 /**
- * @typedef {{ type: 'deliver'|'connect_all'|'money'|'jobs', amount?: number, stars: number }} Goal
+ * @typedef {{ type: 'deliver'|'connect_all'|'money'|'jobs'|'flow', amount?: number, seconds?: number, stars: number }} Goal
  */
 
 export const SCENARIOS = [
@@ -90,6 +114,40 @@ export const SCENARIOS = [
     ]
   },
   {
+    id: 'islands',
+    name: 'Ø-broerne',
+    blurb: 'Vand deler landet – byg broer og hold flow over vandet.',
+    seed: 404,
+    startMoney: 1550,
+    worldScale: 1.28,
+    unlockLevel: 3,
+    layout: LAYOUT_ISLANDS,
+    goals: [
+      { type: 'connect_all', stars: 1 },
+      { type: 'deliver', amount: 14, stars: 1 },
+      { type: 'flow', amount: 65, seconds: 28, stars: 1 }
+    ]
+  },
+  {
+    id: 'nightrush',
+    name: 'Nat-rush',
+    blurb: 'Tæt bynet – hold trafikken kørende under rush og mørke.',
+    seed: 505,
+    startMoney: 1400,
+    worldScale: 1.18,
+    unlockLevel: 4,
+    layout: LAYOUT_NIGHT,
+    /** Start later in day cycle + slightly wet */
+    startTimeOfDay: 0.68,
+    startWeather: 'rain',
+    forceBotsHint: true,
+    goals: [
+      { type: 'flow', amount: 70, seconds: 32, stars: 1 },
+      { type: 'jobs', amount: 3, stars: 1 },
+      { type: 'deliver', amount: 16, stars: 1 }
+    ]
+  },
+  {
     id: 'freeplay',
     name: 'Sandkasse',
     blurb: 'Fri leg på det store standardkort. Ingen stjerne-krav.',
@@ -112,6 +170,11 @@ export function goalLabel(goal) {
   if (goal.type === 'connect_all') return 'Forbind alle steder (vej nær hvert)';
   if (goal.type === 'money') return `Tjen op til $${goal.amount}`;
   if (goal.type === 'jobs') return `Fuldfør ${goal.amount} opgaver`;
+  if (goal.type === 'flow') {
+    const sec = goal.seconds || 30;
+    const pct = goal.amount || 70;
+    return `Hold flow ≥ ${pct}% i ${sec}s`;
+  }
   return 'Mål';
 }
 
@@ -142,6 +205,17 @@ export function evaluateGoals(scenario, snap) {
     } else if (g.type === 'connect_all') {
       done = !!snap.allConnected;
       progress = done ? 'OK' : '…';
+    } else if (g.type === 'flow') {
+      const need = g.seconds || 30;
+      const thr = g.amount || 70;
+      const hold = snap.flowHoldBest || 0;
+      const cur = snap.flowPct || 0;
+      done = hold >= need;
+      progress = done
+        ? `${need}s ✓`
+        : `${Math.floor(Math.min(hold, need))}/${need}s · nu ${cur}%`;
+      // thr used only for hold tracking in game; show if under
+      if (!done && cur < thr) progress = `nu ${cur}% (mål ${thr}%)`;
     }
     return { goal: g, done, progress };
   });

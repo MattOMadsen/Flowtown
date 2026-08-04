@@ -275,9 +275,14 @@ function renderScenarioList() {
 function startGame() {
   const help = document.getElementById('help');
   if (help) help.style.display = 'none';
-  const withBots = !!document.getElementById('start-with-bots')?.checked;
+  let withBots = !!document.getElementById('start-with-bots')?.checked;
+  // Nat-rush: foreslå bots hvis spilleren ikke har slået fra
+  const scPreview = game.listScenariosForUi?.()?.find(s => s.id === selectedScenarioId);
   clearSession(); // nyt spil overskriver gammelt save
   game.loadScenario(selectedScenarioId, { bots: withBots });
+  if (game.scenario?.forceBotsHint && !withBots) {
+    game.showToast?.('Tip: slå bots til for ekstra kaos i Nat-rush', 3.0);
+  }
   updateBotButton();
   game.start();
   lastStarsShown = -1;
@@ -1026,18 +1031,43 @@ function refreshDistrictSheet() {
   const growthEl = document.getElementById('ds-growth');
   if (growthEl) {
     const g = d.growth | 0;
-    const b = d.buildings || {};
-    const bIcons = [b.station && '🚉', b.warehouse && '🏭', b.depot && '🚏'].filter(Boolean).join('');
     const parts = [];
     if (g > 0) parts.push(`🏙️ Størrelse ${g}/8`);
     else if ((d.deliveriesHere | 0) > 0) parts.push(`🏙️ ${d.deliveriesHere | 0} leverancer`);
-    if (bIcons) parts.push(bIcons);
+    // Demand multipliers (building + growth)
+    const p = Math.round((d.passengers || 1) * 100);
+    const c = Math.round((d.cargo || 1) * 100);
+    parts.push(`👤${p}% · 📦${c}%`);
     if (parts.length) {
       growthEl.classList.remove('hidden');
       growthEl.textContent = parts.join(' · ');
     } else {
       growthEl.classList.add('hidden');
       growthEl.textContent = '';
+    }
+  }
+
+  // IMP-A5: synlige bygningseffekter
+  const bui = document.getElementById('ds-buildings');
+  if (bui) {
+    const info = game.getDistrictBuildingUi?.(d) || { lines: [], hasAny: false };
+    if (info.hasAny && info.lines?.length) {
+      bui.classList.remove('hidden');
+      bui.innerHTML = `
+        <div class="text-[10px] font-bold uppercase tracking-wide text-teal-800 mb-0.5">Bygninger i ${escapeHtml(d.name)}</div>
+        ${info.lines.map(l => `
+          <div class="flex items-start gap-1.5 text-[11px] text-stone-700">
+            <span class="shrink-0">${l.icon}</span>
+            <span><b class="text-stone-800">${escapeHtml(l.label)}</b> — ${escapeHtml(l.effect)}</span>
+          </div>`).join('')}
+        <p class="text-[10px] text-teal-700/90 pt-0.5">Køb flere under 🛒 Butik (by valgt)</p>`;
+    } else {
+      bui.classList.remove('hidden');
+      bui.innerHTML = `
+        <div class="text-[11px] text-stone-600">
+          <span class="font-semibold text-stone-700">Ingen bygninger endnu</span>
+          <span class="block text-[10px] text-stone-500 mt-0.5">Station 🚉 · Lager 🏭 · Depot 🚏 i 🛒 Butik — boost jobs her</span>
+        </div>`;
     }
   }
 
@@ -1244,11 +1274,11 @@ setInterval(() => {
 
   const flowEl = document.getElementById('flow-pct');
   if (flowEl) {
-    const total = game.arrivedCount + game.vehicles.length;
-    const pct = total > 5
-      ? Math.round((game.arrivedCount / (game.arrivedCount + Math.max(1, game.vehicles.length * 0.55))) * 100)
-      : 0;
+    const pct = game.flowPct != null ? game.flowPct : 0;
     flowEl.textContent = pct + '%';
+    // Soft color when holding flow goal
+    const thr = game.getFlowThreshold?.() || 70;
+    flowEl.parentElement?.classList.toggle('text-emerald-700', pct >= thr);
   }
 
   renderJobs();

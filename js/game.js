@@ -42,7 +42,8 @@ import {
   getShopItem,
   getShopCatalog,
   hasShopBuff,
-  BUILDING_META
+  BUILDING_META,
+  districtBuildingEffects
 } from './shop.js';
 import {
   unlockAchievement,
@@ -101,6 +102,10 @@ export class Game {
     this.bottleneckToastCooldown = 0;
     /** Worst player road congestion { road, dens, mid } | null */
     this.bottleneck = null;
+    /** Flow meter (IMP-A4) */
+    this.flowPct = 0;
+    this.flowHoldTimer = 0;
+    this.flowHoldBest = 0;
     this.growthTimer = 0;
     /** Session clock (seconds) for rush hour */
     this.sessionTime = 0;
@@ -275,14 +280,22 @@ export class Game {
     this.sessionTime = 0;
     this.rushActive = false;
     this._wasRush = false;
-    this.timeOfDay = 0.32 + Math.random() * 0.15;
-    this.weather = 'clear';
+    this.timeOfDay = sc.startTimeOfDay != null
+      ? sc.startTimeOfDay
+      : (0.32 + Math.random() * 0.15);
+    this.weather = sc.startWeather || 'clear';
     this.weatherTimer = 18 + Math.random() * 25;
     this._cityHintShown = false;
     this._cityHintUntil = 0;
+    this.flowPct = 0;
+    this.flowHoldTimer = 0;
+    this.flowHoldBest = 0;
 
     this.initDistricts();
     this.botsEnabled = !!opts.bots;
+    if (sc.forceBotsHint && opts.bots === undefined) {
+      /* caller may enable bots from UI */
+    }
     for (const b of this.bots) b.enabled = this.botsEnabled;
     if (!this.botsEnabled) {
       this.vehicles = this.vehicles.filter(v => v.owner === 'player');
@@ -513,9 +526,67 @@ export class Game {
       delivered: this.playerDelivered,
       money: this.money,
       jobsCompleted: this.jobsCompleted,
-      allConnected: this.allPlacesHaveRoad()
+      allConnected: this.allPlacesHaveRoad(),
+      flowPct: this.flowPct | 0,
+      flowHoldBest: this.flowHoldBest || 0,
+      flowHoldTimer: this.flowHoldTimer || 0
     });
     return this.goalEval;
+  }
+
+  /**
+   * Live flow %: share of busy player fleet that is not stuck.
+   * Soft fallback when few vehicles (based on arrivals vs fleet).
+   */
+  computeFlowPct() {
+    const fleet = this.getPlayerFleet();
+    const busy = fleet.filter(v => v.job);
+    if (busy.length >= 2) {
+      const ok = busy.filter(v => !v.stuck).length;
+      return Math.round((ok / busy.length) * 100);
+    }
+    const onRoad = this.vehicles.filter(v => v.owner === 'player' && v.job).length;
+    const arrived = this.arrivedCount || 0;
+    if (arrived + onRoad < 4) return Math.max(this.flowPct || 0, 50);
+    const score = arrived / (arrived + Math.max(1, onRoad * 0.65));
+    return Math.max(0, Math.min(100, Math.round(score * 100)));
+  }
+
+  /** Threshold from active flow goals (lowest amount) or 70 */
+  getFlowThreshold() {
+    const goals = this.scenario?.goals || [];
+    const flowGoals = goals.filter(g => g.type === 'flow');
+    if (!flowGoals.length) return 70;
+    return Math.min(...flowGoals.map(g => g.amount || 70));
+  }
+
+  tickFlow(dt) {
+    this.flowPct = this.computeFlowPct();
+    const thr = this.getFlowThreshold();
+    if (this.flowPct >= thr) {
+      this.flowHoldTimer = (this.flowHoldTimer || 0) + dt;
+      if (this.flowHoldTimer > (this.flowHoldBest || 0)) {
+        this.flowHoldBest = this.flowHoldTimer;
+      }
+    } else {
+      this.flowHoldTimer = 0;
+    }
+  }
+
+  /** Effects list for district sheet (IMP-A5) */
+  getDistrictBuildingUi(district) {
+    const d = typeof district === 'string'
+      ? this.districts.find(x => x.name === district)
+      : district;
+    if (!d) return { lines: [], passengers: 1, cargo: 1, growth: 0 };
+    const lines = districtBuildingEffects(d.buildings);
+    return {
+      lines,
+      passengers: Math.round((d.passengers || 1) * 100) / 100,
+      cargo: Math.round((d.cargo || 1) * 100) / 100,
+      growth: d.growth | 0,
+      hasAny: lines.length > 0
+    };
   }
 
   getGoalsUi() {
@@ -2518,6 +2589,7 @@ export class Game {
     this.tickTrafficLights();
     this.tickAtmosphere(dt);
     this.tickBottleneck(dt);
+    this.tickFlow(dt);
 
     // Jobs (faster spawn during rush)
     this.jobTimer += dt;

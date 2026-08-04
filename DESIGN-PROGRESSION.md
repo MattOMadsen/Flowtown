@@ -449,9 +449,8 @@ Længere spilletid via **valg** (fart vs last vs specialisering), ikke kun “k�
 
 ## 12. Næste skridt (2026-08-04)
 
-**Batch 1 (nu):** IMP-A2 flaskehals-feedback + IMP-D1 mere-menu.  
-
-**Batch 2:** Nye baner (A3) + flow-stjerne (A4) + synligere bygninger (A5).  
+**Batch 1:** ~~IMP-A2 + IMP-D1~~ done.  
+**Batch 2:** ~~A3 baner + A4 flow-mål + A5 bygning-UI~~ done.  
 **Batch 3:** PWA + dagligt mini-mål + end-run polish.
 
 Fuld ID-liste: [IMPROVEMENTS.md](./IMPROVEMENTS.md) § Forslag.
