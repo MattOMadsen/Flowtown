@@ -4,7 +4,7 @@
  */
 
 import { drawWaterBodies } from './water.js';
-import { getPlaceSprite, getImageContentBounds, getTileImages } from './assets.js';
+import { getPlaceSprite, getTileImages } from './assets.js';
 import { drawTileMap } from './tilemap.js';
 
 /**
@@ -173,93 +173,79 @@ function drawFarmFields(ctx, d, dpr) {
 
 /**
  * Place hub planted on ground (not floating).
- * Sprite bottom sits on groundY ≈ d.y; shadow tight under base.
+ * Place-sprites er bottom-aligned i PNG; vi planter bunden i groundY + lille sink.
  */
 export function drawPlaceHub(ctx, d, dpr, helpers) {
   const { lightenHex, drawSilhouette } = helpers;
   const type = d.type || 'town';
   const sprite = getPlaceSprite(type, d.spriteKey || null);
-  // Størrelse vokser med hub, men bunden forbliver på jorden (ingen “lift”)
-  const size = d.r * 2.2;
+  // Kompakt størrelse – store isometriske sprites “svæver” hvis de er for store
+  const size = d.r * 1.85;
   const connected = d._connected;
   // Jordkontakt = hub-centrum (veje snapper hertil)
-  const groundY = d.y + 2 * dpr;
+  const groundY = d.y;
   const gc = d.color || '#a8a29e';
 
-  // Soft life ring under place (på jorden)
+  // Solid jord-plade (tydelig base byen står på)
   ctx.beginPath();
-  ctx.ellipse(d.x, groundY, size * 0.4, size * 0.14, 0, 0, Math.PI * 2);
-  const glow = ctx.createRadialGradient(d.x, groundY, 0, d.x, groundY, size * 0.4);
-  glow.addColorStop(0, hexAlpha(gc, 0.2));
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow;
+  ctx.ellipse(d.x, groundY + 1 * dpr, size * 0.48, size * 0.18, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(28, 25, 23, 0.22)';
   ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(d.x, groundY, size * 0.4, size * 0.145, 0, 0, Math.PI * 2);
+  const sod = ctx.createRadialGradient(d.x - size * 0.08, groundY - size * 0.04, 0, d.x, groundY, size * 0.42);
+  sod.addColorStop(0, 'rgba(120, 140, 85, 0.55)');
+  sod.addColorStop(0.45, 'rgba(95, 110, 70, 0.4)');
+  sod.addColorStop(1, 'rgba(70, 80, 50, 0.05)');
+  ctx.fillStyle = sod;
+  ctx.fill();
+  // Farvet ring (stedets farve)
+  ctx.beginPath();
+  ctx.ellipse(d.x, groundY, size * 0.36, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = hexAlpha(gc, 0.45);
+  ctx.lineWidth = 2 * dpr;
+  ctx.stroke();
 
-  // Kontakt-skygge (tæt under bygning – “står på jorden”)
+  // Kontakt-skygge under sprite
   ctx.beginPath();
-  ctx.ellipse(d.x + 2 * dpr, groundY + 3 * dpr, size * 0.42, size * 0.13, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(15, 12, 10, 0.28)';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(d.x, groundY + 1 * dpr, size * 0.32, size * 0.09, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(20, 16, 12, 0.16)';
-  ctx.fill();
-
-  // Lille græs-/jordplade under base
-  ctx.beginPath();
-  ctx.ellipse(d.x, groundY, size * 0.3, size * 0.1, 0, 0, Math.PI * 2);
-  const plate = ctx.createRadialGradient(d.x, groundY - 2 * dpr, 0, d.x, groundY, size * 0.3);
-  plate.addColorStop(0, 'rgba(90, 100, 70, 0.35)');
-  plate.addColorStop(0.65, 'rgba(70, 65, 58, 0.18)');
-  plate.addColorStop(1, 'rgba(70, 65, 58, 0)');
-  ctx.fillStyle = plate;
+  ctx.ellipse(d.x + 3 * dpr, groundY + 4 * dpr, size * 0.36, size * 0.11, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(15, 12, 10, 0.3)';
   ctx.fill();
 
   if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-    const b = getImageContentBounds(sprite);
-    if (b && b.w > 4 && b.h > 4) {
-      // Tegn kun indhold; bund af content = groundY (plantet)
-      const aspect = b.w / b.h;
-      const drawH = size * 0.98;
-      const drawW = drawH * aspect;
-      const dx = d.x - drawW / 2;
-      const dy = groundY - drawH;
-      ctx.drawImage(
-        sprite,
-        b.left, b.top, b.w, b.h,
-        dx, dy, drawW, drawH
-      );
-    } else {
-      // Fallback uden crop: bund af billede på jorden
-      ctx.drawImage(sprite, d.x - size / 2, groundY - size, size, size);
-    }
+    // Sprites er bottom-aligned: plant bund i jorden med lille sink (ingen luft under)
+    const nw = sprite.naturalWidth || size;
+    const nh = sprite.naturalHeight || size;
+    const aspect = nw / Math.max(1, nh);
+    const drawH = size;
+    const drawW = drawH * aspect;
+    const sink = drawH * 0.08; // 8% ned i pladen = “står i jorden”
+    const dx = d.x - drawW / 2;
+    const dy = groundY - drawH + sink;
+    ctx.drawImage(sprite, dx, dy, drawW, drawH);
   } else {
     ctx.beginPath();
-    ctx.arc(d.x, groundY - size * 0.22, size * 0.28, 0, Math.PI * 2);
+    ctx.arc(d.x, groundY - size * 0.2, size * 0.26, 0, Math.PI * 2);
     ctx.fillStyle = lightenHex(d.color || '#a8a29e', 0.08);
     ctx.fill();
     drawSilhouette(ctx, d, type);
   }
 
-  // Hub pin (guld) – på jorden, under bygning
+  // Hub pin – lille, foran basen (ikke midt i huset)
   ctx.beginPath();
-  ctx.arc(d.x, groundY, 4.5 * dpr, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(251, 191, 36, 0.98)';
+  ctx.arc(d.x, groundY + 1 * dpr, 3.5 * dpr, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(251, 191, 36, 0.95)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(28,25,23,0.45)';
-  ctx.lineWidth = 1.2 * dpr;
+  ctx.strokeStyle = 'rgba(28,25,23,0.4)';
+  ctx.lineWidth = 1 * dpr;
   ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(d.x - 1 * dpr, groundY - 1.2 * dpr, 1.5 * dpr, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fill();
 
   // Connected ring
   if (connected) {
     ctx.beginPath();
-    ctx.arc(d.x, groundY, 7.5 * dpr, 0, Math.PI * 2);
+    ctx.ellipse(d.x, groundY, size * 0.38, size * 0.13, 0, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(16, 185, 129, 0.55)';
-    ctx.lineWidth = 1.5 * dpr;
+    ctx.lineWidth = 1.8 * dpr;
     ctx.stroke();
   }
 
@@ -273,34 +259,28 @@ export function drawPlaceHub(ctx, d, dpr, helpers) {
   const tw2 = ctx.measureText(`${icon} ${typeLabel}`.trim()).width;
   const padX = 9 * dpr;
   const bw = Math.max(tw, tw2) + padX * 2 + 4 * dpr;
-  const bh = 30 * dpr;
+  const bh = 28 * dpr;
   const bx = d.x - bw / 2;
-  const by = groundY + 10 * dpr;
+  const by = groundY + 12 * dpr;
 
-  ctx.fillStyle = 'rgba(15,12,10,0.2)';
-  roundRect(ctx, bx + 2 * dpr, by + 3 * dpr, bw, bh, 9 * dpr);
+  ctx.fillStyle = 'rgba(15,12,10,0.18)';
+  roundRect(ctx, bx + 1.5 * dpr, by + 2 * dpr, bw, bh, 8 * dpr);
   ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.94)';
-  roundRect(ctx, bx, by, bw, bh, 9 * dpr);
+  roundRect(ctx, bx, by, bw, bh, 8 * dpr);
   ctx.fill();
-  // accent bar
   ctx.fillStyle = d.color || '#a8a29e';
-  roundRect(ctx, bx, by, 3.8 * dpr, bh, 2 * dpr);
+  roundRect(ctx, bx, by, 3.5 * dpr, bh, 2 * dpr);
   ctx.fill();
-  // top rim
-  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  ctx.lineWidth = 1 * dpr;
-  roundRect(ctx, bx + 0.5 * dpr, by + 0.5 * dpr, bw - dpr, bh * 0.45, 8 * dpr);
-  ctx.stroke();
 
   ctx.fillStyle = '#1c1917';
   ctx.font = `bold ${Math.max(10, 11.5 * dpr)}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, d.x + 1.5 * dpr, by + 11 * dpr);
+  ctx.fillText(label, d.x + 1.5 * dpr, by + 10 * dpr);
   ctx.font = `${Math.max(8, 8.5 * dpr)}px system-ui, sans-serif`;
   ctx.fillStyle = '#57534e';
-  ctx.fillText(`${icon} ${typeLabel}`.trim(), d.x + 1.5 * dpr, by + 21.5 * dpr);
+  ctx.fillText(`${icon} ${typeLabel}`.trim(), d.x + 1.5 * dpr, by + 20 * dpr);
 }
 
 function hexAlpha(hex, a) {

@@ -81,6 +81,7 @@ Distrikter (ca.):
 | 2026-08-04 | Lyst/hvidt skær over skærm efter tid | Atmosphere fog+guld for stærk – lavere alpha, kun kant-tåge |
 | 2026-08-04 | Vej under byer; ingen vej fra havn | Push stroke ud af hub; vand-carve + bugt længere fra havn |
 | 2026-08-04 | Byer så “flyvende” ud | Sprite plantet på jord; alpha-crop padding; skygge under base |
+| 2026-08-04 | Byer fløj stadig (padding/cache) | Tight-crop PNG bottom-align; sink i jordplade; SW cache-bump |
 
 Når du retter en bruger-rapporteret bug: **tilføj en række** i tabellen ovenfor.
 
