@@ -9,81 +9,75 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="bg-stone-100 overflow-hidden select-none">
-  <!-- Top UI -->
-  <div id="ui" class="fixed top-0 left-0 right-0 z-20 pointer-events-none">
-    <div class="flex items-center justify-between p-2 md:p-3 gap-2">
-      <div class="pointer-events-auto min-w-0 max-w-[38%] sm:max-w-[42%]">
-        <h1 class="text-base sm:text-lg md:text-2xl font-bold text-stone-800 tracking-tight truncate">Flowtown</h1>
-        <!-- XP i venstre kolonne under titel – dækker ikke top-knapper -->
-        <div id="xp-strip" class="mt-1 flex items-center gap-1.5 w-full max-w-[11rem] sm:max-w-[14rem]">
-          <div class="flex-1 h-1.5 bg-stone-200/95 rounded-full overflow-hidden border border-stone-300/80 shadow-sm min-w-0">
-            <div id="xp-fill" class="h-full bg-gradient-to-r from-violet-400 to-violet-600 rounded-full transition-all duration-300" style="width:0%"></div>
+  <!-- Top HUD – app-layout: status → værktøjer → opgaver (som mobil city-builders) -->
+  <header id="ui" class="hud fixed top-0 left-0 right-0 z-20 pointer-events-none">
+    <div class="hud-inner pointer-events-auto">
+      <!-- Række 1: titel + ressourcer + XP (helt i top) -->
+      <div class="hud-status">
+        <div class="hud-brand">
+          <span class="hud-title">Flowtown</span>
+        </div>
+        <div class="hud-resources">
+          <div id="level-badge" class="hud-chip hud-chip-lvl" title="Level">
+            Lv <span id="level-count">1</span>
           </div>
-          <span id="xp-label" class="text-[9px] sm:text-[10px] font-medium text-violet-900/90 tabular-nums shrink-0">0/36</span>
+          <div id="money-badge" class="hud-chip hud-chip-money" title="Penge">
+            $<span id="money-count">500</span>
+          </div>
+        </div>
+        <div id="xp-strip" class="hud-xp" title="Erfaring">
+          <div class="hud-xp-track">
+            <div id="xp-fill" class="hud-xp-fill" style="width:0%"></div>
+          </div>
+          <span id="xp-label" class="hud-xp-label">0/36</span>
         </div>
       </div>
 
-      <div class="flex flex-wrap gap-1 sm:gap-1.5 pointer-events-auto justify-end max-w-[62%] sm:max-w-[58%]">
-        <div id="level-badge" class="px-2 py-1.5 bg-violet-50 border border-violet-200 rounded-lg shadow text-xs sm:text-sm font-bold text-violet-900 tabular-nums" title="Netværks-level">
-          Lv <span id="level-count">1</span>
+      <!-- Række 2: værktøjer på én vandret scroll-række -->
+      <div id="tool-bar" class="hud-tools" role="toolbar" aria-label="Værktøjer">
+        <button id="btn-draw" type="button" class="hud-tool">Tegn</button>
+        <button id="btn-pan" type="button" class="hud-tool" title="Flyt kort">Flyt</button>
+        <button id="btn-erase" type="button" class="hud-tool">Slet</button>
+        <button id="btn-upgrade" type="button" class="hud-tool" title="2-spor">2-spor</button>
+        <button id="btn-bridge" type="button" class="hud-tool" title="Bro">Bro</button>
+        <button id="btn-undo" type="button" class="hud-tool">Undo</button>
+        <button id="btn-clear" type="button" class="hud-tool">Clear</button>
+        <button id="btn-bots" type="button" class="hud-tool" title="Bots">Bots</button>
+        <button id="btn-toggle" type="button" class="hud-tool hud-tool-accent">Pause</button>
+      </div>
+
+      <!-- Række 3: opgaver (+ mål når campaign) -->
+      <div class="hud-missions">
+        <div id="jobs-panel" class="hud-jobs">
+          <button type="button" id="btn-jobs-toggle" class="hud-jobs-toggle touch-manipulation">
+            <span class="hud-jobs-title">
+              Opgaver <span id="jobs-count" class="hud-jobs-count">(0)</span>
+            </span>
+            <span id="jobs-chevron" class="hud-jobs-chevron">▼</span>
+          </button>
+          <ul id="jobs-list" class="hud-jobs-list">
+            <li class="text-stone-400 italic">Ingen endnu…</li>
+          </ul>
         </div>
-        <div id="money-badge" class="px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-lg shadow text-xs sm:text-sm font-bold text-amber-900 tabular-nums">
-          $<span id="money-count">500</span>
+        <div id="goals-panel" class="hud-goals hidden">
+          <div class="hud-goals-head">
+            <span id="goals-title" class="truncate">Mål</span>
+            <span id="goals-stars" class="hud-stars">☆☆☆</span>
+          </div>
+          <ul id="goals-list" class="hud-goals-list"></ul>
         </div>
-        <button id="btn-draw" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
-          Tegn
-        </button>
-        <button id="btn-pan" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition" title="Flyt kort uden at tegne">
-          Flyt
-        </button>
-        <button id="btn-erase" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
-          Slet
-        </button>
-        <button id="btn-upgrade" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition" title="Opgrader vej til 2-spor">
-          2-spor
-        </button>
-        <button id="btn-bridge" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition" title="Byg bro over vand">
-          Bro
-        </button>
-        <button id="btn-undo" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
-          Undo
-        </button>
-        <button id="btn-clear" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
-          Clear
-        </button>
-        <button id="btn-bots" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition" title="Slå bot-modstandere til/fra">
-          Bots: Fra
-        </button>
-        <button id="btn-toggle" class="px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow text-xs sm:text-sm font-medium active:scale-95 transition">
-          Pause
-        </button>
       </div>
     </div>
-  </div>
+  </header>
 
-  <!-- Bot scoreboard (shown when bots on) – top right, free of Nord -->
-  <div id="bot-panel" class="fixed top-14 right-2 sm:right-3 z-20 pointer-events-none w-36 sm:w-44 hidden">
+  <!-- Bot scoreboard – under HUD til højre -->
+  <div id="bot-panel" class="fixed right-2 sm:right-3 z-20 pointer-events-none w-36 sm:w-44 hidden" style="top: var(--hud-offset, 9rem)">
     <div class="bg-white/90 backdrop-blur rounded-xl shadow border border-stone-200 p-2 sm:p-2.5">
       <div class="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1.5">Modstandere</div>
       <ul id="bot-list" class="space-y-1 text-[11px] sm:text-xs text-stone-700"></ul>
       <div class="mt-1.5 pt-1.5 border-t border-stone-100 text-[11px] font-medium text-stone-800">
         Dig: $<span id="player-score">0</span>
       </div>
-    </div>
-  </div>
-
-  <!-- Jobs: under top-bar, midt – ikke over knapper -->
-  <div id="jobs-panel" class="fixed top-[4.75rem] sm:top-[5.25rem] left-1/2 -translate-x-1/2 z-20 w-[min(70vw,16rem)] sm:w-[min(92vw,18rem)] pointer-events-auto">
-    <div class="bg-white/92 backdrop-blur rounded-xl shadow border border-stone-200 p-2 sm:p-2.5">
-      <button type="button" id="btn-jobs-toggle" class="w-full flex items-center justify-between gap-2 text-left touch-manipulation">
-        <span class="text-[10px] sm:text-xs font-semibold text-stone-500 uppercase tracking-wide">
-          Aktive opgaver <span id="jobs-count" class="normal-case font-bold text-stone-700">(0)</span>
-        </span>
-        <span id="jobs-chevron" class="text-stone-500 text-xs">▼</span>
-      </button>
-      <ul id="jobs-list" class="space-y-1 text-[11px] sm:text-xs text-stone-700 max-h-24 sm:max-h-32 overflow-y-auto mt-1.5">
-        <li class="text-stone-400 italic">Ingen endnu…</li>
-      </ul>
     </div>
   </div>
 
@@ -148,17 +142,6 @@
         </div>
         <p class="text-[10px] text-stone-400 mt-2 text-center shrink-0">Træk fra byen for at tegne vej · max 3 last-opgrader pr. bil</p>
       </div>
-    </div>
-  </div>
-
-  <!-- Mål (bane) – under XP, foldbar safe zone -->
-  <div id="goals-panel" class="fixed top-[8.25rem] sm:top-36 left-1/2 -translate-x-1/2 z-20 w-[min(92vw,18rem)] pointer-events-none hidden">
-    <div class="bg-white/90 backdrop-blur rounded-xl shadow border border-stone-200 px-2.5 py-1.5 pointer-events-auto">
-      <div class="flex items-center justify-between gap-2">
-        <span id="goals-title" class="text-[10px] sm:text-xs font-semibold text-stone-600 truncate">Mål</span>
-        <span id="goals-stars" class="text-amber-500 text-xs font-bold tabular-nums">☆☆☆</span>
-      </div>
-      <ul id="goals-list" class="mt-1 space-y-0.5 text-[10px] sm:text-[11px] text-stone-600"></ul>
     </div>
   </div>
 

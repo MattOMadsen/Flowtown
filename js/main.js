@@ -181,6 +181,8 @@ function refreshGoalsUi() {
     return;
   }
   panel.classList.remove('hidden');
+  // ensure layout class
+  panel.classList.add('hud-goals');
   const title = document.getElementById('goals-title');
   if (title) title.textContent = ui.scenarioName || 'Mål';
   const stars = document.getElementById('goals-stars');
@@ -264,6 +266,16 @@ function setJobsExpanded(on) {
   jobsExpanded = on;
   if (jobsList) jobsList.classList.toggle('hidden', !on);
   if (jobsChevron) jobsChevron.textContent = on ? '▼' : '▶';
+  // Recalc HUD offset after expand/collapse
+  requestAnimationFrame(() => {
+    const hud = document.getElementById('ui');
+    if (hud) {
+      document.documentElement.style.setProperty(
+        '--hud-offset',
+        `${Math.ceil(hud.getBoundingClientRect().height) + 8}px`
+      );
+    }
+  });
 }
 setJobsExpanded(jobsExpanded);
 function bindTap(id, fn) {
@@ -529,6 +541,12 @@ setInterval(() => {
   refreshDistrictSheet();
   refreshGoalsUi();
   refreshZoomLabel();
+  // Hold pan/zoom free under stacked HUD
+  const hud = document.getElementById('ui');
+  if (hud) {
+    const h = Math.ceil(hud.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--hud-offset', `${h + 8}px`);
+  }
 }, 280);
 
 // Resize

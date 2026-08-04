@@ -1,3 +1,5 @@
+/* Flowtown HUD – mobile-first stack (status → tools → missions) */
+
 html, body {
   margin: 0;
   padding: 0;
@@ -15,19 +17,298 @@ html, body {
   cursor: crosshair;
 }
 
-/* Cozy feel */
 body {
   background: #f5f0e8;
 }
 
-#jobs-panel ul::-webkit-scrollbar {
-  width: 4px;
+/* ---------- Top HUD ---------- */
+.hud {
+  --hud-pad-x: max(0.5rem, env(safe-area-inset-left));
+  --hud-pad-r: max(0.5rem, env(safe-area-inset-right));
+  --hud-pad-t: max(0.35rem, env(safe-area-inset-top));
+  padding: var(--hud-pad-t) var(--hud-pad-r) 0 var(--hud-pad-x);
 }
-#jobs-panel ul::-webkit-scrollbar-thumb {
+
+.hud-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.92) 70%, rgba(255, 255, 255, 0.82) 100%);
+  border: 1px solid rgba(68, 64, 60, 0.12);
+  border-radius: 0 0 1rem 1rem;
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 0.4rem 0.45rem 0.45rem;
+  max-width: 100%;
+}
+
+/* Status row: brand | chips | XP full remaining */
+.hud-status {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  min-height: 1.75rem;
+}
+
+.hud-brand {
+  min-width: 0;
+}
+
+.hud-title {
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+  color: #292524;
+  line-height: 1.1;
+}
+
+@media (min-width: 640px) {
+  .hud-title { font-size: 1.15rem; }
+  .hud-inner { padding: 0.5rem 0.65rem 0.55rem; gap: 0.4rem; }
+}
+
+.hud-resources {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.hud-chip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 0.28rem 0.45rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.hud-chip-lvl {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #5b21b6;
+}
+
+.hud-chip-money {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.hud-xp {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.hud-xp-track {
+  flex: 1;
+  min-width: 3rem;
+  height: 0.45rem;
+  background: #e7e5e4;
+  border: 1px solid #d6d3d1;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.hud-xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a78bfa, #7c3aed);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+  min-width: 0;
+}
+
+.hud-xp-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #5b21b6;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Horizontal tool strip – like Pocket City / builder apps */
+.hud-tools {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 0.05rem;
+  touch-action: pan-x;
+}
+
+.hud-tools::-webkit-scrollbar {
+  display: none;
+}
+
+.hud-tool {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.65rem;
+  min-height: 2rem;
+  border-radius: 0.65rem;
+  border: 1px solid #e7e5e4;
+  background: #fafaf9;
+  color: #44403c;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.hud-tool:active {
+  transform: scale(0.97);
+}
+
+.hud-tool.ring-2 {
+  outline: none;
+}
+
+.hud-tool-accent {
+  background: #10b981;
+  border-color: #059669;
+  color: #fff;
+}
+
+/* When JS toggles active tool styles */
+.hud-tool.bg-indigo-500,
+.hud-tool.bg-sky-500,
+.hud-tool.bg-cyan-600 {
+  border-color: transparent;
+}
+
+/* Missions: jobs + goals side by side on wide, stack on narrow */
+.hud-missions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .hud-missions {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .hud-jobs { flex: 1.2; min-width: 0; }
+  .hud-goals { flex: 1; min-width: 0; }
+}
+
+.hud-jobs {
+  border-radius: 0.65rem;
+  border: 1px solid #e7e5e4;
+  background: #fafaf9;
+  padding: 0.25rem 0.4rem;
+  min-width: 0;
+}
+
+.hud-jobs-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: transparent;
+  border: 0;
+  padding: 0.2rem 0.15rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hud-jobs-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #78716c;
+}
+
+.hud-jobs-count {
+  text-transform: none;
+  font-weight: 800;
+  color: #44403c;
+}
+
+.hud-jobs-chevron {
+  font-size: 0.65rem;
+  color: #a8a29e;
+}
+
+.hud-jobs-list {
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  max-height: 4.5rem;
+  overflow-y: auto;
+  font-size: 0.7rem;
+  color: #44403c;
+  line-height: 1.25;
+}
+
+.hud-jobs-list.hidden {
+  display: none;
+}
+
+.hud-jobs-list li {
+  padding: 0.15rem 0.1rem;
+  border-top: 1px solid #f5f5f4;
+}
+
+.hud-jobs-list::-webkit-scrollbar {
+  width: 3px;
+}
+.hud-jobs-list::-webkit-scrollbar-thumb {
   background: #d6d3d1;
   border-radius: 4px;
 }
 
+.hud-goals {
+  border-radius: 0.65rem;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  padding: 0.3rem 0.45rem;
+  min-width: 0;
+}
+
+.hud-goals.hidden {
+  display: none !important;
+}
+
+.hud-goals-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.hud-stars {
+  color: #f59e0b;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-goals-list {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+  font-size: 0.68rem;
+  color: #78716c;
+  line-height: 1.3;
+}
+
+/* Money pulse */
 #money-badge {
   transition: box-shadow 0.2s ease;
 }
@@ -36,16 +317,12 @@ body {
   transition: box-shadow 0.2s ease;
 }
 
-#xp-fill {
-  min-width: 0;
-}
-
 #district-sheet button:disabled {
   opacity: 0.45;
   pointer-events: none;
 }
 
-/* Edge pan arrows – mid sides, large touch, not corner districts */
+/* Edge pan arrows */
 .pan-edge {
   position: fixed;
   z-index: 30;
@@ -72,19 +349,18 @@ body {
 }
 .pan-edge-left {
   left: max(0.35rem, env(safe-area-inset-left));
-  top: 50%;
+  top: 55%;
   transform: translateY(-50%);
 }
 .pan-edge-left:active { transform: translateY(-50%) scale(0.94); }
 .pan-edge-right {
   right: max(0.35rem, env(safe-area-inset-right));
-  top: 50%;
+  top: 55%;
   transform: translateY(-50%);
 }
 .pan-edge-right:active { transform: translateY(-50%) scale(0.94); }
 .pan-edge-up {
-  /* under top toolbar so den ikke dækker knapper */
-  top: max(6.25rem, calc(env(safe-area-inset-top) + 5.5rem));
+  top: calc(var(--hud-offset, 8.5rem) + 0.35rem);
   left: 50%;
   transform: translateX(-50%) rotate(90deg);
 }
@@ -114,8 +390,4 @@ body {
   touch-action: manipulation;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-}
-
-#jobs-panel {
-  max-width: min(18rem, 92vw);
 }
