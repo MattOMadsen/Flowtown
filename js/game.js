@@ -1,7 +1,8 @@
 import { Road } from './road.js';
 import { Vehicle } from './vehicle.js';
 import { InputHandler } from './input.js';
-import { generateJob, jobComplete, jobLabel } from './jobs.js';
+import { generateJob, jobComplete, jobLabel, createJob, JOB_TYPES, setNextJobId } from './jobs.js';
+import { playBuy, playDeliver, playRoad, playLevelUp, playJobDone, playError } from './audio.js';
 import { Bot, BOT_PRESETS } from './bot.js';
 import {
   loadMeta,
@@ -238,10 +239,109 @@ export class Game {
       this.showToast(`${name}: zoomet ind · Fit = hele brættet · tryk sted for bil`, 3.6);
     }
     this.refreshGoals();
+    this._sessionDirty = true;
     if (!this._loopStarted) {
       this._loopStarted = true;
       requestAnimationFrame((t) => this.loop(t));
     }
+  }
+
+  /**
+   * Genindlæs gemt session (veje, penge, jobs, flåde).
+   * @param {object} data from session.js loadSessionRaw
+   * @returns {boolean}
+   */
+  restoreSession(data) {
+    if (!data?.scenarioId) return false;
+    this.loadScenario(data.scenarioId, { bots: !!data.botsEnabled });
+
+    this.money = data.money != null ? data.money : this.money;
+    this.playerScore = data.playerScore | 0;
+    this.arrivedCount = data.arrivedCount | 0;
+    this.playerDelivered = data.playerDelivered | 0;
+    this.jobsCompleted = data.jobsCompleted | 0;
+
+    // Roads
+    this.roads = [];
+    for (const r of data.roads || []) {
+      if (!r.points || r.points.length < 2) continue;
+      const road = new Road(r.points.map(p => ({ x: p.x, y: p.y })), {
+        owner: r.owner || 'player',
+        lanes: r.lanes != null ? r.lanes : 2,
+        isBridge: !!r.isBridge,
+        paidCost: r.paidCost || 0
+      });
+      if (r.id) road.id = r.id;
+      this.roads.push(road);
+    }
+
+    // Jobs (re-link districts by name)
+    this.jobs = [];
+    let maxJobId = 0;
+    for (const j of data.jobs || []) {
+      const from = this.districts.find(d => d.name === j.fromName);
+      const to = this.districts.find(d => d.name === j.toName);
+      if (!from || !to) continue;
+      const typeKey = j.type && JOB_TYPES[j.type] ? j.type : 'passengers';
+      const job = createJob(from, to, typeKey, Math.max(1, j.amount | 0));
+      if (j.id != null) job.id = j.id;
+      job.delivered = Math.max(0, Math.min(job.amount, j.delivered | 0));
+      job.reward = j.reward != null ? j.reward : job.reward;
+      job.active = job.delivered < job.amount;
+      if (!job.active) continue;
+      this.jobs.push(job);
+      maxJobId = Math.max(maxJobId, job.id | 0);
+    }
+    setNextJobId(maxJobId + 1);
+
+    // Fleet
+    this.vehicles = this.vehicles.filter(v => v.owner !== 'player');
+    for (const f of data.fleet || []) {
+      const home = this.districts.find(d => d.name === f.homeName) || this.districts[0];
+      if (!home) continue;
+      const classId = f.classId || 'car_std';
+      const cls = getClass(classId);
+      const rank = f.upgradeRank | 0;
+      const v = new Vehicle({
+        id: f.id || undefined,
+        x: f.x != null ? f.x : home.x,
+        y: f.y != null ? f.y : home.y,
+        targetDistrict: home,
+        roads: this.roads,
+        kind: cls.kind,
+        classId,
+        upgradeRank: rank,
+        job: null,
+        owner: 'player',
+        cargo: cargoCapacity(classId, rank),
+        fleetOwned: true,
+        homeName: home.name
+      });
+      v.parkIdle(home, this.roads);
+      this.vehicles.push(v);
+    }
+
+    if (data.camera && typeof data.camera.zoom === 'number') {
+      this.camera.x = data.camera.x || 0;
+      this.camera.y = data.camera.y || 0;
+      this.camera.zoom = this.clampZoom(data.camera.zoom);
+    } else {
+      this.startCamera();
+    }
+
+    this.running = true;
+    this.paused = false;
+    this.lastTime = performance.now();
+    this.refreshGoals();
+    this.assignFleetJobs();
+    this.showToast('Fortsætter gemt spil…', 2.2);
+    this._sessionDirty = false;
+    loadGameAssets().then(() => this.requestDraw());
+    if (!this._loopStarted) {
+      this._loopStarted = true;
+      requestAnimationFrame((t) => this.loop(t));
+    }
+    return true;
   }
 
   allPlacesHaveRoad() {
@@ -467,6 +567,7 @@ export class Game {
     const price = buyPriceForClass(classId, fleet.length);
     if (this.money < price) {
       this.showToast(`Ikke råd (mangler $${price - Math.floor(this.money)})`);
+      playError();
       return { ok: false, reason: 'money' };
     }
 
@@ -494,7 +595,9 @@ export class Game {
     this.totalSpawned++;
     this.addFloatText(d.x, d.y - d.r, `−$${price}`, '#b91c1c');
     this.showToast(`${cls.icon} ${cls.label} købt i ${d.name}`);
+    playBuy();
     this.assignFleetJobs();
+    this._sessionDirty = true;
     return { ok: true, vehicle: v, price };
   }
 
@@ -846,6 +949,8 @@ export class Game {
 
     this.addRoadForOwner(points, 'player', null, cost, true, { isBridge });
     if (isBridge) this.showToast(crossesWater ? 'Bro bygget!' : 'Bro-segment (dyrt)');
+    playRoad();
+    this._sessionDirty = true;
     this.currentStroke = null;
     this.pendingRoadCost = 0;
   }
@@ -979,6 +1084,7 @@ export class Game {
         `Level ${result.level}! 🎉 +$${moneyBonus}`,
         3.2
       );
+      playLevelUp();
     } else if (opts.toast) {
       this.showToast(opts.toast, 2.0);
     }
@@ -1373,6 +1479,7 @@ export class Game {
 
     const kind = job.type === 'cargo' ? 'truck' : 'car';
     const cargo = kind === 'truck' ? 1 + Math.floor(Math.random() * 2) : 1;
+    // express/tourist use car (already via kind)
 
     const v = new Vehicle({
       x: spawn.x,
@@ -1437,11 +1544,17 @@ export class Game {
         );
         const cap = vehicle.getCargoCapacity?.() || 1;
         const cargoFit = Math.min(remaining, cap) * 14;
-        // U3: match class to job shape – heavy loves big cargo, fast loves small passenger runs
+        // U3: match class to job shape – heavy loves big cargo, fast loves express
         let classFit = 0;
         if (job.type === 'cargo') {
           if (vehicle.classId === 'truck_heavy') classFit = remaining >= 5 ? 55 : 20;
           else if (vehicle.classId === 'truck_std') classFit = 15;
+        } else if (job.type === 'express') {
+          if (vehicle.classId === 'car_fast') classFit = 70;
+          else if (vehicle.classId === 'car_std') classFit = 10;
+        } else if (job.type === 'tourist') {
+          if (vehicle.classId === 'car_std') classFit = 40;
+          else if (vehicle.classId === 'car_fast') classFit = 35;
         } else {
           if (vehicle.classId === 'car_fast') classFit = remaining <= 6 ? 50 : 18;
           else if (vehicle.classId === 'car_std') classFit = 15;
@@ -1514,8 +1627,12 @@ export class Game {
         job.active = false;
         jobJustCompleted = true;
         if (vehicle.owner === 'player') this.jobsCompleted = (this.jobsCompleted || 0) + 1;
-        this.showToast(`Opgave klar: ${job.from.name} → ${job.to.name}!`);
+        const label = job.typeMeta?.label || 'Opgave';
+        this.showToast(`${job.typeMeta?.icon || '✓'} ${label}: ${job.from.name} → ${job.to.name}!`);
         this.addArrivalParticles(vehicle.x, vehicle.y, job.to.color);
+        if (vehicle.owner === 'player') playJobDone();
+      } else if (vehicle.owner === 'player') {
+        playDeliver();
       }
     }
 
@@ -1535,6 +1652,8 @@ export class Game {
       let xpGain = XP_REWARDS.perUnit * Math.max(1, applied);
       if (jobJustCompleted && job) {
         xpGain += XP_REWARDS.jobCompleteBase + job.amount * XP_REWARDS.jobCompletePerUnit;
+        if (job.type === 'express') xpGain += 4;
+        if (job.type === 'tourist') xpGain += 3;
       }
       this.grantXp(xpGain, { floatAt: { x: vehicle.x, y: vehicle.y } });
 
@@ -1674,10 +1793,14 @@ export class Game {
       const from = this.districts.find(d => d.name === job.from.name) || job.from;
       const to = this.districts.find(d => d.name === job.to.name) || job.to;
 
+      const meta = job.typeMeta || JOB_TYPES[job.type] || JOB_TYPES.passengers;
+      const hex = meta.color || '#2563eb';
       // Dashed route hint
       ctx.beginPath();
       ctx.setLineDash([6 * this.dpr, 8 * this.dpr]);
-      ctx.strokeStyle = job.type === 'cargo' ? 'rgba(180, 83, 9, 0.35)' : 'rgba(37, 99, 235, 0.35)';
+      ctx.strokeStyle = hex.length === 7
+        ? `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},0.38)`
+        : 'rgba(37, 99, 235, 0.35)';
       ctx.lineWidth = 2 * this.dpr;
       ctx.moveTo(from.x, from.y);
       ctx.lineTo(to.x, to.y);
@@ -1686,7 +1809,7 @@ export class Game {
 
       // Origin badge
       const left = Math.max(0, job.amount - job.delivered);
-      this.drawBadge(ctx, from.x, from.y - from.r - 14 * this.dpr, `${job.typeMeta.icon}${left}`, job.type === 'cargo' ? '#b45309' : '#2563eb');
+      this.drawBadge(ctx, from.x, from.y - from.r - 14 * this.dpr, `${meta.icon}${left}`, hex);
       // Dest arrow badge
       this.drawBadge(ctx, to.x, to.y - to.r - 14 * this.dpr, '⚑', '#059669');
     }

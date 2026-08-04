@@ -10,7 +10,8 @@ export const JOB_TYPES = {
     vehicle: 'car',
     unit: 'personer',
     baseReward: 28,
-    rewardPerUnit: 16
+    rewardPerUnit: 16,
+    color: '#2563eb'
   },
   cargo: {
     id: 'cargo',
@@ -19,16 +20,45 @@ export const JOB_TYPES = {
     vehicle: 'truck',
     unit: 'kasser',
     baseReward: 34,
-    rewardPerUnit: 20
+    rewardPerUnit: 20,
+    color: '#b45309'
+  },
+  /** Hurtig persontransport – belønner fart */
+  express: {
+    id: 'express',
+    label: 'Ekspres',
+    icon: '⚡',
+    vehicle: 'car',
+    unit: 'passagerer',
+    baseReward: 42,
+    rewardPerUnit: 22,
+    color: '#db2777',
+    preferFast: true
+  },
+  /** Turister mellem by / havn / hovedby */
+  tourist: {
+    id: 'tourist',
+    label: 'Turister',
+    icon: '🧳',
+    vehicle: 'car',
+    unit: 'turister',
+    baseReward: 36,
+    rewardPerUnit: 18,
+    color: '#7c3aed',
+    tourist: true
   }
 };
 
 let nextJobId = 1;
 
+export function setNextJobId(n) {
+  nextJobId = Math.max(1, n | 0);
+}
+
 export function createJob(from, to, typeKey, amount) {
   const type = JOB_TYPES[typeKey] || JOB_TYPES.passengers;
   const dist = Math.hypot((to.x || 0) - (from.x || 0), (to.y || 0) - (from.y || 0));
-  const distBonus = Math.round(dist * 0.012);
+  const distBonus = Math.round(dist * 0.012 * (type.id === 'express' ? 1.35 : 1));
   const reward = type.baseReward + amount * type.rewardPerUnit + distBonus;
   return {
     id: nextJobId++,
@@ -61,14 +91,30 @@ export function jobLabel(job) {
 export function randomJobAmount(typeKey, from, to) {
   let base;
   if (typeKey === 'cargo') base = 3 + Math.floor(Math.random() * 5);
+  else if (typeKey === 'express') base = 2 + Math.floor(Math.random() * 4); // mindre, hurtigere
+  else if (typeKey === 'tourist') base = 3 + Math.floor(Math.random() * 5);
   else base = 4 + Math.floor(Math.random() * 7);
   if (typeKey === 'cargo' && (from?.type === 'farm' || from?.type === 'factory' || from?.type === 'harbor')) {
     base += 1 + Math.floor(Math.random() * 2);
   }
-  if (typeKey === 'passengers' && (from?.type === 'capital' || from?.type === 'town')) {
+  if ((typeKey === 'passengers' || typeKey === 'tourist') &&
+      (from?.type === 'capital' || from?.type === 'town' || from?.type === 'harbor')) {
     base += Math.floor(Math.random() * 2);
   }
   return base;
+}
+
+function isTouristPlace(d) {
+  return d && (d.type === 'capital' || d.type === 'town' || d.type === 'harbor');
+}
+
+/** Pick passenger-family type for random generation */
+function pickPassengerType(from, to) {
+  const touristRoute = isTouristPlace(from) && isTouristPlace(to);
+  const r = Math.random();
+  if (touristRoute && r < 0.38) return 'tourist';
+  if (r < 0.28) return 'express';
+  return 'passengers';
 }
 
 /**
@@ -104,26 +150,52 @@ export function generateJob(districts, existingJobs = []) {
     return createJob(farm, factory, 'cargo', randomJobAmount('cargo', farm, factory));
   }
 
+  // Dedicated tourist / express attempts (~18% each when places exist)
+  if (Math.random() < 0.18) {
+    const hubs = districts.filter(isTouristPlace);
+    if (hubs.length >= 2) {
+      const from = hubs[Math.floor(Math.random() * hubs.length)];
+      let to = hubs[Math.floor(Math.random() * hubs.length)];
+      while (to === from) to = hubs[Math.floor(Math.random() * hubs.length)];
+      return createJob(from, to, 'tourist', randomJobAmount('tourist', from, to));
+    }
+  }
+  if (Math.random() < 0.16) {
+    const from = districts[Math.floor(Math.random() * districts.length)];
+    let to = districts[Math.floor(Math.random() * districts.length)];
+    while (to === from) to = districts[Math.floor(Math.random() * districts.length)];
+    return createJob(from, to, 'express', randomJobAmount('express', from, to));
+  }
+
   let best = null;
   let bestScore = -Infinity;
 
   for (let attempt = 0; attempt < 32; attempt++) {
-    const typeKey = Math.random() < 0.45 ? 'passengers' : 'cargo';
+    const wantCargo = Math.random() < 0.42;
+    let typeKey = wantCargo ? 'cargo' : 'passengers';
     const from = districts[Math.floor(Math.random() * districts.length)];
     let to = districts[Math.floor(Math.random() * districts.length)];
     while (to === from) to = districts[Math.floor(Math.random() * districts.length)];
+    if (!wantCargo) typeKey = pickPassengerType(from, to);
 
     const routeJobs = existingJobs.filter(
       j => j.active && j.from.name === from.name && j.to.name === to.name
     ).length;
 
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
-    const typeScore = jobRouteScore(from, to, typeKey);
+    const scoreType = typeKey === 'express' || typeKey === 'tourist' ? 'passengers' : typeKey;
+    const typeScore = jobRouteScore(from, to, scoreType);
     // Hard reject nonsense cargo
     if (typeKey === 'cargo' && typeScore < 0) continue;
+    if (typeKey === 'tourist' && !(isTouristPlace(from) && isTouristPlace(to))) continue;
+
+    let bonus = 0;
+    if (typeKey === 'express') bonus = 8;
+    if (typeKey === 'tourist') bonus = 10;
 
     const score =
       typeScore +
+      bonus +
       dist * 0.018 -
       routeJobs * 45 +
       Math.random() * 12;

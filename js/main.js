@@ -1,17 +1,61 @@
 import { Game } from './game.js';
 import { upgradePrice } from './fleet.js';
 import { loadGameAssets } from './assets.js';
+import {
+  unlockAudio,
+  isMuted,
+  toggleMute,
+  playUi
+} from './audio.js';
+import {
+  hasSavedSession,
+  loadSessionRaw,
+  saveSession,
+  clearSession,
+  sessionSummary
+} from './session.js';
+import {
+  TUTORIAL_STEPS,
+  shouldShowTutorial,
+  setTutorialDone
+} from './tutorial.js';
 
 const canvas = document.getElementById('game');
 const game = new Game(canvas);
 loadGameAssets().then(() => game.requestDraw?.());
 
+// Unlock audio on first gesture
+const unlockOnce = () => {
+  unlockAudio();
+  window.removeEventListener('pointerdown', unlockOnce, true);
+};
+window.addEventListener('pointerdown', unlockOnce, true);
+
 // UI buttons
-document.getElementById('btn-undo').addEventListener('click', () => game.undo());
-document.getElementById('btn-clear').addEventListener('click', () => game.clearRoads());
+document.getElementById('btn-undo').addEventListener('click', () => { playUi(); game.undo(); });
+document.getElementById('btn-clear').addEventListener('click', () => { playUi(); game.clearRoads(); });
 document.getElementById('btn-toggle').addEventListener('click', (e) => {
+  playUi();
   game.togglePause();
   e.target.textContent = game.paused ? 'Play' : 'Pause';
+});
+
+// Mute
+const btnMute = document.getElementById('btn-mute');
+function refreshMuteBtn() {
+  if (!btnMute) return;
+  const m = isMuted();
+  btnMute.textContent = m ? '🔇' : '🔊';
+  btnMute.setAttribute('aria-pressed', m ? 'true' : 'false');
+  btnMute.title = m ? 'Lyd er slået fra' : 'Lyd er slået til';
+}
+refreshMuteBtn();
+btnMute?.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  toggleMute();
+  refreshMuteBtn();
+  if (!isMuted()) playUi();
 });
 
 const btnDraw = document.getElementById('btn-draw');
@@ -167,6 +211,7 @@ function startGame() {
   const help = document.getElementById('help');
   if (help) help.style.display = 'none';
   const withBots = !!document.getElementById('start-with-bots')?.checked;
+  clearSession(); // nyt spil overskriver gammelt save
   game.loadScenario(selectedScenarioId, { bots: withBots });
   updateBotButton();
   game.start();
@@ -174,9 +219,49 @@ function startGame() {
   const goalsPanel = document.getElementById('goals-panel');
   if (goalsPanel) goalsPanel.classList.toggle('hidden', !!game.scenario?.freeplay);
   refreshGoalsUi();
+  saveSession(game);
+  maybeStartTutorial();
 }
 
+function continueGame() {
+  const data = loadSessionRaw();
+  if (!data) return;
+  const help = document.getElementById('help');
+  if (help) help.style.display = 'none';
+  selectedScenarioId = data.scenarioId;
+  game.restoreSession(data);
+  updateBotButton();
+  lastStarsShown = -1;
+  const goalsPanel = document.getElementById('goals-panel');
+  if (goalsPanel) goalsPanel.classList.toggle('hidden', !!game.scenario?.freeplay);
+  refreshGoalsUi();
+  playUi();
+}
+
+function refreshContinueButton() {
+  const btn = document.getElementById('btn-continue');
+  const sum = document.getElementById('continue-summary');
+  const data = hasSavedSession() ? loadSessionRaw() : null;
+  if (!btn) return;
+  if (data) {
+    btn.classList.remove('hidden');
+    if (sum) {
+      sum.classList.remove('hidden');
+      sum.textContent = sessionSummary(data);
+    }
+  } else {
+    btn.classList.add('hidden');
+    if (sum) sum.classList.add('hidden');
+  }
+}
+
+document.getElementById('btn-continue')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  continueGame();
+});
+
 function openMapSelect() {
+  if (game.running) saveSession(game);
   game.running = false;
   game.closeDistrictSheet?.();
   const help = document.getElementById('help');
@@ -186,8 +271,63 @@ function openMapSelect() {
     end.classList.add('hidden');
     end.classList.remove('flex');
   }
+  hideTutorial();
   renderScenarioList();
+  refreshContinueButton();
 }
+
+// --- Tutorial ---
+let tutStep = 0;
+function hideTutorial() {
+  const el = document.getElementById('tutorial');
+  if (el) el.classList.add('hidden');
+}
+function showTutorialStep(i) {
+  const el = document.getElementById('tutorial');
+  if (!el) return;
+  const step = TUTORIAL_STEPS[i];
+  if (!step) {
+    setTutorialDone();
+    hideTutorial();
+    return;
+  }
+  tutStep = i;
+  el.classList.remove('hidden');
+  const title = document.getElementById('tut-title');
+  const body = document.getElementById('tut-body');
+  const hint = document.getElementById('tut-hint');
+  if (title) title.textContent = step.title;
+  if (body) body.textContent = step.body;
+  if (hint) hint.textContent = step.hint;
+  const next = document.getElementById('tut-next');
+  if (next) next.textContent = i >= TUTORIAL_STEPS.length - 1 ? 'Kom i gang!' : 'Næste';
+  const dots = document.getElementById('tut-dots');
+  if (dots) {
+    dots.innerHTML = TUTORIAL_STEPS.map((_, di) =>
+      `<span class="inline-block w-1.5 h-1.5 rounded-full ${di === i ? 'bg-emerald-500' : 'bg-stone-300'}"></span>`
+    ).join('');
+  }
+}
+function maybeStartTutorial() {
+  if (!shouldShowTutorial()) return;
+  showTutorialStep(0);
+}
+document.getElementById('tut-next')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  playUi();
+  if (tutStep >= TUTORIAL_STEPS.length - 1) {
+    setTutorialDone();
+    hideTutorial();
+  } else {
+    showTutorialStep(tutStep + 1);
+  }
+});
+document.getElementById('tut-skip')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  playUi();
+  setTutorialDone();
+  hideTutorial();
+});
 
 function refreshGoalsUi() {
   const ui = game.getGoalsUi?.();
@@ -355,7 +495,10 @@ function renderJobs() {
   }
   list.innerHTML = jobs.map(j => {
     const pct = Math.round(j.progress * 100);
-    const barColor = j.type === 'cargo' ? 'bg-amber-500' : 'bg-blue-500';
+    let barColor = 'bg-blue-500';
+    if (j.type === 'cargo') barColor = 'bg-amber-500';
+    else if (j.type === 'express') barColor = 'bg-pink-500';
+    else if (j.type === 'tourist') barColor = 'bg-violet-500';
     return `
       <li class="leading-tight">
         <div class="flex justify-between gap-1">
@@ -612,6 +755,19 @@ document.body.addEventListener('touchmove', (e) => {
     e.preventDefault();
   }
 }, { passive: false });
+
+// Auto-gem session (autosave)
+setInterval(() => {
+  if (game.running && !game.paused) saveSession(game);
+}, 8000);
+window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && game.running) saveSession(game);
+});
+window.addEventListener('pagehide', () => {
+  if (game.running) saveSession(game);
+});
+
+refreshContinueButton();
 
 // Tegn startskærm (distrikter synlige før Start)
 game.draw();

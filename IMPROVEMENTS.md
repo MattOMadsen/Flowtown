@@ -37,29 +37,31 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] Mere startpenge (~1400–1600), billigere veje/broer, mildere stuck-bøde
 - [x] Lettere stjernemål i intro/coast/valley
 
+### UX / retention (04/08 batch 1·2·4·5)
+- [x] **P1-2** Tutorial første gang (3 trin, spring over)
+- [x] **P1-1** Soft Web Audio + mute-knap (🔊/🔇)
+- [x] **PROG-D3** Jobtyper: ekspres ⚡ + turister 🧳 (+ person/gods)
+- [x] **P1-6** Gem session (autosave + “Fortsæt gemt spil”)
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **P1-2** | Kort tutorial første gang | “Tegn vej → tryk by → køb bil” |
-| 2 | **P1-1** | Soft lyd + mute | Ding ved levering, lav UI-klik |
-| 3 | **PROG-F3** | Pris-kurve / sælg bil / flåde-cap | Efter F1 – balance-dybde |
-| 4 | **PROG-D3** | Flere jobtyper (ekspres, turist) | jobs.js |
-| 5 | **P1-6** | Gem session (veje, penge, jobs) | Ud over meta/highscore |
-| 6 | **P1-3** | Rush hour / peak demand | Periodisk spawn-boost |
-| 7 | **P1-4** | Distrikter vokser | PLAN Fase 2 |
-| 8 | **P0-4** | Tydeligere snap-feedback | Delvist glød – kan styrkes |
-| 9 | **P0-5** | Safe-area polish (notch/home) | Delvist `env(safe-area-*)` |
-| 10 | **PROG-B2** | Global shop (infra unlock via level) | By-sheet dækker flåde i dag |
-| 11 | **P2-1** | Trafiklys / envejsveje | Valgfrit tool |
-| 12 | **P2-3** | Station / lager / depot | Placering + buff |
-| 13 | **P2-4** | Achievements | localStorage flags |
-| 14 | **P3-2** | Stærkere bot-AI | bot.js |
-| 15 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
-| 16 | **P3-3/4** | Multiplayer / leaderboard | Kræver backend |
-| 17 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
+| 1 | **PROG-F3** | Pris-kurve / sælg bil / flåde-cap | Balance-dybde |
+| 2 | **P1-3** | Rush hour / peak demand | Periodisk spawn-boost |
+| 3 | **P1-4** | Distrikter vokser | PLAN Fase 2 |
+| 4 | **P0-4** | Tydeligere snap-feedback | Delvist glød |
+| 5 | **P0-5** | Safe-area polish (notch/home) | Delvist `env(safe-area-*)` |
+| 6 | **PROG-B2** | Global shop (infra unlock via level) | By-sheet dækker flåde |
+| 7 | **P2-1** | Trafiklys / envejsveje | Valgfrit tool |
+| 8 | **P2-3** | Station / lager / depot | Placering + buff |
+| 9 | **P2-4** | Achievements | localStorage flags |
+| 10 | **P3-2** | Stærkere bot-AI | bot.js |
+| 11 | **P3-1** | Vejr / tid på døgnet | Visuelt deluxe |
+| 12 | **P3-3/4** | Multiplayer / leaderboard | Backend |
+| 13 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
 
 ### Hurtige polish der stadig kan give værdi
 - [ ] Tydelig “tryk by for at købe”-hint første minut
@@ -90,7 +92,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 | PROG-B3 | ~~2-spor~~ | Done |
 | PROG-C1 | ~~Baner + stjerner~~ | Done |
 | PROG-C2 | End-of-run polish | Delvist |
-| PROG-D3 | Flere jobtyper | Mangler |
+| PROG-D3 | ~~Ekspres + turist jobs~~ | Done 2026-08-04 |
 | PROG-F3 | Pris-kurve / sælg / cap | Mangler |
 | PROG-U1–U3 | ~~Opgrader + unlock + match~~ | Done |
 
@@ -98,12 +100,12 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 
 | ID | Status | Noter |
 |----|--------|--------|
-| P1-1 | Lyd + mute | Mangler |
-| P1-2 | Tutorial | Mangler – **anbefalet næste** |
+| P1-1 | ~~Lyd + mute~~ | Done 2026-08-04 |
+| P1-2 | ~~Tutorial~~ | Done 2026-08-04 |
 | P1-3 | Rush hour | Mangler |
 | P1-4 | Distrikter vokser | Mangler |
 | P1-5 | Større map | Delvist via M1/MAP2 |
-| P1-6 | Gem session | Mangler |
+| P1-6 | ~~Gem session~~ | Done 2026-08-04 |
 
 ## P2 / P3 / Teknik
 

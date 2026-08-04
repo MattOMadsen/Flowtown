@@ -111,10 +111,11 @@ export function canUpgrade(upgradeRank) {
   return (upgradeRank | 0) < FLEET.maxUpgradeRank;
 }
 
-/** Job type → vehicle kind */
+/** Job type → vehicle kind (express/tourist = personbil) */
 export function kindForJob(job) {
   if (!job) return 'car';
-  return job.type === 'cargo' ? 'truck' : 'car';
+  if (job.type === 'cargo') return 'truck';
+  return 'car';
 }
 
 export function vehicleCanDoJob(vehicle, job) {
