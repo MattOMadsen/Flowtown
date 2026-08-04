@@ -286,6 +286,29 @@
     </div>
   </div>
 
+  <!-- Kryds-valg: bro vs kryds med lys (efter vej-over-vej) – midt, ikke hjørne-distrikter -->
+  <div id="crossing-choice" class="crossing-choice hidden" role="dialog" aria-modal="true" aria-labelledby="crossing-choice-title">
+    <div class="crossing-choice-card">
+      <h3 id="crossing-choice-title" class="crossing-choice-title">Vejkryds</h3>
+      <p class="crossing-choice-sub">Din vej krydser en anden. Vælg hvordan:</p>
+      <div class="crossing-choice-btns">
+        <button type="button" id="cross-opt-bridge" class="crossing-opt crossing-opt-bridge touch-manipulation">
+          <span class="crossing-opt-icon">🌉</span>
+          <span class="crossing-opt-label">Bro</span>
+          <span class="crossing-opt-desc">Over den anden vej</span>
+          <span id="cross-cost-bridge" class="crossing-opt-price">$0</span>
+        </button>
+        <button type="button" id="cross-opt-junction" class="crossing-opt crossing-opt-junction touch-manipulation">
+          <span class="crossing-opt-icon">🚦</span>
+          <span class="crossing-opt-label">Kryds med lys</span>
+          <span class="crossing-opt-desc">Samme niveau + trafiklys</span>
+          <span id="cross-cost-junction" class="crossing-opt-price">$0</span>
+        </button>
+      </div>
+      <button type="button" id="cross-opt-cancel" class="crossing-opt-cancel touch-manipulation">Annuller</button>
+    </div>
+  </div>
+
   <!-- Første-gangs tutorial (kort overlay) -->
   <div id="tutorial" class="fixed inset-x-0 bottom-0 z-50 hidden pointer-events-none pb-[max(0.75rem,env(safe-area-inset-bottom))]">
     <div class="pointer-events-auto mx-auto max-w-md px-3">

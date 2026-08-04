@@ -32,8 +32,10 @@ export class Road {
     paidCost = 0,
     /** 0 = tovejs, 1 = kun t:0→1, -1 = kun t:1→0 */
     oneWay = 0,
-    /** Trafiklys midt på segmentet */
-    hasLight = false
+    /** Trafiklys på segmentet */
+    hasLight = false,
+    /** 0–1 position langs vejen (default midt) */
+    lightT = 0.5
   } = {}) {
     this.points = points;
     this.id = Math.random().toString(36).slice(2);
@@ -46,6 +48,7 @@ export class Road {
     this.paidCost = Math.max(0, paidCost | 0);
     this.oneWay = oneWay === -1 || oneWay === 1 ? oneWay : 0;
     this.hasLight = !!hasLight;
+    this.lightT = Math.max(0.05, Math.min(0.95, lightT != null ? lightT : 0.5));
     /** 0 green, 1 yellow, 2 red – set by game tick */
     this.lightPhase = 0;
     this._length = null;
@@ -404,9 +407,9 @@ export class Road {
       }
     }
 
-    // Trafiklys midt på vejen
+    // Trafiklys (ved kryds eller midt)
     if (this.hasLight) {
-      const lp = this.getPointAt(0.5);
+      const lp = this.getPointAt(this.lightT != null ? this.lightT : 0.5);
       const phase = this.lightPhase | 0;
       const colors = ['#22c55e', '#eab308', '#ef4444'];
       const col = colors[Math.max(0, Math.min(2, phase))] || colors[0];

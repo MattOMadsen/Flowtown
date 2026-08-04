@@ -928,3 +928,122 @@ body {
 #district-sheet [class*="bg-white"] {
   border-radius: 1.25rem 1.25rem 0 0;
 }
+
+/* Kryds-valg: bro vs lys – midt på skærm, safe zone */
+.crossing-choice {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(0.75rem, var(--safe-top)) max(0.75rem, var(--safe-right)) max(0.75rem, var(--safe-bottom)) max(0.75rem, var(--safe-left));
+  background: rgba(28, 25, 23, 0.38);
+  pointer-events: auto;
+}
+.crossing-choice.hidden {
+  display: none;
+}
+.crossing-choice-card {
+  width: min(22rem, 100%);
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
+  border-radius: 1.15rem;
+  border: 1px solid rgba(231, 229, 228, 0.95);
+  box-shadow: 0 18px 40px rgba(28, 25, 23, 0.22);
+  padding: 1rem 1rem 0.85rem;
+}
+.crossing-choice-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1c1917;
+  text-align: center;
+}
+.crossing-choice-sub {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.8rem;
+  color: #57534e;
+  text-align: center;
+  line-height: 1.35;
+}
+.crossing-choice-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+.crossing-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
+  padding: 0.75rem 0.45rem 0.65rem;
+  border-radius: 0.9rem;
+  border: 1.5px solid #e7e5e4;
+  background: #fafaf9;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  min-height: 6.2rem;
+}
+.crossing-opt:active {
+  transform: scale(0.97);
+}
+.crossing-opt-bridge {
+  border-color: #bae6fd;
+  background: linear-gradient(180deg, #f0f9ff, #f8fafc);
+}
+.crossing-opt-junction {
+  border-color: #bbf7d0;
+  background: linear-gradient(180deg, #f0fdf4, #f8fafc);
+}
+.crossing-opt-icon {
+  font-size: 1.55rem;
+  line-height: 1;
+}
+.crossing-opt-label {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #1c1917;
+}
+.crossing-opt-desc {
+  font-size: 0.65rem;
+  color: #78716c;
+  text-align: center;
+  line-height: 1.25;
+  padding: 0 0.15rem;
+}
+.crossing-opt-price {
+  margin-top: 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #b91c1c;
+}
+.crossing-opt-bridge .crossing-opt-price {
+  color: #0369a1;
+}
+.crossing-opt-junction .crossing-opt-price {
+  color: #15803d;
+}
+.crossing-opt:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.crossing-opt-cancel {
+  display: block;
+  width: 100%;
+  margin-top: 0.55rem;
+  padding: 0.55rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: #f5f5f4;
+  color: #57534e;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.crossing-opt-cancel:active {
+  background: #e7e5e4;
+}

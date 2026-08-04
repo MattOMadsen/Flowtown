@@ -31,6 +31,60 @@ const canvas = document.getElementById('game');
 const game = new Game(canvas);
 loadGameAssets().then(() => game.requestDraw?.());
 
+// Kryds-valg: bro vs lys (efter vej-over-vej)
+const crossingEl = document.getElementById('crossing-choice');
+const crossCostBridge = document.getElementById('cross-cost-bridge');
+const crossCostJunction = document.getElementById('cross-cost-junction');
+const crossBtnBridge = document.getElementById('cross-opt-bridge');
+const crossBtnJunction = document.getElementById('cross-opt-junction');
+const crossBtnCancel = document.getElementById('cross-opt-cancel');
+
+function setCrossingChoiceOpen(state) {
+  if (!crossingEl) return;
+  if (!state || !state.open) {
+    crossingEl.classList.add('hidden');
+    return;
+  }
+  const money = state.money | 0;
+  const bCost = state.bridgeCost | 0;
+  const jCost = state.junctionCost | 0;
+  if (crossCostBridge) crossCostBridge.textContent = `$${bCost}`;
+  if (crossCostJunction) crossCostJunction.textContent = `$${jCost}`;
+  if (crossBtnBridge) {
+    crossBtnBridge.disabled = money < bCost;
+    crossBtnBridge.title = money < bCost ? 'Ikke råd' : 'Byg bro over vejen';
+  }
+  if (crossBtnJunction) {
+    crossBtnJunction.disabled = money < jCost;
+    crossBtnJunction.title = money < jCost ? 'Ikke råd' : 'Kryds med trafiklys';
+  }
+  crossingEl.classList.remove('hidden');
+}
+
+game.onCrossingChoice = setCrossingChoiceOpen;
+
+if (crossBtnBridge) {
+  crossBtnBridge.addEventListener('click', (e) => {
+    e.preventDefault();
+    playUi();
+    game.resolveCrossingChoice('bridge');
+  });
+}
+if (crossBtnJunction) {
+  crossBtnJunction.addEventListener('click', (e) => {
+    e.preventDefault();
+    playUi();
+    game.resolveCrossingChoice('junction');
+  });
+}
+if (crossBtnCancel) {
+  crossBtnCancel.addEventListener('click', (e) => {
+    e.preventDefault();
+    playUi();
+    game.resolveCrossingChoice('cancel');
+  });
+}
+
 // Unlock audio on first gesture
 const unlockOnce = () => {
   unlockAudio();

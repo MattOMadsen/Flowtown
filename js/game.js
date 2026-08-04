@@ -181,6 +181,10 @@ export class Game {
     /** Mission-vejviser: job-id der fremhæves på kortet (null = alle dæmpet) */
     this.guideJobId = null;
     this.guideJobUntil = 0;
+    /** Afventer bro/kryds-valg efter vej-over-vej */
+    this.pendingCrossing = null;
+    /** UI-callback: ({ open, bridgeCost, junctionCost, money }) */
+    this.onCrossingChoice = null;
     this._cityHintShown = false;
     this._cityHintUntil = 0;
     for (const b of this.bots) b.enabled = false;
@@ -456,7 +460,8 @@ export class Game {
         isBridge: !!r.isBridge,
         paidCost: r.paidCost || 0,
         oneWay: r.oneWay === -1 || r.oneWay === 1 ? r.oneWay : 0,
-        hasLight: !!r.hasLight
+        hasLight: !!r.hasLight,
+        lightT: r.lightT != null ? r.lightT : 0.5
       });
       if (r.id) road.id = r.id;
       this.roads.push(road);
@@ -1437,12 +1442,28 @@ export class Game {
     return false;
   }
 
+  /** Parameter 0–1 along polyline for a point on segment i→i+1 at local t. */
+  _polylineParamAt(points, segIndex, localT) {
+    let total = 0;
+    const segs = [];
+    for (let i = 1; i < points.length; i++) {
+      const len = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+      segs.push(len);
+      total += len;
+    }
+    if (total <= 0) return 0.5;
+    let before = 0;
+    for (let i = 0; i < segIndex - 1 && i < segs.length; i++) before += segs[i];
+    const segLen = segs[segIndex - 1] || 0;
+    return Math.max(0.05, Math.min(0.95, (before + localT * segLen) / total));
+  }
+
   /**
-   * True if stroke crosses an existing road in the middle (not mere T-junction snap).
-   * Endpoints within `endSkip` of either segment are ignored so connecting roads stay flat.
+   * Find first proper mid-crossing with an existing road (not T-junction snap).
+   * @returns {{ road, point, tOnNew, tOnOld } | null}
    */
-  strokeCrossesExistingRoads(points, endSkip = 28) {
-    if (!points || points.length < 2 || !this.roads?.length) return false;
+  findStrokeRoadCrossing(points, endSkip = 28) {
+    if (!points || points.length < 2 || !this.roads?.length) return null;
     const skip = endSkip * Math.max(1, this.dpr || 1);
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
@@ -1458,24 +1479,134 @@ export class Game {
           const otherLen = Math.hypot(d.x - c.x, d.y - c.y);
           if (otherLen < 4) continue;
           if (!this._segmentsCrossProper(a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y)) continue;
-          // Intersection point (param on AB)
           const den = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
           if (Math.abs(den) < 1e-8) continue;
           const t = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / den;
           const u = -((a.x - b.x) * (a.y - c.y) - (a.y - b.y) * (a.x - c.x)) / den;
-          if (t < 0.08 || t > 0.92 || u < 0.08 || u > 0.92) continue; // near ends = junction
+          if (t < 0.08 || t > 0.92 || u < 0.08 || u > 0.92) continue;
           const ix = a.x + t * (b.x - a.x);
           const iy = a.y + t * (b.y - a.y);
-          // Also skip if very close to any endpoint of either stroke (T-junction)
           const nearEnd = (p) => Math.hypot(ix - p.x, iy - p.y) < skip;
           if (nearEnd(a) || nearEnd(b) || nearEnd(c) || nearEnd(d)) continue;
           if (nearEnd(points[0]) || nearEnd(points[points.length - 1])) continue;
           if (nearEnd(rp[0]) || nearEnd(rp[rp.length - 1])) continue;
-          return true;
+          return {
+            road,
+            point: { x: ix, y: iy },
+            tOnNew: this._polylineParamAt(points, i, t),
+            tOnOld: this._polylineParamAt(rp, j, u)
+          };
         }
       }
     }
-    return false;
+    return null;
+  }
+
+  /** True if stroke crosses an existing road in the middle. */
+  strokeCrossesExistingRoads(points, endSkip = 28) {
+    return !!this.findStrokeRoadCrossing(points, endSkip);
+  }
+
+  /** Pris for trafiklys ved kryds (pakke-rabat vs. manuelt lys). */
+  crossingLightCost() {
+    return Math.max(22, Math.round(28 * this.roadCostMul()));
+  }
+
+  /** Priser til kryds-valg: bro vs kryds med lys. */
+  getCrossingChoicePrices(points) {
+    const base = this.estimateStrokeCost(points, { bridge: false });
+    const bridge = this.estimateStrokeCost(points, { bridge: true });
+    const light = this.crossingLightCost();
+    return {
+      base,
+      bridge,
+      junction: base + light,
+      light
+    };
+  }
+
+  /**
+   * Åbn valg: bro eller kryds med lys efter vej-over-vej.
+   * @param {object} payload
+   */
+  openCrossingChoice(payload) {
+    this.pendingCrossing = payload;
+    if (typeof this.onCrossingChoice === 'function') {
+      this.onCrossingChoice({
+        open: true,
+        bridgeCost: payload.bridgeCost,
+        junctionCost: payload.junctionCost,
+        money: Math.floor(this.money)
+      });
+    }
+  }
+
+  closeCrossingChoiceUi() {
+    if (typeof this.onCrossingChoice === 'function') {
+      this.onCrossingChoice({ open: false });
+    }
+  }
+
+  /**
+   * Afslut kryds-valg fra UI: 'bridge' | 'junction' | 'cancel'
+   */
+  resolveCrossingChoice(choice) {
+    const pend = this.pendingCrossing;
+    this.pendingCrossing = null;
+    this.closeCrossingChoiceUi();
+    if (!pend || !pend.points || pend.points.length < 2) return false;
+
+    if (choice === 'cancel') {
+      this.showToast('Vej annulleret');
+      this.currentStroke = null;
+      this.pendingRoadCost = 0;
+      this.clearActiveSnap();
+      this.requestDraw?.();
+      return false;
+    }
+
+    const points = pend.points;
+    const isBridge = choice === 'bridge';
+    const hasLight = choice === 'junction';
+    const cost = isBridge ? pend.bridgeCost : pend.junctionCost;
+
+    if (this.money < cost) {
+      this.showToast(`Ikke råd (mangler $${cost - Math.floor(this.money)})`);
+      playError();
+      this.requestDraw?.();
+      return false;
+    }
+
+    const ok = this.addRoadForOwner(points, 'player', null, cost, true, {
+      isBridge,
+      hasLight,
+      lightT: hasLight ? (pend.tOnNew ?? 0.5) : 0.5
+    });
+    if (!ok) {
+      this.showToast('Kunne ikke bygge vejen');
+      return false;
+    }
+
+    // Kryds: sæt også lys på den eksisterende vej ved skæringspunktet
+    if (hasLight && pend.otherRoad && this.roads.includes(pend.otherRoad)) {
+      pend.otherRoad.hasLight = true;
+      pend.otherRoad.lightT = pend.tOnOld != null ? pend.tOnOld : 0.5;
+      pend.otherRoad.lightPhase = 0;
+      this.tryAchievement('traffic_light');
+    } else if (hasLight) {
+      this.tryAchievement('traffic_light');
+    }
+
+    if (isBridge) this.showToast('Bro over vejen!');
+    else this.showToast('Kryds med trafiklys!');
+    playRoad();
+    this.tryAchievement('first_road');
+    this._sessionDirty = true;
+    this.currentStroke = null;
+    this.pendingRoadCost = 0;
+    this.clearActiveSnap();
+    this.requestDraw?.();
+    return true;
   }
 
   /** Vælg mission til vejviser på kortet (fra→til). */
@@ -1727,8 +1858,8 @@ export class Game {
     const waterFrac = strokeWaterFraction(points, this.waterBodies);
     const wantBridge = this.mode === 'bridge';
     const crossesWater = waterFrac > 0.08;
-    // Auto-bro når ny vej krydser en eksisterende (ikke bare T-kryds)
-    const crossesRoad = this.strokeCrossesExistingRoads(points);
+    const crossInfo = this.findStrokeRoadCrossing(points);
+    const crossesRoad = !!crossInfo;
 
     if (crossesWater && !wantBridge) {
       this.showToast('Over vand: brug Bro-værktøjet');
@@ -1740,8 +1871,38 @@ export class Game {
       return;
     }
 
-    // Bro: manuelt værktøj, vand, eller kryds over anden vej
-    const isBridge = wantBridge || crossesWater || crossesRoad;
+    // Vej over vej (ikke vand, ikke bro-værktøj): lad spilleren vælge bro vs. kryds med lys
+    if (crossesRoad && !wantBridge && !crossesWater) {
+      const prices = this.getCrossingChoicePrices(points);
+      // Mindste pris der skal til for mindst ét valg
+      const minCost = Math.min(prices.bridge, prices.junction);
+      if (this.money < minCost) {
+        this.showToast(`Ikke råd (mangler $${minCost - Math.floor(this.money)})`);
+        this.currentStroke = null;
+        this.pendingRoadCost = 0;
+        this.clearActiveSnap();
+        const end = points[points.length - 1];
+        this.addArrivalParticles(end.x, end.y, '#ef4444');
+        return;
+      }
+      this.openCrossingChoice({
+        points: points.map(p => ({ x: p.x, y: p.y })),
+        bridgeCost: prices.bridge,
+        junctionCost: prices.junction,
+        otherRoad: crossInfo.road,
+        tOnNew: crossInfo.tOnNew,
+        tOnOld: crossInfo.tOnOld,
+        point: crossInfo.point
+      });
+      this.currentStroke = null;
+      this.pendingRoadCost = 0;
+      this.clearActiveSnap();
+      this.showToast('Vælg: bro eller kryds med lys');
+      return;
+    }
+
+    // Bro: manuelt værktøj eller over vand
+    const isBridge = wantBridge || crossesWater;
     const cost = this.estimateStrokeCost(points, { bridge: isBridge });
 
     if (this.money < cost) {
@@ -1757,7 +1918,6 @@ export class Game {
     this.addRoadForOwner(points, 'player', null, cost, true, { isBridge });
     if (isBridge) {
       if (crossesWater) this.showToast('Bro bygget over vand!');
-      else if (crossesRoad) this.showToast('Bro over vejen!');
       else this.showToast('Bro-segment (dyrt)');
     }
     playRoad();
@@ -1790,7 +1950,9 @@ export class Game {
       ownerColor,
       lanes: opts.lanes != null ? opts.lanes : 2, // tovejs som standard
       isBridge: !!opts.isBridge,
-      paidCost: paid
+      paidCost: paid,
+      hasLight: !!opts.hasLight,
+      lightT: opts.lightT != null ? opts.lightT : 0.5
     }));
     if (owner === 'player') {
       this.checkFirstLinks();
@@ -3335,6 +3497,30 @@ export class Game {
 
       // P0-4: tydelig snap-feedback (mål + guide-linje + label)
       this.drawSnapFeedback(ctx, last);
+    } else if (this.pendingCrossing?.points?.length > 1) {
+      // Ghost mens spilleren vælger bro/kryds
+      const pts = this.pendingCrossing.points;
+      ctx.beginPath();
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 14 * this.dpr;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = 0.22;
+      ctx.setLineDash([10 * this.dpr, 8 * this.dpr]);
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      if (this.pendingCrossing.point) {
+        const c = this.pendingCrossing.point;
+        const pulse = 0.6 + 0.4 * Math.sin((this.sessionTime || 0) * 4);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 12 * this.dpr * pulse, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(245, 158, 11, ${0.75 * pulse})`;
+        ctx.lineWidth = 3 * this.dpr;
+        ctx.stroke();
+      }
     } else if (this.activeSnap) {
       this.drawSnapFeedback(ctx, null);
     }
