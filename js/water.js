@@ -213,65 +213,100 @@ export function drawWaterBodies(ctx, bodies, dpr) {
 
     // Solid water body (opaque – no tile grid bleed)
     const g = ctx.createRadialGradient(
-      b.cx - b.rx * 0.15,
-      b.cy - b.ry * 0.2,
-      maxR * 0.05,
+      b.cx - b.rx * 0.18,
+      b.cy - b.ry * 0.22,
+      maxR * 0.04,
       b.cx,
       b.cy,
-      maxR * 1.02
+      maxR * 1.05
     );
     if (isLake) {
-      g.addColorStop(0, '#7dd3fc');
-      g.addColorStop(0.35, '#38bdf8');
-      g.addColorStop(0.72, '#0ea5e9');
+      g.addColorStop(0, '#a5e8ff');
+      g.addColorStop(0.28, '#7dd3fc');
+      g.addColorStop(0.55, '#38bdf8');
+      g.addColorStop(0.82, '#0ea5e9');
       g.addColorStop(1, '#0369a1');
     } else {
-      g.addColorStop(0, '#38bdf8');
-      g.addColorStop(0.4, '#0ea5e9');
-      g.addColorStop(0.8, '#0284c7');
-      g.addColorStop(1, '#075985');
+      g.addColorStop(0, '#7dd3fc');
+      g.addColorStop(0.3, '#38bdf8');
+      g.addColorStop(0.6, '#0ea5e9');
+      g.addColorStop(0.85, '#0284c7');
+      g.addColorStop(1, '#0c4a6e');
     }
     ctx.beginPath();
     pathBlob(ctx, b);
     ctx.fillStyle = g;
     ctx.fill();
 
-    // Inner highlight
+    // Deep rim under edge
+    ctx.beginPath();
+    pathBlob(ctx, b);
+    ctx.strokeStyle = 'rgba(7, 89, 133, 0.35)';
+    ctx.lineWidth = 4 * dpr;
+    ctx.stroke();
+
+    // Specular glass sheen
     ctx.save();
     ctx.beginPath();
     pathBlob(ctx, {
       ...b,
-      rx: b.rx * 0.55,
-      ry: b.ry * 0.4,
-      cy: b.cy - b.ry * 0.15
+      rx: b.rx * 0.62,
+      ry: b.ry * 0.38,
+      cy: b.cy - b.ry * 0.18,
+      cx: b.cx - b.rx * 0.08
     });
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    const sheen = ctx.createLinearGradient(
+      b.cx - b.rx * 0.4, b.cy - b.ry * 0.35,
+      b.cx + b.rx * 0.2, b.cy + b.ry * 0.1
+    );
+    sheen.addColorStop(0, 'rgba(255,255,255,0.38)');
+    sheen.addColorStop(0.45, 'rgba(255,255,255,0.12)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sheen;
     ctx.fill();
     ctx.restore();
+
+    // Sparkle dots
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    for (let i = 0; i < 6; i++) {
+      const ang = (i / 6) * Math.PI * 2 + (b.seed || 0) * 0.01;
+      const rr = 0.25 + (i % 3) * 0.12;
+      const sx = b.cx + Math.cos(ang) * b.rx * rr;
+      const sy = b.cy + Math.sin(ang) * b.ry * rr * 0.7 - b.ry * 0.08;
+      const sr = (1.1 + (i % 2)) * dpr;
+      ctx.beginPath();
+      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Shore line
     ctx.beginPath();
     pathBlob(ctx, b);
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 2.2 * dpr;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2.4 * dpr;
     ctx.stroke();
     ctx.beginPath();
     pathBlob(ctx, { ...b, rx: b.rx * 0.97, ry: b.ry * 0.97 });
-    ctx.strokeStyle = 'rgba(12, 74, 110, 0.25)';
-    ctx.lineWidth = 1.2 * dpr;
+    ctx.strokeStyle = 'rgba(12, 74, 110, 0.28)';
+    ctx.lineWidth = 1.3 * dpr;
     ctx.stroke();
 
-    // Soft wave arcs
-    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-    ctx.lineWidth = 1.2 * dpr;
+    // Soft wave arcs (more)
+    ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+    ctx.lineWidth = 1.35 * dpr;
     ctx.lineCap = 'round';
-    for (let i = 0; i < 4; i++) {
-      const t = 0.25 + i * 0.15;
-      const yy = b.cy - b.ry * 0.25 + i * b.ry * 0.16;
-      const span = b.rx * (0.35 + t * 0.25);
+    for (let i = 0; i < 6; i++) {
+      const t = 0.18 + i * 0.12;
+      const yy = b.cy - b.ry * 0.28 + i * b.ry * 0.13;
+      const span = b.rx * (0.32 + t * 0.28);
       ctx.beginPath();
       ctx.moveTo(b.cx - span, yy);
-      ctx.quadraticCurveTo(b.cx, yy + 4 * dpr * (i % 2 === 0 ? 1 : -1), b.cx + span, yy);
+      ctx.quadraticCurveTo(
+        b.cx + span * 0.1,
+        yy + 5 * dpr * (i % 2 === 0 ? 1 : -1),
+        b.cx + span,
+        yy
+      );
       ctx.stroke();
     }
 

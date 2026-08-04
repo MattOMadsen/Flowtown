@@ -356,6 +356,30 @@ body {
   box-shadow: none;
 }
 
+.hud-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.55rem;
+  min-width: 2.35rem;
+}
+.hud-tool-icon img {
+  display: block;
+  width: 1.35rem;
+  height: 1.35rem;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,0.6));
+}
+.hud-tool-accent.hud-tool-icon {
+  background: linear-gradient(180deg, #34d399, #10b981);
+}
+.hud-more-item .inline-icon {
+  display: inline-block;
+  vertical-align: -0.25em;
+  margin-right: 0.15rem;
+}
+
 .hud-tool.ring-2 {
   outline: none;
 }

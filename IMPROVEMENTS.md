@@ -151,6 +151,12 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 - [x] By-hubs: glow, glass-labels, forbundet-ring
 - [x] World vignette/lys + ambient foliage; HUD soft glass
 
+### ART-2 (04/08)
+- [x] Nye sted-sprites (capital/town/farm/factory/harbor)
+- [x] Vand: sheen, sparkle, flere bølger
+- [x] Bro: gelænder-stolper + bedre piller
+- [x] Tool-UI ikoner (draw/erase/upgrade/bridge/…)
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)

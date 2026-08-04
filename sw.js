@@ -1,5 +1,5 @@
 /* Flowtown service worker – offline cache for core shell */
-const CACHE = 'flowtown-v3';
+const CACHE = 'flowtown-v4-art2';
 const PRECACHE = [
   './',
   './index.html',
@@ -30,6 +30,15 @@ const PRECACHE = [
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
   './assets/icons/icon-512-maskable.png',
+  './assets/icons/tools/draw.png',
+  './assets/icons/tools/erase.png',
+  './assets/icons/tools/upgrade.png',
+  './assets/icons/tools/bridge.png',
+  './assets/icons/tools/undo.png',
+  './assets/icons/tools/more.png',
+  './assets/icons/tools/pause.png',
+  './assets/icons/tools/sound.png',
+  './assets/icons/tools/shop.png',
   './assets/vehicles/car.png',
   './assets/vehicles/car_fast.png',
   './assets/vehicles/truck.png',

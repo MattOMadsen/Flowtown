@@ -224,21 +224,35 @@ export class Road {
       ctx.stroke();
     }
 
-    // Bridge pillars
+    // Bridge pillars + deck accents
     if (bridge) {
       const len = this.length;
-      const count = Math.max(2, Math.floor(len / (70 * dpr)));
+      const count = Math.max(2, Math.floor(len / (62 * dpr)));
       for (let i = 1; i <= count; i++) {
         const t = i / (count + 1);
         const p = this.getPointAt(t);
-        const hw = 5.5 * dpr;
-        // pillar body + water reflection
-        ctx.fillStyle = 'rgba(51, 65, 85, 0.85)';
-        ctx.fillRect(p.x - hw * 0.45, p.y, hw * 0.9, 16 * dpr);
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
-        ctx.fillRect(p.x - hw * 0.35, p.y, hw * 0.7, 3 * dpr);
-        ctx.fillStyle = 'rgba(14, 165, 233, 0.2)';
-        ctx.fillRect(p.x - hw * 0.4, p.y + 14 * dpr, hw * 0.8, 7 * dpr);
+        const ang = this.getAngleAt(t);
+        const hw = 6 * dpr;
+        // pillar
+        ctx.fillStyle = 'rgba(51, 65, 85, 0.88)';
+        ctx.fillRect(p.x - hw * 0.45, p.y + 2 * dpr, hw * 0.9, 17 * dpr);
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
+        ctx.fillRect(p.x - hw * 0.35, p.y + 2 * dpr, hw * 0.7, 3.5 * dpr);
+        // water reflection under pillar
+        ctx.fillStyle = 'rgba(14, 165, 233, 0.22)';
+        ctx.fillRect(p.x - hw * 0.5, p.y + 16 * dpr, hw, 8 * dpr);
+        // railing posts left/right of deck
+        const nx = Math.cos(ang + Math.PI / 2);
+        const ny = Math.sin(ang + Math.PI / 2);
+        const off = wBody * 0.42;
+        for (const s of [-1, 1]) {
+          const rx = p.x + nx * off * s;
+          const ry = p.y + ny * off * s;
+          ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+          ctx.beginPath();
+          ctx.arc(rx, ry, 2.2 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 

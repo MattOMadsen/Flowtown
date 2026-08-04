@@ -52,9 +52,19 @@ const btnMute = document.getElementById('btn-mute');
 function refreshMuteBtn() {
   if (!btnMute) return;
   const m = isMuted();
-  btnMute.textContent = m ? '🔇' : '🔊';
   btnMute.setAttribute('aria-pressed', m ? 'true' : 'false');
   btnMute.title = m ? 'Lyd er slået fra' : 'Lyd er slået til';
+  const img = document.getElementById('mute-icon-img');
+  const fb = document.getElementById('mute-icon-fallback');
+  if (img) {
+    img.style.opacity = m ? '0.35' : '1';
+    img.style.filter = m ? 'grayscale(1)' : '';
+  }
+  if (fb) {
+    fb.textContent = m ? '🔇' : '🔊';
+    // keep icon img primary; fallback only if img missing
+    fb.classList.add('hidden');
+  }
 }
 refreshMuteBtn();
 btnMute?.addEventListener('click', (e) => {
