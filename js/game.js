@@ -2012,24 +2012,27 @@ export class Game {
   }
 
   /**
-   * Minimap over hele spilbrættet (worldW/H) – bottom-center over stats.
-   * Størrelse skalerer med skærm (større touch-mål på mobil).
+   * Minimap over hele spilbrættet (worldW/H) – bottom-center.
+   * Panel-aspekt = verdens aspekt (ingen letterbox-skævhed), viewport matches setTransform.
    */
   drawMinimap(ctx, w, h) {
     const dpr = this.dpr || 1;
     const cssW = w / dpr;
-    // Mobile: ~32% of width, min 140 / max 200 css px; desktop a bit larger
-    const mapCssW = Math.min(200, Math.max(140, cssW * 0.34));
-    const mapCssH = mapCssW * 0.78;
+    const worldW = Math.max(1, this.worldW || w);
+    const worldH = Math.max(1, this.worldH || h);
+    const worldAspect = worldW / worldH;
+
+    // Mobil: ~32% bredde; højde følger brættet så grøn flade = hele kortet
+    const mapCssW = Math.min(210, Math.max(140, cssW * 0.34));
+    const mapCssH = Math.min(mapCssW / worldAspect, cssW * 0.42);
     const mapW = mapCssW * dpr;
     const mapH = mapCssH * dpr;
     const mx = (w - mapW) / 2;
-    // Stats er i top-HUD – minimap kan sidde lavere (over home indicator)
-    const my = h - mapH - Math.max(28, 20) * dpr;
+    const my = h - mapH - Math.max(24, 18) * dpr;
 
-    const worldW = Math.max(1, this.worldW || w);
-    const worldH = Math.max(1, this.worldH || h);
-    const scale = Math.min(mapW / worldW, mapH / worldH);
+    // Ens scale i x/y – bræt fylder panelet (evt. lille padding)
+    const pad = 3 * dpr;
+    const scale = Math.min((mapW - pad * 2) / worldW, (mapH - pad * 2) / worldH);
     const drawW = worldW * scale;
     const drawH = worldH * scale;
     const ox = mx + (mapW - drawW) / 2;
@@ -2052,12 +2055,15 @@ export class Game {
     ctx.fill();
     ctx.stroke();
 
+    // Clip alt indhold til bræt-rektangel
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox, oy, drawW, drawH);
+    ctx.clip();
+
     // Board background
     ctx.fillStyle = 'rgba(197, 217, 160, 0.95)';
     ctx.fillRect(ox, oy, drawW, drawH);
-    ctx.strokeStyle = 'rgba(68,64,60,0.35)';
-    ctx.lineWidth = 1 * dpr;
-    ctx.strokeRect(ox, oy, drawW, drawH);
 
     // Water blobs (tiny)
     if (this.waterBodies?.length) {
@@ -2109,28 +2115,41 @@ export class Game {
       ctx.stroke();
     }
 
-    // Viewport on board
+    // Viewport = det der vises på skærmen (matcher setTransform(zoom,0,0,zoom,cam.x,cam.y))
     const cam = this.camera;
-    const z = cam.zoom || 1;
-    const viewX0 = -cam.x / z;
-    const viewY0 = -cam.y / z;
-    const viewW = w / z;
-    const viewH = h / z;
-    ctx.strokeStyle = '#14b8a6';
-    ctx.lineWidth = 2 * dpr;
-    ctx.strokeRect(
-      ox + viewX0 * scale,
-      oy + viewY0 * scale,
-      viewW * scale,
-      viewH * scale
-    );
-    ctx.fillStyle = 'rgba(20, 184, 166, 0.12)';
-    ctx.fillRect(
-      ox + viewX0 * scale,
-      oy + viewY0 * scale,
-      viewW * scale,
-      viewH * scale
-    );
+    const z = Math.max(1e-6, cam.zoom || 1);
+    const invZ = 1 / z;
+    // Canvas-pixels (0..w, 0..h) → world
+    const left = (0 - cam.x) * invZ;
+    const top = (0 - cam.y) * invZ;
+    const right = (w - cam.x) * invZ;
+    const bottom = (h - cam.y) * invZ;
+
+    // Clip viewport til bræt – firkant ligger altid på kortet
+    const vx0 = Math.max(0, Math.min(worldW, left));
+    const vy0 = Math.max(0, Math.min(worldH, top));
+    const vx1 = Math.max(0, Math.min(worldW, right));
+    const vy1 = Math.max(0, Math.min(worldH, bottom));
+    const rw = vx1 - vx0;
+    const rh = vy1 - vy0;
+    if (rw > 1 && rh > 1) {
+      const rx = ox + vx0 * scale;
+      const ry = oy + vy0 * scale;
+      const rww = rw * scale;
+      const rhh = rh * scale;
+      ctx.fillStyle = 'rgba(20, 184, 166, 0.16)';
+      ctx.fillRect(rx, ry, rww, rhh);
+      ctx.strokeStyle = '#14b8a6';
+      ctx.lineWidth = 2.25 * dpr;
+      ctx.strokeRect(rx, ry, rww, rhh);
+    }
+
+    ctx.restore(); // clip
+
+    // Board edge (uden for clip så streg er skarp)
+    ctx.strokeStyle = 'rgba(68,64,60,0.45)';
+    ctx.lineWidth = 1.25 * dpr;
+    ctx.strokeRect(ox, oy, drawW, drawH);
 
     // Label
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
@@ -2140,7 +2159,7 @@ export class Game {
     ctx.fillText('Kort', mx + mapW / 2, my - 2 * dpr);
 
     ctx.restore();
-    // sx/sy for tap: map panel coords → world (with letterbox offset)
+    // Tap: world = (x-ox)/scale (panelet matcher bræt)
     this._minimapRect = {
       x: mx,
       y: my,

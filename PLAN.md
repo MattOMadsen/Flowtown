@@ -113,4 +113,4 @@ Implementering i batches af **1–3 ting** (start anbefalet: PROG-A1 job-trafik)
 
 ---
 
-*Sidst opdateret: 3. august 2026*
+*Sidst opdateret: 4. august 2026* – se **IMPROVEMENTS.md** for levende lavet/mangler.
