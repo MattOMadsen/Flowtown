@@ -45,6 +45,63 @@ body {
   pointer-events: none;
 }
 
+/* Edge pan arrows – mid sides, large touch, not corner districts */
+.pan-edge {
+  position: fixed;
+  z-index: 30;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(68, 64, 60, 0.2);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  color: #44403c;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+.pan-edge:active {
+  transform: scale(0.94);
+  background: #f5f5f4;
+}
+.pan-edge-left {
+  left: max(0.35rem, env(safe-area-inset-left));
+  top: 50%;
+  transform: translateY(-50%);
+}
+.pan-edge-left:active { transform: translateY(-50%) scale(0.94); }
+.pan-edge-right {
+  right: max(0.35rem, env(safe-area-inset-right));
+  top: 50%;
+  transform: translateY(-50%);
+}
+.pan-edge-right:active { transform: translateY(-50%) scale(0.94); }
+.pan-edge-up {
+  top: max(5.5rem, calc(env(safe-area-inset-top) + 4.5rem));
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+.pan-edge-up:active { transform: translateX(-50%) rotate(90deg) scale(0.94); }
+.pan-edge-down {
+  bottom: max(3.5rem, calc(env(safe-area-inset-bottom) + 3rem));
+  left: 50%;
+  transform: translateX(-50%) rotate(90deg);
+}
+.pan-edge-down:active { transform: translateX(-50%) rotate(90deg) scale(0.94); }
+
+@media (min-width: 640px) {
+  .pan-edge {
+    width: 3rem;
+    height: 3rem;
+  }
+}
+
 #zoom-controls {
   touch-action: manipulation;
   -webkit-user-select: none;

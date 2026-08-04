@@ -29,6 +29,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-VIS2** Skarpere steder + vej/bro-art
 - [x] **PROG-VIS3** Playable board, tæt start-zoom, sprites (ingen bobler)
 - [x] **PROG-VIS4** Seamless tile-map (græs/dirt/skov/vand)
+- [x] **PROG-PAN** Flyt-tool + kantpile + piletaster
+- [x] **PROG-VIS5** Flere græs/dirt-varianter
 
 ---
 

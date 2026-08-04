@@ -7,17 +7,14 @@ export class InputHandler {
     this.spaceDown = false;
     this.panLast = null;
     this.pinch = null;
-    /** District tap without drag (buy fleet) */
     this.pendingDistrict = null;
     this.downPos = null;
     this.movedPx = 0;
 
-    // Mouse
     canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
     window.addEventListener('mouseup', (e) => this.onMouseUp(e));
     canvas.addEventListener('mouseleave', () => {
-      // keep pan if dragging outside; drawing ends
       if (this.drawing && !this.panning) this.onUp();
     });
     canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
@@ -27,6 +24,17 @@ export class InputHandler {
       if (e.code === 'Space') {
         this.spaceDown = true;
         e.preventDefault();
+      }
+      // Arrow keys pan when not typing
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        const map = {
+          ArrowLeft: 'left',
+          ArrowRight: 'right',
+          ArrowUp: 'up',
+          ArrowDown: 'down'
+        };
+        this.game.panNudge?.(map[e.key]);
       }
       if (e.key === '+' || e.key === '=') this.game.zoomBy(1.15);
       if (e.key === '-' || e.key === '_') this.game.zoomBy(1 / 1.15);
@@ -39,7 +47,6 @@ export class InputHandler {
       if (e.code === 'Space') this.spaceDown = false;
     });
 
-    // Touch – only on canvas
     canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
       if (e.touches.length >= 2) {
@@ -59,8 +66,9 @@ export class InputHandler {
         else this.movePinch(e.touches);
         return;
       }
-      if (e.touches.length === 1 && this.drawing) {
-        this.onMove(e.touches[0]);
+      if (e.touches.length === 1) {
+        if (this.panning) this.onPanMove(e.touches[0]);
+        else if (this.drawing || this.pendingDistrict) this.onMove(e.touches[0]);
       }
     }, { passive: false });
 
@@ -69,6 +77,7 @@ export class InputHandler {
       if (e.touches.length < 2) this.pinch = null;
       if (e.touches.length === 0) {
         this.panning = false;
+        this.panLast = null;
         this.onUp();
       }
     }, { passive: false });
@@ -76,6 +85,7 @@ export class InputHandler {
     canvas.addEventListener('touchcancel', () => {
       this.pinch = null;
       this.panning = false;
+      this.panLast = null;
       this.onUp();
     });
   }
@@ -126,19 +136,16 @@ export class InputHandler {
     const scale = dist / Math.max(1, this.pinch.dist);
     const newZoom = this.game.clampZoom(this.pinch.zoom * scale);
 
-    // Reconstruct camera from pinch origin so zoom stays stable
     const dpr = this.game.dpr;
     const ox = this.pinch.originMidX * dpr;
     const oy = this.pinch.originMidY * dpr;
     const wx = (ox - this.pinch.camX) / this.pinch.zoom;
     const wy = (oy - this.pinch.camY) / this.pinch.zoom;
 
-    // New mid in screen px
     const nx = mid.x * dpr;
     const ny = mid.y * dpr;
 
     this.game.camera.zoom = newZoom;
-    // Keep original world point under original mid, then pan by mid delta
     this.game.camera.x = nx - wx * newZoom;
     this.game.camera.y = ny - wy * newZoom;
     this.game.requestDraw();
@@ -151,10 +158,8 @@ export class InputHandler {
     e.preventDefault();
     e.stopPropagation();
     const pos = this.getPos(e);
-    // Support trackpads (small delta) and mice
     const dy = e.deltaY;
     const factor = dy < 0 ? 1.12 : 1 / 1.12;
-    // Stronger zoom for larger wheel ticks
     const steps = Math.min(3, Math.max(1, Math.round(Math.abs(dy) / 100)));
     let f = 1;
     for (let i = 0; i < steps; i++) f *= factor;
@@ -162,10 +167,11 @@ export class InputHandler {
   }
 
   onMouseDown(e) {
-    if (e.button === 1 || e.button === 2 || this.spaceDown) {
+    if (e.button === 1 || e.button === 2 || this.spaceDown || this.game.mode === 'pan') {
       e.preventDefault();
       this.panning = true;
       this.panLast = this.getPos(e);
+      this.drawing = false;
       return;
     }
     if (e.button === 0) this.onDown(e);
@@ -173,15 +179,23 @@ export class InputHandler {
 
   onMouseMove(e) {
     if (this.panning && this.panLast) {
-      const pos = this.getPos(e);
-      const dpr = this.game.dpr;
-      this.game.camera.x += (pos.x - this.panLast.x) * dpr;
-      this.game.camera.y += (pos.y - this.panLast.y) * dpr;
-      this.panLast = pos;
-      this.game.requestDraw();
+      this.onPanMove(e);
       return;
     }
     this.onMove(e);
+  }
+
+  onPanMove(e) {
+    const pos = this.getPos(e);
+    if (!this.panLast) {
+      this.panLast = pos;
+      return;
+    }
+    const dpr = this.game.dpr;
+    this.game.camera.x += (pos.x - this.panLast.x) * dpr;
+    this.game.camera.y += (pos.y - this.panLast.y) * dpr;
+    this.panLast = pos;
+    this.game.requestDraw();
   }
 
   onMouseUp(e) {
@@ -207,16 +221,25 @@ export class InputHandler {
     this.movedPx = 0;
     this.pendingDistrict = null;
 
-    // Minimap click pans camera instead of drawing
     if (this.game.handleMinimapTap?.(pos.x, pos.y)) {
       this.drawing = false;
       return;
     }
 
-    // Tap-on-city candidate (F1) – not in erase/upgrade mode
+    // Pan tool: drag map, never draw
+    if (this.game.mode === 'pan') {
+      this.panning = true;
+      this.panLast = pos;
+      this.drawing = false;
+      return;
+    }
+
     const hit = this.game.hitDistrict?.(pos.x, pos.y);
     const mode = this.game.mode;
-    if (hit && this.game.running && mode !== 'erase' && mode !== 'upgrade' && mode !== 'bridge') {
+    if (
+      hit && this.game.running &&
+      mode !== 'erase' && mode !== 'upgrade' && mode !== 'bridge' && mode !== 'pan'
+    ) {
       this.pendingDistrict = hit;
       this.drawing = false;
       return;
@@ -232,13 +255,17 @@ export class InputHandler {
       const dx = pos.x - this.downPos.x;
       const dy = pos.y - this.downPos.y;
       this.movedPx = Math.hypot(dx, dy);
-      // Drag → start drawing from original point (not a city tap)
-      if (this.movedPx > 14) {
+      // Drag on city → pan map instead of accidental road (better UX)
+      if (this.movedPx > 16) {
         this.pendingDistrict = null;
-        this.drawing = true;
-        this.game.beginStroke(this.downPos.x, this.downPos.y);
-        this.game.continueStroke(pos.x, pos.y);
+        this.panning = true;
+        this.panLast = this.downPos;
+        this.onPanMove(e);
       }
+      return;
+    }
+    if (this.panning) {
+      this.onPanMove(e);
       return;
     }
     if (!this.drawing) return;
@@ -246,8 +273,12 @@ export class InputHandler {
   }
 
   onUp() {
+    if (this.panning) {
+      this.panning = false;
+      this.panLast = null;
+    }
     if (this.pendingDistrict) {
-      if (this.movedPx <= 14) {
+      if (this.movedPx <= 16) {
         this.game.openDistrictSheet(this.pendingDistrict);
       }
       this.pendingDistrict = null;
@@ -256,7 +287,10 @@ export class InputHandler {
       this.drawing = false;
       return;
     }
-    if (!this.drawing) return;
+    if (!this.drawing) {
+      this.downPos = null;
+      return;
+    }
     this.drawing = false;
     this.downPos = null;
     this.game.endStroke();

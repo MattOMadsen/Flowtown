@@ -27,6 +27,9 @@
         <button id="btn-draw" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
           Tegn
         </button>
+        <button id="btn-pan" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition" title="Flyt kort uden at tegne">
+          Flyt
+        </button>
         <button id="btn-erase" class="px-2 py-1.5 bg-white/95 hover:bg-white rounded-lg shadow text-xs sm:text-sm font-medium text-stone-700 border border-stone-200 active:scale-95 transition">
           Slet
         </button>
@@ -86,6 +89,14 @@
         <li class="text-stone-400 italic">Ingen endnu…</li>
       </ul>
     </div>
+  </div>
+
+  <!-- Kort-pile: flyt uden at tegne (mid-edges, safe for distrikter) -->
+  <div id="pan-arrows" class="pointer-events-none fixed inset-0 z-30" aria-hidden="false">
+    <button type="button" id="pan-left" class="pan-edge pan-edge-left pointer-events-auto touch-manipulation" aria-label="Flyt venstre">‹</button>
+    <button type="button" id="pan-right" class="pan-edge pan-edge-right pointer-events-auto touch-manipulation" aria-label="Flyt højre">›</button>
+    <button type="button" id="pan-up" class="pan-edge pan-edge-up pointer-events-auto touch-manipulation" aria-label="Flyt op">‹</button>
+    <button type="button" id="pan-down" class="pan-edge pan-edge-down pointer-events-auto touch-manipulation" aria-label="Flyt ned">›</button>
   </div>
 
   <!-- Zoom – høj z-index, store knapper til mobil -->
@@ -166,13 +177,13 @@
         Start med bots
       </label>
       <p class="text-[11px] text-stone-400 leading-relaxed mb-2">
-        Tegn veje · <b>Bro</b> over vand · 2-spor · flåde · Fit/zoom
+        <b>Flyt</b> / pile flytter kort · Tegn veje · Bro · 2-spor · Fit
       </p>
       <button type="button" id="btn-how" class="w-full text-xs text-stone-500 underline mb-1">Kort tip</button>
       <div id="how-box" class="hidden text-left text-xs text-stone-600 space-y-1 mb-2 bg-stone-50 rounded-xl p-3">
-        <p>• Vand/kyst: almindelig vej kan ikke over vand – brug <b>Bro</b></p>
-        <p>• Steder: by, landbrug, fabrik, havn – gods følger kæder</p>
-        <p>• Køb biler · opgrader last · 2-spor på flaskehalse</p>
+        <p>• <b>Flyt</b>-tool eller pile i siderne: ryk kort uden at tegne</p>
+        <p>• Vand: brug <b>Bro</b> · træk fra by = pan (ikke vej)</p>
+        <p>• Køb biler ved tryk på sted · 2-spor på flaskehalse</p>
       </div>
     </div>
   </div>

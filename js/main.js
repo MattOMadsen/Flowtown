@@ -15,6 +15,7 @@ document.getElementById('btn-toggle').addEventListener('click', (e) => {
 });
 
 const btnDraw = document.getElementById('btn-draw');
+const btnPan = document.getElementById('btn-pan');
 const btnErase = document.getElementById('btn-erase');
 const btnUpgrade = document.getElementById('btn-upgrade');
 const btnBridge = document.getElementById('btn-bridge');
@@ -30,8 +31,10 @@ function setMode(mode) {
     btn.classList.toggle('ring-rose-500', on && color === 'rose');
     btn.classList.toggle('ring-sky-500', on && color === 'sky');
     btn.classList.toggle('ring-cyan-500', on && color === 'cyan');
+    btn.classList.toggle('ring-indigo-500', on && color === 'indigo');
   };
   ring(btnDraw, mode === 'draw', 'emerald');
+  ring(btnPan, mode === 'pan', 'indigo');
   ring(btnErase, mode === 'erase', 'rose');
   ring(btnUpgrade, mode === 'upgrade', 'sky');
   ring(btnBridge, mode === 'bridge', 'cyan');
@@ -43,16 +46,51 @@ function setMode(mode) {
     btn.classList.toggle('bg-white/95', !active);
     btn.classList.toggle('text-stone-700', !active);
   };
+  styleTool(btnPan, mode === 'pan', 'bg-indigo-500', 'border-indigo-600');
   styleTool(btnUpgrade, mode === 'upgrade', 'bg-sky-500', 'border-sky-600');
   styleTool(btnBridge, mode === 'bridge', 'bg-cyan-600', 'border-cyan-700');
-  canvas.style.cursor = (mode === 'draw' || mode === 'bridge') ? 'crosshair' : 'pointer';
+  canvas.style.cursor =
+    mode === 'pan' ? 'grab' :
+    (mode === 'draw' || mode === 'bridge') ? 'crosshair' : 'pointer';
 }
 
 btnDraw.addEventListener('click', () => setMode('draw'));
+if (btnPan) btnPan.addEventListener('click', () => setMode('pan'));
 btnErase.addEventListener('click', () => setMode('erase'));
 if (btnUpgrade) btnUpgrade.addEventListener('click', () => setMode('upgrade'));
 if (btnBridge) btnBridge.addEventListener('click', () => setMode('bridge'));
 setMode('draw');
+
+// Edge pan arrows (+ hold to repeat)
+function bindPanEdge(id, dir) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let hold = null;
+  const step = () => game.panNudge?.(dir);
+  const start = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    step();
+    clearInterval(hold);
+    hold = setInterval(step, 140);
+  };
+  const stop = () => {
+    clearInterval(hold);
+    hold = null;
+  };
+  el.addEventListener('pointerdown', start);
+  el.addEventListener('pointerup', stop);
+  el.addEventListener('pointerleave', stop);
+  el.addEventListener('pointercancel', stop);
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+}
+bindPanEdge('pan-left', 'left');
+bindPanEdge('pan-right', 'right');
+bindPanEdge('pan-up', 'up');
+bindPanEdge('pan-down', 'down');
 
 function updateBotButton() {
   const on = game.botsEnabled;

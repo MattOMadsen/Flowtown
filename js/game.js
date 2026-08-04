@@ -572,6 +572,25 @@ export class Game {
     this.requestDraw();
   }
 
+  /**
+   * Pan camera by CSS-pixel delta (positive dx = view moves right content left).
+   */
+  panBy(cssDx, cssDy) {
+    const dpr = this.dpr || 1;
+    this.camera.x += cssDx * dpr;
+    this.camera.y += cssDy * dpr;
+    this.requestDraw();
+  }
+
+  /** Nudge map with edge arrows (world-ish step) */
+  panNudge(dir) {
+    const step = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * 0.18;
+    if (dir === 'left') this.panBy(step, 0);
+    else if (dir === 'right') this.panBy(-step, 0);
+    else if (dir === 'up') this.panBy(0, step);
+    else if (dir === 'down') this.panBy(0, -step);
+  }
+
   resetCamera() {
     this.camera.x = 0;
     this.camera.y = 0;
@@ -663,6 +682,7 @@ export class Game {
   }
 
   beginStroke(x, y) {
+    if (this.mode === 'pan') return;
     if (this.mode === 'erase') {
       this.eraseNear(x, y);
       return;

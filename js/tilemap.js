@@ -1,11 +1,21 @@
 /**
- * Procedural tile-map over the playable board.
- * Seamless textures: grass, dirt, forest, water.
+ * Procedural tile-map with grass/dirt variants (less repetition).
  */
 
 import { pointInWater } from './water.js';
 
-export const TILE_KEYS = ['grass', 'dirt', 'forest', 'water'];
+/** Indices into TILE_KEYS */
+export const TILE_KEYS = [
+  'grass', 'grass2', 'grass3',
+  'dirt', 'dirt2', 'dirt3',
+  'forest',
+  'water'
+];
+
+const GRASS = [0, 1, 2];
+const DIRT = [3, 4, 5];
+const FOREST = 6;
+const WATER = 7;
 
 function mulberry32(a) {
   return function () {
@@ -14,6 +24,10 @@ function mulberry32(a) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function pick(arr, rng) {
+  return arr[Math.floor(rng() * arr.length) % arr.length];
 }
 
 /**
@@ -30,55 +44,61 @@ export function buildTileMap(worldW, worldH, dpr, districts = [], waterBodies = 
     for (let x = 0; x < cols; x++) {
       const cx = (x + 0.5) * tileSize;
       const cy = (y + 0.5) * tileSize;
-      let t = 0;
+      // default grass variant by checker + noise (breaks grid look)
+      let t = GRASS[(x * 3 + y * 5 + Math.floor(rng() * 3)) % GRASS.length];
 
       if (pointInWater(cx, cy, waterBodies)) {
-        t = 3;
+        t = WATER;
       } else {
         const n = rng();
-        if (n < 0.11) t = 2;
-        else if (n < 0.16) t = 1;
+        if (n < 0.1) t = FOREST;
+        else if (n < 0.15) t = pick(DIRT, rng);
 
         for (const d of districts) {
           const dist = Math.hypot(d.x - cx, d.y - cy);
           if (dist > d.r * 5.5) continue;
-          if (d.type === 'farm' && dist < d.r * 3.6) t = 1;
-          if (d.type === 'factory' && dist < d.r * 2.9) t = 1;
-          if (d.type === 'harbor' && dist < d.r * 2.3) t = 1;
-          if ((d.type === 'town' || d.type === 'capital') && dist < d.r * 2.5 && rng() < 0.45) t = 1;
-          if (dist > d.r * 2.8 && dist < d.r * 5.2 && rng() < 0.22) t = 2;
+          if (d.type === 'farm' && dist < d.r * 3.6) t = pick(DIRT, rng);
+          if (d.type === 'factory' && dist < d.r * 2.9) t = pick(DIRT, rng);
+          if (d.type === 'harbor' && dist < d.r * 2.3) t = pick(DIRT, rng);
+          if ((d.type === 'town' || d.type === 'capital') && dist < d.r * 2.5 && rng() < 0.45) {
+            t = pick(DIRT, rng);
+          }
+          if (dist > d.r * 2.8 && dist < d.r * 5.2 && rng() < 0.22) t = FOREST;
         }
       }
       grid[y * cols + x] = t;
     }
   }
 
-  // Remove lonely non-grass tiles
   for (let y = 1; y < rows - 1; y++) {
     for (let x = 1; x < cols - 1; x++) {
       const i = y * cols + x;
-      if (grid[i] === 0 || grid[i] === 3) continue;
+      const v = grid[i];
+      if (v === WATER || GRASS.includes(v)) continue;
       let same = 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        if (grid[(y + dy) * cols + (x + dx)] === grid[i]) same++;
+        const n = grid[(y + dy) * cols + (x + dx)];
+        // same family
+        const family = (a) => (GRASS.includes(a) ? 'g' : DIRT.includes(a) ? 'd' : a);
+        if (family(n) === family(v)) same++;
       }
-      if (same === 0) grid[i] = 0;
+      if (same === 0 && v !== FOREST) grid[i] = pick(GRASS, rng);
     }
   }
 
   return { cols, rows, tileSize, grid };
 }
 
-/**
- * Draw tiles via drawImage (seamless textures).
- * @param {Record<string, HTMLImageElement|null>} tileImgs
- */
 export function drawTileMap(ctx, tileMap, tileImgs) {
   if (!tileMap) return;
   const { cols, rows, tileSize, grid } = tileMap;
   const solids = {
     grass: '#b7d18a',
+    grass2: '#a8c97c',
+    grass3: '#c2db96',
     dirt: '#c4b48a',
+    dirt2: '#d0bc94',
+    dirt3: '#b8a67c',
     forest: '#6f9b5a',
     water: '#3ba3d0'
   };
@@ -90,10 +110,9 @@ export function drawTileMap(ctx, tileMap, tileImgs) {
       const py = y * tileSize;
       const img = tileImgs?.[key];
       if (img && img.complete && img.naturalWidth > 0) {
-        // slight subpixel overlap kills hairline gaps
         ctx.drawImage(img, px, py, tileSize + 0.75, tileSize + 0.75);
       } else {
-        ctx.fillStyle = solids[key];
+        ctx.fillStyle = solids[key] || solids.grass;
         ctx.fillRect(px, py, tileSize + 0.75, tileSize + 0.75);
       }
     }

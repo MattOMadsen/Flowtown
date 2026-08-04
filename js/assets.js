@@ -19,7 +19,11 @@ const VEHICLE_SRC = {
 
 const TILE_SRC = {
   grass: 'assets/tiles/grass.png',
+  grass2: 'assets/tiles/grass2.png',
+  grass3: 'assets/tiles/grass3.png',
   dirt: 'assets/tiles/dirt.png',
+  dirt2: 'assets/tiles/dirt2.png',
+  dirt3: 'assets/tiles/dirt3.png',
   forest: 'assets/tiles/forest.png',
   water: 'assets/tiles/water.png'
 };
