@@ -42,14 +42,14 @@ export const SCENARIOS = [
     name: 'Første forbindelser',
     blurb: 'Lille dal – lær at forbinde by og landbrug.',
     seed: 101,
-    startMoney: 520,
+    startMoney: 1100,
     worldScale: 1.0,
     unlockLevel: 1,
     layout: LAYOUT_INTRO,
     goals: [
       { type: 'deliver', amount: 10, stars: 1 },
       { type: 'connect_all', stars: 1 },
-      { type: 'money', amount: 650, stars: 1 }
+      { type: 'money', amount: 500, stars: 1 }
     ]
   },
   {
@@ -57,14 +57,14 @@ export const SCENARIOS = [
     name: 'Kyststrækningen',
     blurb: 'Havn, fabrik og marker – gods skal ud.',
     seed: 202,
-    startMoney: 480,
+    startMoney: 1000,
     worldScale: 1.12,
     unlockLevel: 2,
     layout: LAYOUT_COAST,
     goals: [
       { type: 'deliver', amount: 18, stars: 1 },
       { type: 'jobs', amount: 3, stars: 1 },
-      { type: 'money', amount: 900, stars: 1 }
+      { type: 'money', amount: 550, stars: 1 }
     ]
   },
   {
@@ -72,7 +72,7 @@ export const SCENARIOS = [
     name: 'Industri-dalen',
     blurb: 'Stort kort – fuld netværks-udfordring.',
     seed: 303,
-    startMoney: 450,
+    startMoney: 950,
     worldScale: 1.28,
     unlockLevel: 3,
     layout: LAYOUT_VALLEY,
@@ -87,7 +87,7 @@ export const SCENARIOS = [
     name: 'Sandkasse',
     blurb: 'Fri leg på det store standardkort. Ingen stjerne-krav.',
     seed: 42,
-    startMoney: 500,
+    startMoney: 1200,
     worldScale: 1.2,
     unlockLevel: 1,
     layout: null, // default full layout

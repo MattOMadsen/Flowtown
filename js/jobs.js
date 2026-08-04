@@ -9,8 +9,8 @@ export const JOB_TYPES = {
     icon: '👤',
     vehicle: 'car',
     unit: 'personer',
-    baseReward: 18,
-    rewardPerUnit: 12
+    baseReward: 28,
+    rewardPerUnit: 16
   },
   cargo: {
     id: 'cargo',
@@ -18,8 +18,8 @@ export const JOB_TYPES = {
     icon: '📦',
     vehicle: 'truck',
     unit: 'kasser',
-    baseReward: 22,
-    rewardPerUnit: 16
+    baseReward: 34,
+    rewardPerUnit: 20
   }
 };
 

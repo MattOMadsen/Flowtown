@@ -44,6 +44,7 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-ERASE** Slet vejstykke (ikke hele vejen)
 - [x] **PROG-HEX** Blød hex-hjælp under tegning
 - [x] **PROG-GFX** Dybde/lys/hex + tip flyttet til start
+- [x] **PROG-ART2** Opdaterede sted-sprites + højere startpenge/belønninger
 
 ---
 

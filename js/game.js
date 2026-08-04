@@ -35,10 +35,10 @@ import {
   goalLabel
 } from './scenarios.js';
 
-const START_MONEY = 500;
+const START_MONEY = 950;
 const MAX_JOBS = 5;
-const ROAD_BASE_COST = 12;
-const ROAD_COST_PER_PX = 0.045; // scaled by dpr later
+const ROAD_BASE_COST = 9;
+const ROAD_COST_PER_PX = 0.034; // cheaper early roads so missions are playable
 const STUCK_PENALTY_INTERVAL = 4;
 const STUCK_PENALTY = 3;
 

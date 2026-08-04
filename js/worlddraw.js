@@ -132,7 +132,7 @@ export function drawPlaceHub(ctx, d, dpr, helpers) {
   const { lightenHex, drawSilhouette } = helpers;
   const type = d.type || 'town';
   const sprite = getPlaceSprite(type);
-  const size = d.r * 2.25;
+  const size = d.r * 2.45; // slightly larger sprites – clearer art
 
   // Multi-layer contact shadow
   ctx.beginPath();
