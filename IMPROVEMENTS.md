@@ -49,6 +49,8 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 - [x] **PROG-MAP2** Større bræt, flere steder, blødere kyst
 - [x] **PROG-MINIMAP** Større minimap over hele worldW/H + fix HUD auto-hide
 - [x] **PROG-MINIMAP2** Mobil-skaleret minimap + friskere farm/factory/harbor
+- [x] **PROG-ART-CAP** Ny capital-sprite
+- [x] **PROG-UI-POLISH** HUD chips/tools/stats/zoom polish
 
 ---
 
