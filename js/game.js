@@ -186,6 +186,11 @@ export class Game {
     /** UI-callback: ({ open, bridgeCost, junctionCost, bridgeAllCost, junctionAllCost, money, index, total, multi }) */
     this.onCrossingChoice = null;
     this._nextLightGroupId = 1;
+    /**
+     * Undo-batches for multi-kryds (ét træk = alle segmenter + fuld $).
+     * { id, roadIds: string[], totalPaid, lightRestores: [{ roadId, hasLight, lightT, lightGroup, lightRole, lightPhase }] }
+     */
+    this.undoBatches = [];
     this._cityHintShown = false;
     this._cityHintUntil = 0;
     for (const b of this.bots) b.enabled = false;
@@ -1762,8 +1767,33 @@ export class Game {
     }
   }
 
+  /** Snapshot af lys-tilstand før vi piller ved en eksisterende vej (til undo). */
+  _snapshotLight(road) {
+    if (!road) return null;
+    return {
+      roadId: road.id,
+      hasLight: !!road.hasLight,
+      lightT: road.lightT != null ? road.lightT : 0.5,
+      lightGroup: road.lightGroup != null ? road.lightGroup : null,
+      lightRole: road.lightRole === 1 ? 1 : 0,
+      lightPhase: road.lightPhase | 0
+    };
+  }
+
+  _restoreLightSnapshot(snap) {
+    if (!snap?.roadId) return;
+    const road = this.roads.find(r => r.id === snap.roadId);
+    if (!road) return;
+    road.hasLight = !!snap.hasLight;
+    road.lightT = snap.lightT != null ? snap.lightT : 0.5;
+    road.lightGroup = snap.lightGroup != null ? snap.lightGroup : null;
+    road.lightRole = snap.lightRole === 1 ? 1 : 0;
+    road.lightPhase = snap.lightPhase | 0;
+  }
+
   /**
    * Byg vej ud fra færdige beslutninger (split ved kryds).
+   * Hele byggeriet er ét undo-batch med fuld refund.
    */
   _commitCrossingBuild(pend) {
     const points = pend.points;
@@ -1785,11 +1815,16 @@ export class Game {
       if (d === 'junction') anyJunction = true;
     }
 
+    const batchId = `xb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    const batchRoadIds = [];
+    const lightRestores = [];
+    // Undgå dobbelt-snapshot af samme eksisterende vej
+    const snappedOld = new Set();
+
     this.money -= cost;
     const mid = this._pointAtPolylineT(points, 0.5);
     this.addFloatText(mid.x, mid.y, `−$${cost}`, anyBridge ? '#0369a1' : '#b91c1c');
 
-    const perPaid = Math.round(cost / Math.max(1, n + 1));
     for (let i = 0; i < n; i++) {
       const seg = this.slicePolylineByT(points, cuts[i], cuts[i + 1]);
       const d = decisions[i];
@@ -1799,14 +1834,21 @@ export class Game {
       const roadOk = this.addRoadForOwner(seg, 'player', null, 0, false, {
         isBridge,
         hasLight: isJunc,
-        lightT
+        lightT,
+        undoBatchId: batchId
       });
       if (!roadOk) continue;
       const newRoad = this.roads[this.roads.length - 1];
       if (newRoad) {
-        newRoad.paidCost = perPaid;
+        newRoad.undoBatchId = batchId;
+        batchRoadIds.push(newRoad.id);
         if (isJunc && crossings[i].road && this.roads.includes(crossings[i].road)) {
-          this.pairJunctionLights(newRoad, lightT, crossings[i].road, crossings[i].tOnOld);
+          const old = crossings[i].road;
+          if (!snappedOld.has(old.id)) {
+            lightRestores.push(this._snapshotLight(old));
+            snappedOld.add(old.id);
+          }
+          this.pairJunctionLights(newRoad, lightT, old, crossings[i].tOnOld);
         } else if (isJunc) {
           newRoad.hasLight = true;
           newRoad.lightT = lightT;
@@ -1818,10 +1860,39 @@ export class Game {
     const lastD = decisions[n - 1];
     this.addRoadForOwner(tail, 'player', null, 0, false, {
       isBridge: lastD === 'bridge',
-      hasLight: false
+      hasLight: false,
+      undoBatchId: batchId
     });
     const tailRoad = this.roads[this.roads.length - 1];
-    if (tailRoad) tailRoad.paidCost = perPaid;
+    if (tailRoad) {
+      tailRoad.undoBatchId = batchId;
+      batchRoadIds.push(tailRoad.id);
+    }
+    // Fordel paidCost så sum == cost (batch.totalPaid er dog facit ved undo)
+    if (batchRoadIds.length) {
+      const each = Math.floor(cost / batchRoadIds.length);
+      let sum = 0;
+      for (let k = 0; k < batchRoadIds.length; k++) {
+        const r = this.roads.find(x => x.id === batchRoadIds[k]);
+        if (!r) continue;
+        if (k === batchRoadIds.length - 1) r.paidCost = Math.max(0, cost - sum);
+        else {
+          r.paidCost = each;
+          sum += each;
+        }
+      }
+    }
+
+    if (batchRoadIds.length) {
+      this.undoBatches.push({
+        id: batchId,
+        roadIds: batchRoadIds.slice(),
+        totalPaid: cost,
+        lightRestores
+      });
+      // Hold stakken kort
+      if (this.undoBatches.length > 40) this.undoBatches.shift();
+    }
 
     if (anyJunction) this.tryAchievement('traffic_light');
     if (anyBridge && anyJunction) this.showToast(n > 1 ? 'Blandet: bro + lys' : 'Vej bygget');
@@ -2226,7 +2297,7 @@ export class Game {
         opts.isBridge ? '#0369a1' : '#b91c1c'
       );
     }
-    this.roads.push(new Road(points, {
+    const road = new Road(points, {
       owner,
       ownerColor,
       lanes: opts.lanes != null ? opts.lanes : 2, // tovejs som standard
@@ -2236,7 +2307,9 @@ export class Game {
       lightT: opts.lightT != null ? opts.lightT : 0.5,
       lightGroup: opts.lightGroup != null ? opts.lightGroup : null,
       lightRole: opts.lightRole === 1 ? 1 : 0
-    }));
+    });
+    if (opts.undoBatchId) road.undoBatchId = opts.undoBatchId;
+    this.roads.push(road);
     if (owner === 'player') {
       this.checkFirstLinks();
       this.refreshGoals();
@@ -2647,22 +2720,77 @@ export class Game {
   }
 
   undo() {
+    // Find seneste spiller-vej
+    let lastIdx = -1;
     for (let i = this.roads.length - 1; i >= 0; i--) {
       if (this.roads[i].owner === 'player') {
-        const road = this.roads[i];
-        // Full refund of what was paid for this road
-        const refund = Math.max(
-          0,
-          road.paidCost || this.roadCostForLength(road.length)
-        );
-        this.money += refund;
-        this.vehicles = this.vehicles.filter(v => v.currentRoad !== road);
-        this.roads.splice(i, 1);
-        this.showToast(refund ? `Undo · +$${refund} (fuld refund)` : 'Undo');
-        this.requestDraw();
-        return;
+        lastIdx = i;
+        break;
       }
     }
+    if (lastIdx < 0) {
+      this.showToast('Intet at fortryde');
+      return;
+    }
+
+    const last = this.roads[lastIdx];
+    const batchId = last.undoBatchId || null;
+
+    // Multi-kryds / split-strøg: ét undo fjerner hele batch + fuld refund + lys-restore
+    if (batchId) {
+      let batch = null;
+      for (let b = this.undoBatches.length - 1; b >= 0; b--) {
+        if (this.undoBatches[b].id === batchId) {
+          batch = this.undoBatches[b];
+          this.undoBatches.splice(b, 1);
+          break;
+        }
+      }
+      const idSet = new Set(
+        batch?.roadIds?.length
+          ? batch.roadIds
+          : this.roads.filter(r => r.undoBatchId === batchId).map(r => r.id)
+      );
+      let refund = 0;
+      if (batch && batch.totalPaid != null) {
+        refund = Math.max(0, batch.totalPaid | 0);
+      } else {
+        for (const r of this.roads) {
+          if (idSet.has(r.id)) {
+            refund += Math.max(0, r.paidCost || this.roadCostForLength(r.length));
+          }
+        }
+      }
+      // Fjern biler på batch-veje
+      this.vehicles = this.vehicles.filter(v => !v.currentRoad || !idSet.has(v.currentRoad.id));
+      this.roads = this.roads.filter(r => !idSet.has(r.id));
+      // Gendan lys på eksisterende veje som blev parret
+      if (batch?.lightRestores?.length) {
+        for (const snap of batch.lightRestores) this._restoreLightSnapshot(snap);
+      }
+      this.money += refund;
+      const n = idSet.size;
+      this.showToast(
+        refund
+          ? `Undo · ${n} stykke${n === 1 ? '' : 'r'} · +$${refund} (fuld refund)`
+          : `Undo · ${n} stykke${n === 1 ? '' : 'r'}`
+      );
+      this._sessionDirty = true;
+      this.requestDraw();
+      return;
+    }
+
+    // Enkelt vej
+    const refund = Math.max(
+      0,
+      last.paidCost || this.roadCostForLength(last.length)
+    );
+    this.money += refund;
+    this.vehicles = this.vehicles.filter(v => v.currentRoad !== last);
+    this.roads.splice(lastIdx, 1);
+    this.showToast(refund ? `Undo · +$${refund} (fuld refund)` : 'Undo');
+    this._sessionDirty = true;
+    this.requestDraw();
   }
 
   clearRoads() {
