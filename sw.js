@@ -1,5 +1,5 @@
 /* Flowtown service worker – offline cache for core shell */
-const CACHE = 'flowtown-v12-hex-joins';
+const CACHE = 'flowtown-v13-seamless';
 const PRECACHE = [
   './',
   './index.html',

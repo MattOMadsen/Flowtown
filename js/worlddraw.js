@@ -1,6 +1,5 @@
 /**
- * World: richer tile board + place hubs (ART lift 2026-08).
- * Cozy stylized city-builder look.
+ * World: sømløst moderne terræn + place hubs.
  */
 
 import { drawWaterBodies } from './water.js';
@@ -18,44 +17,27 @@ export function drawWorldTerrain(
   const w = worldW;
   const h = worldH;
 
-  // Soft drop shadow under board
-  ctx.fillStyle = 'rgba(15, 12, 10, 0.32)';
+  // Soft board shadow
+  ctx.fillStyle = 'rgba(15, 18, 22, 0.22)';
   ctx.beginPath();
-  roundRectPath(ctx, -3 * dpr, 6 * dpr, w + 14 * dpr, h + 12 * dpr, 20 * dpr);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(20, 18, 16, 0.12)';
-  ctx.beginPath();
-  roundRectPath(ctx, 2 * dpr, 3 * dpr, w + 6 * dpr, h + 6 * dpr, 16 * dpr);
+  roundRectPath(ctx, 2 * dpr, 6 * dpr, w + 8 * dpr, h + 8 * dpr, 18 * dpr);
   ctx.fill();
 
   ctx.save();
   ctx.beginPath();
-  roundRectPath(ctx, 0, 0, w, h, 14 * dpr);
+  roundRectPath(ctx, 0, 0, w, h, 16 * dpr);
   ctx.clip();
 
-  // Sky-to-meadow wash (warmer, more depth)
+  // Fallback base (tileMap tegner selv sømløst meadow)
   const base = ctx.createLinearGradient(0, 0, 0, h);
-  base.addColorStop(0, '#cfe8b8');
-  base.addColorStop(0.35, '#dcecc4');
-  base.addColorStop(0.7, '#e4e0c0');
-  base.addColorStop(1, '#d4c8a8');
+  base.addColorStop(0, '#c5dfa8');
+  base.addColorStop(1, '#c8d4a0');
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, w, h);
 
   if (tileMap) {
     drawTileMap(ctx, tileMap, getTileImages());
   }
-
-  // Studio light – dæmpet så tiles ikke vaskes ud / grønner over
-  const light = ctx.createRadialGradient(
-    w * 0.18, h * 0.12, 0,
-    w * 0.32, h * 0.38, Math.max(w, h) * 0.78
-  );
-  light.addColorStop(0, 'rgba(255,255,255,0.08)');
-  light.addColorStop(0.5, 'rgba(255,255,255,0.02)');
-  light.addColorStop(1, 'rgba(40, 32, 24, 0.06)');
-  ctx.fillStyle = light;
-  ctx.fillRect(0, 0, w, h);
 
   if (waterBodies?.length) {
     drawWaterBodies(ctx, waterBodies, dpr);
@@ -65,43 +47,31 @@ export function drawWorldTerrain(
     if (d.type === 'farm') drawFarmFields(ctx, d, dpr);
   }
 
-  // Ambient foliage (ekstra buske uden for skov-tiles)
   drawAmbientDecor(ctx, w, h, dpr, districts, seed, tileMap);
 
-  // Hex-guide kun hvis ikke allerede hex-tiles (ellers for rod)
-  if (opts.showHex && opts.hexSize && tileMap?.kind !== 'hex') {
-    drawHexGuide(ctx, w, h, opts.hexSize, dpr);
-  }
-
+  // Ingen hex/firkant-guide – nogensinde
   // Soft vignette
   const vig = ctx.createRadialGradient(
-    w * 0.5, h * 0.48, Math.min(w, h) * 0.22,
-    w * 0.5, h * 0.5, Math.max(w, h) * 0.72
+    w * 0.5, h * 0.45, Math.min(w, h) * 0.25,
+    w * 0.5, h * 0.5, Math.max(w, h) * 0.7
   );
   vig.addColorStop(0, 'rgba(0,0,0,0)');
-  vig.addColorStop(0.7, 'rgba(30, 25, 18, 0.04)');
-  vig.addColorStop(1, 'rgba(25, 20, 14, 0.16)');
+  vig.addColorStop(1, 'rgba(20, 25, 30, 0.1)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
 
   ctx.restore();
 
-  // Beveled frame
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-  ctx.lineWidth = 2.5 * dpr;
+  // Tynd moderne ramme
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.5 * dpr;
   ctx.beginPath();
-  roundRectPath(ctx, 2.5 * dpr, 2.5 * dpr, w - 5 * dpr, h - 5 * dpr, 13 * dpr);
+  roundRectPath(ctx, 1.5 * dpr, 1.5 * dpr, w - 3 * dpr, h - 3 * dpr, 15 * dpr);
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(40, 32, 26, 0.5)';
-  ctx.lineWidth = 3.2 * dpr;
+  ctx.strokeStyle = 'rgba(30, 35, 40, 0.28)';
+  ctx.lineWidth = 2 * dpr;
   ctx.beginPath();
-  roundRectPath(ctx, 0, 0, w, h, 14 * dpr);
-  ctx.stroke();
-  // Inner warm rim
-  ctx.strokeStyle = 'rgba(180, 150, 100, 0.18)';
-  ctx.lineWidth = 1.2 * dpr;
-  ctx.beginPath();
-  roundRectPath(ctx, 5 * dpr, 5 * dpr, w - 10 * dpr, h - 10 * dpr, 11 * dpr);
+  roundRectPath(ctx, 0, 0, w, h, 16 * dpr);
   ctx.stroke();
 }
 
@@ -112,40 +82,20 @@ function drawAmbientDecor(ctx, w, h, dpr, districts, seed, tileMap = null) {
     return s / 4294967296;
   };
   ctx.save();
-  // Små buske i græs (ikke oven i skov-canopy / byer)
-  for (let i = 0; i < 56; i++) {
+  // Få, bløde buske – ikke prik-regn
+  for (let i = 0; i < 22; i++) {
     const x = rng() * w;
     const y = rng() * h;
     let near = false;
     for (const d of districts) {
-      if (Math.hypot(d.x - x, d.y - y) < d.r * 2.1) { near = true; break; }
+      if (Math.hypot(d.x - x, d.y - y) < d.r * 2.2) { near = true; break; }
     }
     if (near) continue;
-    // undgå stier (dirt-bånd)
-    if (tileMap?.paths?.length) {
-      let onPath = false;
-      for (const pts of tileMap.paths) {
-        for (let j = 1; j < pts.length; j++) {
-          const ax = pts[j - 1].x;
-          const ay = pts[j - 1].y;
-          const bx = pts[j].x;
-          const by = pts[j].y;
-          const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (y - ay) * (by - ay))
-            / Math.max(1, (bx - ax) ** 2 + (by - ay) ** 2)));
-          const px = ax + (bx - ax) * t;
-          const py = ay + (by - ay) * t;
-          if (Math.hypot(x - px, y - py) < (tileMap.tileSize || 40) * 0.45) {
-            onPath = true;
-            break;
-          }
-        }
-        if (onPath) break;
-      }
-      if (onPath) continue;
-    }
-    const r = (1.4 + rng() * 3.2) * dpr;
-    ctx.globalAlpha = 0.1 + rng() * 0.16;
-    ctx.fillStyle = rng() > 0.5 ? '#4f8a38' : '#639e48';
+    const r = (2 + rng() * 4) * dpr;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(90, 140, 70, 0.16)');
+    g.addColorStop(1, 'rgba(90, 140, 70, 0)');
+    ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
@@ -153,58 +103,20 @@ function drawAmbientDecor(ctx, w, h, dpr, districts, seed, tileMap = null) {
   ctx.restore();
 }
 
-function drawHexGuide(ctx, w, h, size, dpr) {
-  // Meget diskret – må ikke “fylde” kortet
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.055)';
-  ctx.lineWidth = 0.8 * dpr;
-  const hexH = size * 2;
-  const hexW = Math.sqrt(3) * size;
-  const vert = hexH * 0.75;
-  for (let row = -1; row * vert < h + hexH; row++) {
-    for (let col = -1; col * hexW < w + hexW; col++) {
-      const cx = col * hexW + (row % 2 ? hexW * 0.5 : 0);
-      const cy = row * vert;
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = (Math.PI / 180) * (60 * i - 30);
-        const x = cx + size * Math.cos(a);
-        const y = cy + size * Math.sin(a);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-}
-
 function drawFarmFields(ctx, d, dpr) {
-  // Bløde mark-striber – ikke store grønne firkanter over kortet
-  const rows = 4;
-  const fw = d.r * 2.1;
-  const fh = d.r * 1.55;
+  // Meget diskret mark-glød – ingen striber/kasser
+  const x = d.x + d.r * 0.7;
+  const y = d.y + d.r * 0.35;
+  const rx = d.r * 1.6;
+  const ry = d.r * 1.0;
   ctx.save();
-  ctx.translate(d.x + d.r * 0.75, d.y + d.r * 0.4);
-  ctx.rotate(-0.12);
-  ctx.globalAlpha = 0.16;
-  // afrundet clip så det ikke ligner en boks
+  const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(rx, ry));
+  g.addColorStop(0, 'rgba(180, 170, 90, 0.1)');
+  g.addColorStop(1, 'rgba(180, 170, 90, 0)');
+  ctx.fillStyle = g;
   ctx.beginPath();
-  const rr = 10 * dpr;
-  const x0 = -fw / 2;
-  const y0 = -fh / 2;
-  ctx.moveTo(x0 + rr, y0);
-  ctx.arcTo(x0 + fw, y0, x0 + fw, y0 + fh, rr);
-  ctx.arcTo(x0 + fw, y0 + fh, x0, y0 + fh, rr);
-  ctx.arcTo(x0, y0 + fh, x0, y0, rr);
-  ctx.arcTo(x0, y0, x0 + fw, y0, rr);
-  ctx.closePath();
-  ctx.clip();
-  for (let i = 0; i < rows; i++) {
-    ctx.fillStyle = i % 2 === 0 ? '#8fbf4a' : '#c9a84a';
-    ctx.fillRect(x0, y0 + (i / rows) * fh, fw, fh / rows);
-  }
+  ctx.ellipse(x, y, rx, ry, -0.1, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 

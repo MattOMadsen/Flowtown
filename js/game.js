@@ -2979,9 +2979,8 @@ export class Game {
 
   /** Hex grid size for snap helpers */
   get hexSize() {
-    // Match tilemap hex når muligt
-    if (this.tileMap?.hexSize) return this.tileMap.hexSize;
-    return 34 * (this.dpr || 1);
+    // Soft snap-grid (usynlig) – ikke til tegning af hex-fliser
+    return 36 * (this.dpr || 1);
   }
 
   /** Soft snap to hex center (easier drawing, not forced) */
@@ -3843,7 +3842,7 @@ export class Game {
       ctx, w, h, this.dpr,
       this.districts, this.mapSeed,
       this.waterBodies, this.tileMap,
-      { showHex: this.mode === 'draw' || this.mode === 'bridge', hexSize: this.hexSize }
+      { showHex: false, hexSize: this.hexSize }
     );
   }
 
@@ -4143,42 +4142,19 @@ export class Game {
     }
 
     for (const p of merged) {
-      // ydre curb
+      // Diskret moderne kryds – lille asfalt-disk, ingen knopper
+      const rr = p.r * 0.85;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * 1.2, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, rr * 1.08, 0, Math.PI * 2);
       ctx.fillStyle = p.edge;
-      ctx.globalAlpha = 0.96;
+      ctx.globalAlpha = 0.55;
       ctx.fill();
-      // asfalt
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, rr, 0, Math.PI * 2);
       ctx.fillStyle = p.asphalt;
-      ctx.fill();
-      // highlight
-      ctx.beginPath();
-      ctx.arc(p.x - p.r * 0.15, p.y - p.r * 0.18, p.r * 0.4, 0, Math.PI * 2);
-      ctx.fillStyle = p.hi;
-      ctx.globalAlpha = 0.2;
+      ctx.globalAlpha = 0.92;
       ctx.fill();
       ctx.globalAlpha = 1;
-      // X-kryds: lille hvid “+” markering
-      if (p.cross) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-        ctx.lineWidth = 1.4 * dpr;
-        ctx.lineCap = 'round';
-        const s = p.r * 0.28;
-        ctx.beginPath();
-        ctx.moveTo(p.x - s, p.y);
-        ctx.lineTo(p.x + s, p.y);
-        ctx.moveTo(p.x, p.y - s);
-        ctx.lineTo(p.x, p.y + s);
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, Math.max(2, p.r * 0.1), 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fill();
-      }
     }
   }
 
