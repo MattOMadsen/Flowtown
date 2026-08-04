@@ -508,7 +508,8 @@ export class Vehicle {
 
     const sprite = getVehicleSprite(this.classId, this.kind);
     if (sprite && sprite.complete && sprite.naturalWidth > 0) {
-      const sc = (isBus ? 3.05 : isHeavy ? 2.85 : isVan ? 2.65 : isFast ? 2.4 : 2.55) * s;
+      // Ens scale-familie (top-down packs) – længere køretøjer lidt større
+      const sc = (isBus ? 2.95 : isHeavy ? 2.8 : isVan ? 2.55 : isFast ? 2.35 : 2.5) * s;
       ctx.drawImage(sprite, -sc / 2, -sc / 2, sc, sc);
     } else if (this.kind === 'truck') {
       this.drawTruck(ctx, s, dpr, isHeavy);

@@ -157,6 +157,10 @@ Batch-plan: **1** flaskehals + mere-menu · **2** baner/flow/bygninger · **3** 
 - [x] Bro: gelænder-stolper + bedre piller
 - [x] Tool-UI ikoner (draw/erase/upgrade/bridge/…)
 
+### ART-3 (04/08)
+- [x] Ens top-down bil-sprites (car, fast, truck, heavy, bus, van)
+- [x] Skarpere by-varianter (places + sharpen)
+
 ---
 
 ## Mangler / næste (anbefalet rækkefølge)
