@@ -588,7 +588,8 @@ body {
 
 #district-sheet .pointer-events-auto > div,
 #shop-sheet .pointer-events-auto > div,
-#achieve-sheet .pointer-events-auto > div {
+#achieve-sheet .pointer-events-auto > div,
+#lb-sheet .pointer-events-auto > div {
   margin-bottom: max(0.35rem, var(--safe-bottom));
 }
 

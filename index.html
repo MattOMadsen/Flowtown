@@ -54,6 +54,7 @@
         <button id="btn-light" type="button" class="hud-tool" title="Trafiklys">🚦</button>
         <button id="btn-shop" type="button" class="hud-tool" title="Butik">🛒</button>
         <button id="btn-achieve" type="button" class="hud-tool" title="Achievements">🏆</button>
+        <button id="btn-leaderboard" type="button" class="hud-tool" title="Topscore">🏅</button>
         <button id="btn-undo" type="button" class="hud-tool" title="Fortryd">↩️</button>
         <button id="btn-clear" type="button" class="hud-tool" title="Ryd veje">✨</button>
         <button id="btn-bots" type="button" class="hud-tool" title="Bots">🤖</button>
@@ -115,6 +116,36 @@
     <button id="btn-zoom-out" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-2xl font-bold text-stone-800 active:scale-95 transition" title="Zoom ud" aria-label="Zoom ud">−</button>
     <button id="btn-zoom-fit" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[10px] font-bold text-stone-700 active:scale-95 transition" title="Se hele byen" aria-label="Se hele byen">Fit</button>
     <button id="btn-zoom-reset" type="button" class="zoom-btn w-11 h-11 sm:w-12 sm:h-12 bg-white hover:bg-stone-50 rounded-xl shadow-md border border-stone-300 text-[11px] font-semibold text-stone-700 active:scale-95 transition" title="Nulstil zoom" aria-label="Nulstil zoom"><span id="zoom-label">100%</span></button>
+  </div>
+
+  <!-- Leaderboard (P3-3 lokal topscore) -->
+  <div id="lb-sheet" class="fixed inset-x-0 bottom-0 z-30 hidden pointer-events-none">
+    <div class="pointer-events-auto mx-auto w-full max-w-md px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div class="bg-white/95 backdrop-blur rounded-t-2xl sm:rounded-2xl shadow-xl border border-stone-200 p-3 sm:p-4 mb-4 sm:mb-6 max-h-[min(72vh,32rem)] flex flex-col">
+        <div class="flex items-start justify-between gap-2 mb-2 shrink-0">
+          <div class="min-w-0">
+            <h3 class="text-lg font-bold text-stone-800">🏅 Topscore</h3>
+            <p class="text-xs text-stone-500">Lokal på denne enhed · klar til cloud senere</p>
+          </div>
+          <button type="button" id="lb-close" class="px-3 py-1.5 text-sm font-medium text-stone-600 bg-stone-100 hover:bg-stone-200 rounded-lg touch-manipulation shrink-0">Luk</button>
+        </div>
+        <div class="flex gap-2 mb-2 shrink-0">
+          <label class="flex-1 flex items-center gap-1.5 text-xs text-stone-600">
+            <span class="shrink-0">Navn</span>
+            <input id="lb-name" type="text" maxlength="16" class="flex-1 min-w-0 px-2 py-1.5 rounded-lg border border-stone-200 text-sm font-medium text-stone-800" placeholder="Spiller" />
+          </label>
+          <button type="button" id="lb-save-name" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-stone-100 text-stone-700 touch-manipulation">Gem</button>
+        </div>
+        <div class="flex gap-1 mb-2 shrink-0">
+          <button type="button" id="lb-tab-scenario" class="flex-1 py-2 text-sm font-semibold rounded-lg bg-amber-500 text-white touch-manipulation">Denne bane</button>
+          <button type="button" id="lb-tab-global" class="flex-1 py-2 text-sm font-semibold rounded-lg bg-stone-100 text-stone-700 touch-manipulation">Alle</button>
+        </div>
+        <div id="lb-list" class="overflow-y-auto min-h-0 space-y-1.5 mb-2"></div>
+        <button type="button" id="lb-share" class="w-full py-2.5 text-sm font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-xl touch-manipulation shrink-0">
+          Kopiér score til deling
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Achievements (P2-4) -->

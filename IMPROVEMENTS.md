@@ -67,14 +67,19 @@ Status opdateres når noget laves. Prioritet: **P0** (hurtigt/højt) → **P3** 
 
 ---
 
+### Leaderboard + minimap-by (04/08 P3-3 + polish)
+- [x] **P3-3** Lokal topscore (🏅): navn, pr. bane / global, kopiér score – cloud-klar API
+- [x] **Minimap tap→by** Hop til sted ved prik + toast med navn
+
+---
+
 ## Mangler / næste (anbefalet rækkefølge)
 
 | Pri | ID | Forslag | Noter |
 |-----|-----|---------|--------|
-| 1 | **P3-3/4** | Multiplayer / leaderboard | Backend |
-| 2 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
-| 3 | **Minimap tap→by** | Hop til by ved prik | Polish |
-| 4 | **Bus / flere sprites** | Flåde-variation | Art |
+| 1 | **T-1–T-5** | Tests, cull, graph-cache, a11y, PWA | Kvalitet |
+| 2 | **P3-4 cloud** | Online leaderboard / multiplayer | Backend |
+| 3 | **Bus / flere sprites** | Flåde-variation | Art |
 
 ### Hurtige polish der stadig kan give værdi
 - [ ] Tydelig “tryk by for at købe”-hint første minut

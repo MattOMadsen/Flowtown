@@ -605,6 +605,103 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Leaderboard (P3-3)
+const lbSheet = document.getElementById('lb-sheet');
+let lbOpen = false;
+let lbTab = 'scenario'; // scenario | global
+
+function setLbOpen(on) {
+  lbOpen = !!on;
+  if (!lbSheet) return;
+  lbSheet.classList.toggle('hidden', !lbOpen);
+  if (lbOpen) {
+    setAchieveOpen(false);
+    setShopOpen(false);
+    if (districtSheet) districtSheet.classList.add('hidden');
+    const nameIn = document.getElementById('lb-name');
+    if (nameIn) nameIn.value = game.getLeaderboardUi?.()?.playerName || 'Spiller';
+    refreshLbSheet();
+  }
+}
+
+function refreshLbSheet() {
+  if (!lbSheet || !lbOpen) return;
+  const ui = game.getLeaderboardUi?.() || { global: [], scenario: [], playerName: 'Spiller' };
+  const tabSc = document.getElementById('lb-tab-scenario');
+  const tabGl = document.getElementById('lb-tab-global');
+  if (tabSc) {
+    tabSc.classList.toggle('bg-amber-500', lbTab === 'scenario');
+    tabSc.classList.toggle('text-white', lbTab === 'scenario');
+    tabSc.classList.toggle('bg-stone-100', lbTab !== 'scenario');
+    tabSc.classList.toggle('text-stone-700', lbTab !== 'scenario');
+  }
+  if (tabGl) {
+    tabGl.classList.toggle('bg-amber-500', lbTab === 'global');
+    tabGl.classList.toggle('text-white', lbTab === 'global');
+    tabGl.classList.toggle('bg-stone-100', lbTab !== 'global');
+    tabGl.classList.toggle('text-stone-700', lbTab !== 'global');
+  }
+  const list = document.getElementById('lb-list');
+  if (!list) return;
+  const rows = lbTab === 'global' ? (ui.global || []) : (ui.scenario || []);
+  if (!rows.length) {
+    list.innerHTML = `<p class="text-xs text-stone-400 italic text-center py-4">Ingen scores endnu – klar en bane med stjerner!</p>`;
+    return;
+  }
+  list.innerHTML = rows.map((e, i) => {
+    const stars = '★'.repeat(e.stars | 0) + '☆'.repeat(3 - (e.stars | 0));
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+    const when = e.at ? new Date(e.at).toLocaleDateString('da-DK', { day: 'numeric', month: 'short' }) : '';
+    return `
+      <div class="flex items-center gap-2 p-2 rounded-xl border border-stone-200 bg-white">
+        <span class="text-sm font-bold w-7 shrink-0 text-center">${medal}</span>
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-semibold text-stone-800 truncate">${escapeHtml(e.name)}</div>
+          <div class="text-[10px] text-stone-500 truncate">${escapeHtml(e.scenarioName || '')} · ${when}</div>
+        </div>
+        <div class="text-right shrink-0">
+          <div class="text-xs font-bold text-amber-600">${stars}</div>
+          <div class="text-[11px] tabular-nums text-stone-600">${e.score | 0} · ${e.delivered | 0}📦</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+bindTap('btn-leaderboard', () => {
+  playUi();
+  setLbOpen(!lbOpen);
+});
+bindTap('lb-close', () => setLbOpen(false));
+bindTap('lb-tab-scenario', () => {
+  lbTab = 'scenario';
+  refreshLbSheet();
+});
+bindTap('lb-tab-global', () => {
+  lbTab = 'global';
+  refreshLbSheet();
+});
+bindTap('lb-save-name', () => {
+  const nameIn = document.getElementById('lb-name');
+  const n = game.setPlayerDisplayName?.(nameIn?.value || 'Spiller');
+  if (nameIn && n) nameIn.value = n;
+  game.showToast?.(`Navn: ${n}`, 1.6);
+  playUi();
+});
+bindTap('lb-share', async () => {
+  const line = game.getShareScoreLine?.() || '';
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(line);
+      game.showToast?.('Score kopieret – del med venner!', 2.2);
+    } else {
+      game.showToast?.(line, 3.5);
+    }
+  } catch {
+    game.showToast?.(line, 3.5);
+  }
+  playUi();
+});
+
 // Achievements (P2-4)
 const achieveSheet = document.getElementById('achieve-sheet');
 let achieveOpen = false;
@@ -615,6 +712,7 @@ function setAchieveOpen(on) {
   achieveSheet.classList.toggle('hidden', !achieveOpen);
   if (achieveOpen) {
     setShopOpen(false);
+    setLbOpen(false);
     if (districtSheet) districtSheet.classList.add('hidden');
     refreshAchieveSheet();
   }
@@ -659,6 +757,7 @@ function setShopOpen(on) {
     // Skjul by-sheet visuelt, men behold valgt by (til station/lager/depot)
     if (districtSheet) districtSheet.classList.add('hidden');
     if (achieveOpen) setAchieveOpen(false);
+    if (lbOpen) setLbOpen(false);
     refreshShopSheet();
   }
 }
@@ -779,6 +878,10 @@ function refreshDistrictSheet() {
   if (achieveOpen) {
     achieveOpen = false;
     if (achieveSheet) achieveSheet.classList.add('hidden');
+  }
+  if (lbOpen) {
+    lbOpen = false;
+    if (lbSheet) lbSheet.classList.add('hidden');
   }
   districtSheet.classList.remove('hidden');
   setDsTab(dsTab);
@@ -1022,6 +1125,7 @@ setInterval(() => {
   refreshDistrictSheet();
   if (shopOpen) refreshShopSheet();
   if (achieveOpen) refreshAchieveSheet();
+  if (lbOpen) refreshLbSheet();
   refreshGoalsUi();
   refreshZoomLabel();
   updateHudOffset();

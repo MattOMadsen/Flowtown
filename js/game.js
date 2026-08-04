@@ -48,6 +48,13 @@ import {
   unlockAchievement,
   achievementProgress
 } from './achievements.js';
+import {
+  submitScore,
+  getLeaderboard,
+  getPlayerName,
+  setPlayerName,
+  formatShareLine
+} from './leaderboard.js';
 
 const START_MONEY = 1400;
 const MAX_JOBS = 5;
@@ -537,9 +544,79 @@ export class Game {
       this.showToast(`${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} gemt!`, 2.8);
       if (stars >= 1) this.tryAchievement('star_1');
     }
+    // Leaderboard: submit when stars improve or force end
+    let lb = null;
+    if (improved || force || stars >= 3) {
+      lb = this.submitLeaderboardScore(stars);
+    }
     if (stars >= 3) this.runEnded = true;
     if (force) this.runEnded = true;
-    return { stars, improved, freeplay: false };
+    return { stars, improved, freeplay: false, leaderboard: lb };
+  }
+
+  /**
+   * P3-3: gem run på lokal topscore.
+   * @param {number} [stars]
+   */
+  submitLeaderboardScore(stars = null) {
+    const s = stars != null ? stars : (this.goalEval?.stars || 0);
+    const result = submitScore({
+      name: getPlayerName(),
+      scenarioId: this.scenarioId || 'freeplay',
+      scenarioName: this.scenario?.name || this.scenarioId || 'Bane',
+      score: this.playerScore | 0,
+      delivered: this.playerDelivered | 0,
+      stars: s,
+      money: Math.floor(this.money),
+      jobsCompleted: this.jobsCompleted | 0
+    });
+    if (result.rank > 0 && result.rank <= 5) {
+      this.showToast(`🏅 Topscore #${result.rank} på ${result.entry.scenarioName}`, 2.6);
+    }
+    return result;
+  }
+
+  getLeaderboardUi(scenarioOnly = false) {
+    const sid = scenarioOnly ? this.scenarioId : null;
+    return {
+      playerName: getPlayerName(),
+      scenarioId: this.scenarioId,
+      scenarioName: this.scenario?.name || '',
+      global: getLeaderboard(null),
+      scenario: getLeaderboard(this.scenarioId),
+      list: getLeaderboard(sid)
+    };
+  }
+
+  setPlayerDisplayName(name) {
+    return setPlayerName(name);
+  }
+
+  getShareScoreLine() {
+    const top = getLeaderboard(this.scenarioId)[0];
+    if (top) return formatShareLine(top);
+    return formatShareLine({
+      name: getPlayerName(),
+      scenarioName: this.scenario?.name || 'Bane',
+      stars: this.goalEval?.stars || 0,
+      score: this.playerScore | 0,
+      delivered: this.playerDelivered | 0
+    });
+  }
+
+  /** Center camera on a place (minimap / “gå til by”) */
+  focusOnDistrict(district, zoomBoost = false) {
+    if (!district) return false;
+    const z = zoomBoost
+      ? this.clampZoom(Math.max(this.camera.zoom || 1, 1.15))
+      : (this.camera.zoom || 1);
+    this.camera.zoom = z;
+    const cw = this.canvas.width || 1;
+    const ch = this.canvas.height || 1;
+    this.camera.x = cw / 2 - district.x * z;
+    this.camera.y = ch / 2 - district.y * z;
+    this.requestDraw();
+    return true;
   }
 
   listScenariosForUi() {
@@ -2999,19 +3076,22 @@ export class Game {
       ctx.stroke();
     }
 
-    // Places – larger dots for mobile readability
+    // Places – larger dots for mobile readability (+ hit targets for tap→by)
+    const placeHits = [];
     for (const d of this.districts) {
       const px = ox + d.x * scale;
       const py = oy + d.y * scale;
-      const pr = Math.max(4.5 * dpr, d.r * scale * 0.85);
+      const pr = Math.max(5 * dpr, d.r * scale * 0.9);
+      placeHits.push({ d, px, py, pr: Math.max(pr, 11 * dpr) });
       ctx.beginPath();
       ctx.fillStyle = d.color || '#a8a29e';
       ctx.arc(px, py, pr, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-      ctx.lineWidth = 1.1 * dpr;
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 1.2 * dpr;
       ctx.stroke();
     }
+    this._minimapPlaceHits = placeHits;
 
     // Viewport = det der vises på skærmen (matcher setTransform(zoom,0,0,zoom,cam.x,cam.y))
     const cam = this.camera;
@@ -3050,11 +3130,11 @@ export class Game {
     ctx.strokeRect(ox, oy, drawW, drawH);
 
     // Label
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.font = `${Math.max(9, 10 * dpr)}px system-ui`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('Kort', mx + mapW / 2, my - 2 * dpr);
+    ctx.fillText('Kort · tryk by', mx + mapW / 2, my - 2 * dpr);
 
     ctx.restore();
     // Tap: world = (x-ox)/scale (panelet matcher bræt)
@@ -3071,14 +3151,36 @@ export class Game {
     };
   }
 
-  /** Click on minimap → pan camera so that world point is centered */
+  /**
+   * Minimap-tap: prik på by → hop til by; ellers pan til punkt.
+   * @returns {boolean} handled
+   */
   handleMinimapTap(screenCssX, screenCssY) {
     const r = this._minimapRect;
     if (!r) return false;
     const x = screenCssX * this.dpr;
     const y = screenCssY * this.dpr;
     if (x < r.x || y < r.y || x > r.x + r.w || y > r.y + r.h) return false;
-    // Prefer board area inside letterbox
+
+    // 1) Hit nearest place (større hit-radius til touch)
+    const hits = this._minimapPlaceHits || [];
+    let best = null;
+    let bestD = Infinity;
+    for (const h of hits) {
+      const dd = Math.hypot(h.px - x, h.py - y);
+      const thr = h.pr * 1.65;
+      if (dd <= thr && dd < bestD) {
+        bestD = dd;
+        best = h;
+      }
+    }
+    if (best?.d) {
+      this.focusOnDistrict(best.d, true);
+      this.showToast(`📍 ${best.d.name}`, 1.4);
+      return true;
+    }
+
+    // 2) Ellers pan til world-punkt under finger
     const bx = Math.max(r.ox, Math.min(r.ox + r.worldW * r.scale, x));
     const by = Math.max(r.oy, Math.min(r.oy + r.worldH * r.scale, y));
     const wx = (bx - r.ox) / r.scale;
