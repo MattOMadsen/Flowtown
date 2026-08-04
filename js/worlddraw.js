@@ -131,7 +131,7 @@ function drawFarmFields(ctx, d, dpr) {
 export function drawPlaceHub(ctx, d, dpr, helpers) {
   const { lightenHex, drawSilhouette } = helpers;
   const type = d.type || 'town';
-  const sprite = getPlaceSprite(type);
+  const sprite = getPlaceSprite(type, d.spriteKey || null);
   const size = d.r * 2.45; // slightly larger sprites – clearer art
 
   // Multi-layer contact shadow

@@ -4,6 +4,8 @@
 
 const PLACE_SRC = {
   town: 'assets/places/town.png',
+  town2: 'assets/places/town2.png',
+  town3: 'assets/places/town3.png',
   capital: 'assets/places/capital.png',
   farm: 'assets/places/farm.png',
   factory: 'assets/places/factory.png',
@@ -65,7 +67,12 @@ export function loadGameAssets() {
   return loadPromise;
 }
 
-export function getPlaceSprite(type) {
+export function getPlaceSprite(type, variant = null) {
+  if (variant && placeImgs[variant]) return placeImgs[variant];
+  if (type === 'town') {
+    // fallback chain for variants
+    return placeImgs.town || placeImgs.town2 || placeImgs.town3 || null;
+  }
   return placeImgs[type] || placeImgs.town || null;
 }
 

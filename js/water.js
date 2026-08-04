@@ -166,19 +166,25 @@ export function strokeWaterFraction(points, bodies) {
 function pathBlob(ctx, b) {
   const pts = blobPoints(b);
   if (pts.length < 3) return;
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) {
-    const p0 = pts[i - 1];
-    const p1 = pts[i];
-    const midX = (p0.x + p1.x) / 2;
-    const midY = (p0.y + p1.y) / 2;
-    ctx.quadraticCurveTo(p0.x, p0.y, midX, midY);
+  // Smooth closed curve through midpoints
+  const n = pts.length;
+  const mid = (i) => {
+    const a = pts[i % n];
+    const c = pts[(i + 1) % n];
+    return { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 };
+  };
+  const m0 = mid(n - 1);
+  ctx.moveTo(m0.x, m0.y);
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const m = mid(i);
+    ctx.quadraticCurveTo(p.x, p.y, m.x, m.y);
   }
   ctx.closePath();
 }
 
 /**
- * Pretty lakes/bays: shore, depth gradient, soft waves, light reeds on lakes.
+ * Pretty lakes/bays: fully opaque organic fill so square tiles never show through.
  */
 export function drawWaterBodies(ctx, bodies, dpr) {
   if (!bodies?.length) return;
@@ -187,44 +193,44 @@ export function drawWaterBodies(ctx, bodies, dpr) {
     const isLake = b.role === 'lake';
     const maxR = Math.max(b.rx, b.ry);
 
-    // Soft sand/shore underlay
+    // Wide grass/sand ring (covers any tile edges under the lake)
     ctx.beginPath();
-    pathBlob(ctx, {
-      ...b,
-      rx: b.rx * 1.12,
-      ry: b.ry * 1.12
-    });
-    ctx.fillStyle = isLake
-      ? 'rgba(214, 196, 150, 0.55)'
-      : 'rgba(196, 180, 140, 0.4)';
+    pathBlob(ctx, { ...b, rx: b.rx * 1.22, ry: b.ry * 1.22 });
+    ctx.fillStyle = isLake ? '#c9b896' : '#b8a888';
     ctx.fill();
 
-    // Depth gradient water
+    // Beach ring
+    ctx.beginPath();
+    pathBlob(ctx, { ...b, rx: b.rx * 1.1, ry: b.ry * 1.1 });
+    ctx.fillStyle = isLake ? '#e2d4b0' : '#d4c4a0';
+    ctx.fill();
+
+    // Solid water body (opaque – no tile grid bleed)
     const g = ctx.createRadialGradient(
       b.cx - b.rx * 0.15,
       b.cy - b.ry * 0.2,
       maxR * 0.05,
       b.cx,
       b.cy,
-      maxR * 1.05
+      maxR * 1.02
     );
     if (isLake) {
-      g.addColorStop(0, 'rgba(125, 211, 252, 0.92)');
-      g.addColorStop(0.35, 'rgba(56, 189, 248, 0.88)');
-      g.addColorStop(0.75, 'rgba(14, 165, 233, 0.82)');
-      g.addColorStop(1, 'rgba(3, 105, 161, 0.75)');
+      g.addColorStop(0, '#7dd3fc');
+      g.addColorStop(0.35, '#38bdf8');
+      g.addColorStop(0.72, '#0ea5e9');
+      g.addColorStop(1, '#0369a1');
     } else {
-      g.addColorStop(0, 'rgba(56, 189, 248, 0.9)');
-      g.addColorStop(0.45, 'rgba(14, 165, 233, 0.85)');
-      g.addColorStop(0.85, 'rgba(2, 132, 199, 0.8)');
-      g.addColorStop(1, 'rgba(3, 105, 161, 0.7)');
+      g.addColorStop(0, '#38bdf8');
+      g.addColorStop(0.4, '#0ea5e9');
+      g.addColorStop(0.8, '#0284c7');
+      g.addColorStop(1, '#075985');
     }
     ctx.beginPath();
     pathBlob(ctx, b);
     ctx.fillStyle = g;
     ctx.fill();
 
-    // Inner highlight (sky reflection)
+    // Inner highlight
     ctx.save();
     ctx.beginPath();
     pathBlob(ctx, {
@@ -233,28 +239,24 @@ export function drawWaterBodies(ctx, bodies, dpr) {
       ry: b.ry * 0.4,
       cy: b.cy - b.ry * 0.15
     });
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
     ctx.fill();
     ctx.restore();
 
     // Shore line
     ctx.beginPath();
     pathBlob(ctx, b);
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 2 * dpr;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2.2 * dpr;
     ctx.stroke();
     ctx.beginPath();
-    pathBlob(ctx, {
-      ...b,
-      rx: b.rx * 0.97,
-      ry: b.ry * 0.97
-    });
-    ctx.strokeStyle = 'rgba(12, 74, 110, 0.2)';
+    pathBlob(ctx, { ...b, rx: b.rx * 0.97, ry: b.ry * 0.97 });
+    ctx.strokeStyle = 'rgba(12, 74, 110, 0.25)';
     ctx.lineWidth = 1.2 * dpr;
     ctx.stroke();
 
     // Soft wave arcs
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
     ctx.lineWidth = 1.2 * dpr;
     ctx.lineCap = 'round';
     for (let i = 0; i < 4; i++) {

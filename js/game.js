@@ -168,6 +168,7 @@ export class Game {
         type: d.type || 'town',
         typeLabel: d.typeLabel || typeMeta.label,
         icon: d.icon || typeMeta.icon,
+        spriteKey: d.spriteKey || d.type || 'town',
         passengers: d.passengers ?? typeMeta.passengers,
         cargo: d.cargo ?? typeMeta.cargo,
         demandPeople: prevMatch?.demandPeople ?? 0,

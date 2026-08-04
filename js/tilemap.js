@@ -100,12 +100,16 @@ export function drawTileMap(ctx, tileMap, tileImgs) {
     dirt2: '#d0bc94',
     dirt3: '#b8a67c',
     forest: '#6f9b5a',
-    water: '#3ba3d0'
+    water: '#b7d18a' // never paint square water – organic lakes draw on top
   };
 
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const key = TILE_KEYS[grid[y * cols + x]] || 'grass';
+      let key = TILE_KEYS[grid[y * cols + x]] || 'grass';
+      // Square water tiles look like Minecraft cubes under lakes → use grass base
+      if (key === 'water') key = GRASS[(x + y) % GRASS.length] !== undefined
+        ? TILE_KEYS[GRASS[(x + y) % GRASS.length]]
+        : 'grass';
       const px = x * tileSize;
       const py = y * tileSize;
       const img = tileImgs?.[key];

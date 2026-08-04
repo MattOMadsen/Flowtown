@@ -108,10 +108,17 @@ export function buildPlaceDefs(seed = 42, layout = null) {
   const used = new Set();
   const raw = layout && layout.length ? layout : DEFAULT_LAYOUT;
   const slots = ensureIndustryChains(raw);
+  let townIdx = 0;
   return slots.map((slot, i) => {
     const type = PLACE_TYPES[slot.type] || PLACE_TYPES.town;
     const pool = NAME_POOLS[slot.type] || NAME_POOLS.town;
     const name = pickName(pool, used, rng);
+    let spriteKey = type.id;
+    if (type.id === 'town') {
+      const variants = ['town', 'town2', 'town3'];
+      spriteKey = variants[townIdx % variants.length];
+      townIdx++;
+    }
     return {
       id: `p${i}`,
       rx: slot.rx,
@@ -122,6 +129,7 @@ export function buildPlaceDefs(seed = 42, layout = null) {
       icon: type.icon,
       color: type.color,
       name,
+      spriteKey,
       passengers: type.passengers,
       cargo: type.cargo
     };
